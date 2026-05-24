@@ -1,0 +1,25 @@
+<svg
+  xmlns="http://www.w3.org/2000/svg"
+  viewBox="0 0 1085.6 2327.47"
+  class="borderline"
+>
+  <style>
+    .borderline {
+      color: #D6A12F; /* this controls currentColor */
+    }
+  </style>
+
+  <path
+    d="M1077.51,2319.57H8.06V8.09h1069.44v2311.48ZM14.06,2313.57h1057.44V14.09H14.06v2299.48Z"
+    fill="none"
+    stroke="currentColor"
+    stroke-width="2"
+  />
+  <path
+    d="M1085.6,2327.47H0V0h1085.6v2327.47ZM4,2323.47h1077.6V4H4v2319.47Z"
+    fill="none"
+    stroke="currentColor"
+    stroke-width="2"
+  />
+</svg>
+
