@@ -1,0 +1,5577 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link href='https://fonts.googleapis.com/css?family=Montserrat' rel='stylesheet'>
+    <link href='https://fonts.googleapis.com/css?family=Roboto' rel='stylesheet'>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" />
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@24,400,0,0&icon_names=login" />
+    <link rel="icon" href="Logo\Vi-Up Submark.png" type="image/png">
+    <link rel="stylesheet" href="homepagestyle.css">
+    <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
+    <link rel="stylesheet" href="https://unpkg.com/grapesjs@0.21.9/dist/css/grapes.min.css">
+    <script src="https://unpkg.com/grapesjs@0.21.9/dist/grapes.min.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;600&family=Poppins:wght@400;600&family=Roboto:wght@400;700&family=Inter:wght@400;600&family=Open+Sans:wght@400;600&family=Playfair+Display:wght@400;700&family=Great+Vibes&family=Alex+Brush&family=Pacifico&family=Lato:wght@400;700&family=Oswald:wght@400;700&family=Raleway:wght@400;600&display=swap" rel="stylesheet">
+    
+    <title>VI-UP design</title>
+    <style>
+      #topbar { height:44px; display:flex; align-items:center; gap:8px; padding:8px 12px; border-bottom:1px solid #e5e7eb; font-family: system-ui, sans-serif; }
+      #gjs { height: calc(100vh - 44px); }
+      .btn { padding:6px 10px; border:1px solid #e5e7eb; border-radius:6px; background:#fff; cursor:pointer; }
+/* Give the actual container height */
+#vi-up-gjs { height: 500vh; width: 500vw; }
+
+/* Make internal canvas fill it */
+#vi-up-gjs .gjs-editor,
+#vi-up-gjs .gjs-cv-canvas,
+#vi-up-gjs .gjs-frame-wrapper {
+  height: 100%;
+}
+
+.gjs-editor{
+height: 85%;;
+}
+
+.viup-ext-gallery {
+  max-height: 0;
+  overflow: hidden;
+  transition: max-height .28s ease, opacity .18s ease;
+  opacity: 0;
+}
+
+.viup-ext-gallery.open {
+  max-height: 70vh;
+  opacity: 1;
+  max-width: 100vw;
+}
+
+.viup-zoombar {
+  position: absolute;
+    bottom: 75px;
+    left: 400px;
+    width: 50%;
+    /* background: #F7EFEB; */
+    display: flex
+;
+    align-items: center;
+    justify-content: center;
+    gap: 50px;
+    padding: 11px 0;
+    font-family: 'Montserrat', sans-serif;
+    z-index: 999;
+    box-shadow: 0 4px 0px rgba(0, 0, 0, 0.1);
+}
+
+.zoom-section {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.zoom-btn {
+  background: #7D5B59;
+  color: white;
+  border: none;
+  border-radius: 6px;
+  width: 28px;
+  height: 28px;
+  cursor: pointer;
+  font-size: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.zoom-btn:hover { opacity: 0.8; }
+
+#zoom-slider {
+  width: 160px;
+  accent-color: #7D5B59;
+  cursor: pointer;
+}
+
+.page-section {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  color: #6D4C41;
+  font-weight: 600;
+}
+
+
+.viup-ext-inner {
+  background: #fff9f7;
+  border: 1px solid #E8DCD6;
+  border-radius: 12px;
+  padding: 12px;
+  margin: 6px;
+  box-shadow: 0 4px 12px rgba(0,0,0,.05);
+  font-family: Montserrat, sans-serif;
+}
+
+.viup-ext-search input {
+  width: 100%;
+  padding: 8px;
+  border: 1px solid #E8DCD6;
+  border-radius: 8px;
+}
+
+.viup-ext-upload {
+  margin-top: 8px;
+  background: #7D5B59;
+  color: #fff;
+  border: none;
+  padding: 8px 12px;
+  border-radius: 8px;
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.gjs-one-bg {
+    background-color: #EDE2DE;
+}
+
+.gjs-two-color {
+    color: #7D5B59;
+}
+
+.viup-ext-grid {
+  margin-top: 10px;
+  display: grid;
+  gap: 8px;
+}
+.viup-ext-grid img {
+  width: 100%;
+  border-radius: 6px;
+}
+
+/* Only affect the duplicated inner editor */
+.vi-up-editor > .vi-up-editor {
+  grid-template-columns: 1fr;          /* remove the left column for the inner editor */
+}
+
+/* Hide only the inner/second left sidebar */
+.vi-up-editor > .vi-up-editor > aside.vi-up-sidebar {
+  display: none !important;
+}
+
+/* Safety: if the inner editor has the bottom bar, don't offset it */
+.vi-up-editor > .vi-up-editor .vi-up-rightbar {
+  margin-left: 0;
+}
+/* Let absolutely-positioned panels anchor inside the editor */
+.vi-up-editor { position: relative; }
+
+/* Format the SECOND sidebar as a slide-over panel */
+.vi-up-editor > .vi-up-editor > aside.vi-up-sidebar.viup-overlay-panel {
+  position: absolute;
+  top: 0;
+  /* left is synced in JS to match the real width of the main sidebar (130px by default) */
+  left: 0px;
+  height: 110%;
+  width: 320px;
+  background: #fff9f7;
+  border-right: 1px solid var(--viup-border);
+  box-shadow: var(--viup-shadow);
+  transform: translateX(-100%);            /* off-canvas by default */
+  transition: transform .25s ease;
+  z-index: 60;
+  pointer-events: none;                     /* blocked while closed */
+}
+
+/* When “open” class is on the INNER editor, show the second aside */
+.vi-up-editor > .vi-up-editor.viup-photo-open > aside.vi-up-sidebar {
+  display: block !important;               /* override your hide rule ONLY when open */
+}
+
+/* Slide into view + re-enable interaction */
+.vi-up-editor > .vi-up-editor.viup-photo-open > aside.vi-up-sidebar.viup-overlay-panel {
+  transform: translateX(0);
+  pointer-events: auto;
+}
+
+/* --- CONTACT panel styling (basic, matches your theme vars) --- */
+.viup-ext-contact { padding: 0px; background:#fff9f7; }
+.viup-ext-contact .viup-field { display:block; margin-bottom:10px; }
+.viup-ext-contact .viup-field > span {
+  display:block; font-size:12px; margin-bottom:6px;
+  color: var(--viup-brown); opacity:.8;
+}
+.viup-ext-contact input {
+  width:100%; padding:10px 12px;
+  border:1px solid var(--viup-border); border-radius:10px; outline:none;
+  background:#fff;
+}
+.viup-ext-contact .viup-actions { display:flex; gap:12px; align-items:center; justify-content:center; margin-top:12px; }
+.viup-ext-contact .viup-btn-add {
+  width:40px; height:40px; border-radius:50%; border:none; cursor:pointer;
+  background: var(--viup-brown); color:#fff; font-size:22px; line-height:40px;
+}
+.viup-ext-contact .viup-btn-save {
+  padding:10px 16px; border:none; border-radius:16px; cursor:pointer;
+  background: var(--viup-brown); color:#fff; font-weight:600; min-width:140px;
+}
+
+/* --- SHOW ONLY THE CONTACT PANEL when contact is open --- */
+.vi-up-editor > .vi-up-editor.viup-contact-open > aside.vi-up-sidebar { display:block !important; }
+.vi-up-editor > .vi-up-editor.viup-contact-open > aside.vi-up-sidebar.viup-overlay-panel {
+  transform: translateX(0); pointer-events:auto;
+}
+.vi-up-editor > .vi-up-editor.viup-contact-open > aside.vi-up-sidebar.viup-overlay-panel > * {
+  display:none !important;          /* hide everything */
+}
+.vi-up-editor > .vi-up-editor.viup-contact-open > aside.vi-up-sidebar.viup-overlay-panel #viup-contact-ext {
+  display:block !important;         /* show only the contact panel */
+}
+
+/* --- CALENDAR panel styling --- */
+.viup-ext-calendar { padding:0px; background:#fff9f7; }
+.viup-ext-calendar .viup-field { display:block; margin-bottom:12px; }
+.viup-ext-calendar .viup-field > span {
+  display:block; font-size:12px; margin-bottom:6px;
+  color: var(--viup-brown); opacity:.8;
+}
+.viup-ext-calendar input[type="date"]{
+  width:100%; padding:10px 12px;
+  border:1px solid var(--viup-border); border-radius:10px; outline:none;
+  background:#fff;
+}
+.viup-ext-calendar .viup-actions{
+  display:flex; justify-content:center; gap:12px; margin-top:12px;
+}
+.viup-ext-calendar .viup-btn-save{
+  padding:10px 16px; border:none; border-radius:16px; cursor:pointer;
+  background: var(--viup-brown); color:#fff; font-weight:600; min-width:140px;
+}
+
+/* --- SHOW ONLY THE CALENDAR PANEL when calendar is open --- */
+.vi-up-editor > .vi-up-editor.viup-calendar-open > aside.vi-up-sidebar { display:block !important; }
+.vi-up-editor > .vi-up-editor.viup-calendar-open > aside.vi-up-sidebar.viup-overlay-panel{
+  transform: translateX(0); pointer-events:auto;
+}
+.vi-up-editor > .vi-up-editor.viup-calendar-open > aside.vi-up-sidebar.viup-overlay-panel > *{
+  display:none !important;
+}
+.vi-up-editor > .vi-up-editor.viup-calendar-open > aside.vi-up-sidebar.viup-overlay-panel #viup-calendar-ext{
+  display:block !important;
+}
+
+/* safety: if calendar is active, keep panel expanded even without .open */
+.vi-up-editor > .vi-up-editor.viup-calendar-open #viup-calendar-ext{
+  max-height:70vh; opacity:1; overflow:auto;
+}
+
+/* ===== Base fields reused across panels ===== */
+.viup-ext-elements, .viup-ext-location, .viup-ext-moneygift {
+  padding: 0px;
+  background: #fff9f7;
+}
+.viup-ext-elements .viup-field,
+.viup-ext-location .viup-field,
+.viup-ext-moneygift .viup-field { display:block; margin-bottom:10px; }
+.viup-ext-elements .viup-field > span,
+.viup-ext-location .viup-field > span,
+.viup-ext-moneygift .viup-field > span {
+  display:block; font-size:12px; margin-bottom:6px;
+  color: var(--viup-brown); opacity:.8;
+}
+.viup-ext-elements input,
+.viup-ext-location input,
+.viup-ext-moneygift input {
+  width:100%; padding:10px 12px;
+  border:1px solid var(--viup-border); border-radius:10px; outline:none; background:#fff;
+}
+.viup-actions { display:flex; gap:12px; align-items:center; justify-content:center; margin-top:12px; }
+.viup-btn-save {
+  padding:10px 16px; border:none; border-radius:16px; cursor:pointer;
+  background: var(--viup-brown); color:#fff; font-weight:600; min-width:140px;
+}
+
+/* Elements grid demo */
+.viup-elements-groups .viup-subtitle { margin:10px 0 6px; color:var(--viup-brown); font-weight:600; }
+.viup-grid { display:grid; grid-template-columns: repeat(3, 1fr); gap:8px; }
+.viup-card { height:64px; border-radius:8px; background:#E8DCD6; }
+.viup-shape { height:64px; border-radius:6px; background:#7D5B59; }
+.viup-circle { height:64px; border-radius:50%; background:#7D5B59; }
+.viup-triangle {
+  width: 0; height: 0; border-left: 32px solid transparent; border-right: 32px solid transparent;
+  border-bottom: 64px solid #7D5B59; justify-self:center;
+}
+
+/* Location preview box */
+.viup-mapbox {
+  margin-top:12px; height:400px; border-radius:10px; border:1px dashed var(--viup-border);
+  display:flex; align-items:center; justify-content:center; color:#A1887F; font-size:12px;
+}
+
+/* Dropzone for Money Gift */
+.viup-drop {
+  margin:10px 0; padding:18px; text-align:center; border:1px dashed var(--viup-border); border-radius:10px; background:#fff;
+}
+
+/* ===== Slide-over visibility rules (copy of your pattern) ===== */
+.vi-up-editor > .vi-up-editor.viup-elements-open  > aside.vi-up-sidebar { display:block !important; }
+.vi-up-editor > .vi-up-editor.viup-location-open  > aside.vi-up-sidebar { display:block !important; }
+.vi-up-editor > .vi-up-editor.viup-moneygift-open > aside.vi-up-sidebar { display:block !important; }
+
+.vi-up-editor > .vi-up-editor.viup-elements-open  > aside.vi-up-sidebar.viup-overlay-panel,
+.vi-up-editor > .vi-up-editor.viup-location-open  > aside.vi-up-sidebar.viup-overlay-panel,
+.vi-up-editor > .vi-up-editor.viup-moneygift-open > aside.vi-up-sidebar.viup-overlay-panel {
+  transform: translateX(0); pointer-events:auto;
+}
+
+/* Hide everything inside second aside, then show only the active panel */
+.vi-up-editor > .vi-up-editor.viup-elements-open  > aside.vi-up-sidebar.viup-overlay-panel > *,
+.vi-up-editor > .vi-up-editor.viup-location-open  > aside.vi-up-sidebar.viup-overlay-panel > *,
+.vi-up-editor > .vi-up-editor.viup-moneygift-open > aside.vi-up-sidebar.viup-overlay-panel > * {
+  display:none !important;
+}
+.vi-up-editor > .vi-up-editor.viup-elements-open  #viup-elements-ext,
+.vi-up-editor > .vi-up-editor.viup-location-open  #viup-location-ext,
+.vi-up-editor > .vi-up-editor.viup-moneygift-open #viup-moneygift-ext {
+  display:block !important;
+}
+
+/* Keep panel expanded while active (like Calendar rule) */
+.vi-up-editor > .vi-up-editor.viup-elements-open  #viup-elements-ext,
+.vi-up-editor > .vi-up-editor.viup-location-open  #viup-location-ext,
+.vi-up-editor > .vi-up-editor.viup-moneygift-open #viup-moneygift-ext {
+  max-height:70vh; opacity:1; overflow:auto;
+}
+
+/* ===== TEMPLATES & TEXT panels (theme-matched) ===== */
+.viup-ext-templates, .viup-ext-text { padding:0px; background:#fff9f7; }
+.viup-ext-templates input, .viup-ext-text input {
+  width:100%; padding:10px 12px; border:1px solid var(--viup-border); border-radius:10px; background:#fff; outline:none;
+}
+
+.viup-group-head, .viup-fonts-head {
+  display:flex; align-items:center; justify-content:space-between;
+  margin:10px 0 6px;
+}
+.viup-link { background:none; border:none; color:var(--viup-brown); opacity:.7; cursor:pointer; font-size:12px; }
+
+.viup-templates-row { display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-bottom:14px; }
+.viup-card { height:100px; border-radius:10px; background:#7D5B59; opacity:.9; }
+
+.viup-btn-block {
+  width:100%; display:flex; gap:8px; align-items:center; justify-content:center;
+  padding:10px 12px; border:none; border-radius:16px; background:var(--viup-brown); color:#fff; font-weight:600;
+}
+.viup-subtitle { color:var(--viup-brown); font-weight:700; margin:12px 0 6px; }
+
+.viup-pill {
+  width:100%; text-align:left; padding:12px; margin-bottom:8px;
+  background:#fff; border:1px solid var(--viup-border); border-radius:12px; font-weight:600;
+}
+
+.viup-pillz{
+  width: 3%;
+    text-align: center;
+    padding: 14px;
+    margin-bottom: 8px;
+    background: #fff;
+    border: 1px solid var(--viup-border);
+    border-radius: 12px;
+    font-weight: 600;
+    left: 1200px;
+    position: absolute;
+    top: 785px;
+    height: 37px;
+}
+.viup-fonts { display:grid; grid-template-columns:1fr; gap:8px; }
+.viup-font-chip {
+  width:100%; padding:10px 12px; text-align:left; border:1px solid var(--viup-border); background:#fff; border-radius:10px;
+}
+
+/* ===== Visibility rules (same pattern as other panels) ===== */
+.vi-up-editor > .vi-up-editor.viup-templates-open > aside.vi-up-sidebar { display:block !important; }
+.vi-up-editor > .vi-up-editor.viup-text-open      > aside.vi-up-sidebar { display:block !important; }
+
+.vi-up-editor > .vi-up-editor.viup-templates-open > aside.vi-up-sidebar.viup-overlay-panel,
+.vi-up-editor > .vi-up-editor.viup-text-open      > aside.vi-up-sidebar.viup-overlay-panel {
+  transform: translateX(0); pointer-events:auto;
+}
+
+/* Hide others; show only active panel inside second aside */
+.vi-up-editor > .vi-up-editor.viup-templates-open > aside.vi-up-sidebar.viup-overlay-panel > *,
+.vi-up-editor > .vi-up-editor.viup-text-open      > aside.vi-up-sidebar.viup-overlay-panel > * {
+  display:none !important;
+}
+.vi-up-editor > .vi-up-editor.viup-templates-open #viup-templates-ext,
+.vi-up-editor > .vi-up-editor.viup-text-open      #viup-text-ext {
+  display:block !important; max-height:70vh; opacity:1; overflow:auto;
+}
+
+/*For the music section*/
+/* MUSIC PANEL */
+.viup-ext-music {
+  display: none;
+  padding: 20px;
+  background-color: #fff9f7;
+  border-left: 1px solid var(--viup-border);
+  height: 100%;
+  overflow-y: auto;
+}
+
+.viup-ext-music.open {
+  display: block;
+}
+
+.viup-ext-music .viup-field {
+  margin-bottom: 15px;
+}
+
+.viup-ext-music label {
+  display: block;
+  font-size: 12px;
+  color: var(--viup-brown);
+  margin-bottom: 5px;
+  font-family: Montserrat, sans-serif;
+}
+
+.viup-ext-music input {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid var(--viup-border);
+  border-radius: 10px;
+  outline: none;
+  background: #fff;
+}
+
+.viup-ext-music .viup-btn-save {
+  background: var(--viup-pink);
+  color: #fff;
+  border: none;
+  padding: 10px 16px;
+  border-radius: 8px;
+  font-family: Montserrat, sans-serif;
+  cursor: pointer;
+  transition: 0.3s;
+}
+
+.viup-ext-music .viup-btn-save:hover {
+  opacity: 0.85;
+}
+
+/* === MUSIC panel visibility (match the existing pattern) === */
+.vi-up-editor > .vi-up-editor.viup-music-open > aside.vi-up-sidebar { 
+  display: block !important; 
+}
+
+.vi-up-editor > .vi-up-editor.viup-music-open > aside.vi-up-sidebar.viup-overlay-panel {
+  transform: translateX(0);
+  pointer-events: auto;
+}
+
+/* Hide everything inside the second aside, then show ONLY Music panel */
+.vi-up-editor > .vi-up-editor.viup-music-open > aside.vi-up-sidebar.viup-overlay-panel > * {
+  display: none !important;
+}
+.vi-up-editor > .vi-up-editor.viup-music-open #viup-music-ext {
+  display: block !important;
+  max-height: 70vh;
+  opacity: 1;
+  overflow: auto;
+}
+
+/* Optional: if any parent was collapsing */
+html, body { height: 100%; }
+    /* Default look for our custom classes */
+    .vi-up-button { padding: 12px 20px; border-radius: 10px; border: none; background: #111; color: #fff; cursor: pointer; }
+    .vi-up-text { font-size: 24px; line-height: 1.3; }
+    .vi-up-image { max-width: 100%; display: block; }
+    .vi-up-audio { width: 100%; }
+.header-viup {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: #F5EDE9; /* same soft tone */
+  padding: 16px 16px;
+  font-family: Montserrat;
+}
+
+.header-viup-left {
+  display: flex;
+  align-items: center;
+  gap: 70px;
+  margin-left: 15px;
+}
+
+.icon-btn,
+.menu-btn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 16px;
+  color: #6D4C41;
+  margin-right: 20px;
+}
+
+.header-viup-steps {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-left: 500px; /* <<< this gives the 40px gap */
+  font-size: 14px;
+  color: #6D4C41;
+}
+
+.header-viup-steps a {
+  text-decoration: none;
+  color: inherit;
+  font-weight: 500;
+  font-size: 20px;
+}
+
+.header-viup-steps span {
+  color: #A1887F; /* softer arrow */
+}
+
+.header-viup-right {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-right: 15px;
+}
+
+.event-title {
+  font-size: 18px;
+  font-weight: bold;
+  color: #6D4C41;
+  font-family: Montserrat;
+}
+
+.play-btn {
+  background: #6D4C41;      /* brown background */
+  color: #fff;              /* white text/icon */
+  border: none;
+  width: 35px;              /* same width */
+  height: 35px;             /* and height = circle */
+  border-radius: 50%;       /* perfect circle */
+  cursor: pointer;
+  font-size: 20px;          /* size of play icon */
+  display: flex;            /* center the icon */
+  justify-content: center;
+  align-items: center;
+}
+
+.share-btn {
+  background: #7D5B59;
+    color: #fff;
+    border: 2px;
+    padding: 10px 12px;
+    border-radius: 13px;
+    cursor: pointer;
+    width: 108px;
+    height: 44px;
+    font-size: 18px;
+    font-weight: 700;
+    font-family: 'Montserrat';
+}
+
+.upgrade-btn{
+  background: #F5EDE9;
+  color: #6D4C41;
+  border:2px solid #6D4C41; /* width + style + color */
+  padding: 6px 12px;
+  border-radius: 12px;
+  cursor: pointer;
+  width: 224px;
+    height: 44px;
+    font-size: 18px;
+    font-weight: 700;
+    font-family:'Montserrat';
+}
+
+.profile {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+}
+
+:root{
+ /* --viup-bg:#F7EFEB;            page background */
+  --viup-brown:#6D4C41;        /* primary brown */
+  --viup-brown-2:#8A6A5E;      /* softer */
+  --viup-ink:#2f1f1b;          /* dark for floatbar */
+  --viup-side:#ffffffcc;       /* sidebar tiles */
+  --viup-border:#E8DCD6;
+  --viup-footer-bg: #000000;      /* Navigation Bar */
+  --viup-footer-text: #ffffff;    /* Text & Icon */
+  --viup-radius:12px;
+  --viup-shadow:0 6px 24px rgba(0,0,0,.06);
+  font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+}
+
+/* Shell */
+.vi-up-editor{
+  display:grid;
+  grid-template-columns: 130px 1fr;      /* was: 130px 1fr 220px */
+  grid-template-rows: 1fr;
+  height: calc(100vh - 0px);
+  background: var(--viup-bg);
+}
+
+/* Sidebar */
+.vi-up-sidebar{
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 12px 8px;
+  border-right: 1px solid var(--viup-border);
+  background: #fff9f7;
+
+  /* ✨ make sidebar scrollable */
+  overflow-y: auto;
+  overflow-x: hidden;
+  scrollbar-width: thin; /* Firefox */
+  scrollbar-color: #c7b6ad #fff9f7;
+  padding-bottom:100px;
+}
+
+/* optional: prettier scrollbars for Chrome */
+.vi-up-sidebar::-webkit-scrollbar {
+  width: 8px;
+}
+.vi-up-sidebar::-webkit-scrollbar-thumb {
+  background-color: #c7b6ad;
+  border-radius: 4px;
+}
+.vi-up-sidebar::-webkit-scrollbar-track {
+  background: #fff9f7;
+}
+
+.vi-up-sideitem {
+  display: flex;
+  flex-direction: column; /* 👈 stack vertically */
+  align-items: center;    /* center horizontally */
+  gap: 4px;               /* space between icon & label */
+  width: 100%;
+  border: none;
+  background: var(--viup);
+  color: var(--viup-brown);
+  border-radius: 10px;
+  padding: 8px 6px;
+  cursor: pointer;
+  transition: transform .08s ease, background .15s ease;
+}
+
+.viup-ext-wishlist {
+  padding: 0px;
+  background: #fff9f7;
+}
+
+.viup-ext-wishlist .viup-field {
+  display: block;
+  margin-bottom: 10px;
+}
+
+.viup-ext-wishlist .viup-field > span {
+  display: block;
+  font-size: 12px;
+  margin-bottom: 6px;
+  color: var(--viup-brown);
+  opacity: .8;
+}
+
+.viup-ext-wishlist input {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid var(--viup-border);
+  border-radius: 10px;
+  outline: none;
+  background: #fff;
+}
+
+.viup-ext-wishlist .viup-btn-add,
+.viup-ext-wishlist .viup-btn-save {
+  padding: 10px 16px;
+  border: none;
+  border-radius: 16px;
+  cursor: pointer;
+  background: var(--viup-brown);
+  color: #fff;
+  font-weight: 600;
+  min-width: 140px;
+}
+
+.vi-up-editor > .vi-up-editor.viup-wishlist-open > aside.vi-up-sidebar {
+  display: block !important;
+}
+
+.vi-up-editor > .vi-up-editor.viup-wishlist-open > aside.vi-up-sidebar.viup-overlay-panel {
+  transform: translateX(0);
+  pointer-events: auto;
+}
+
+/* Hide everything else */
+.vi-up-editor > .vi-up-editor.viup-wishlist-open > aside.vi-up-sidebar.viup-overlay-panel > * {
+  display: none !important;
+}
+
+/* Show only wishlist panel */
+.vi-up-editor > .vi-up-editor.viup-wishlist-open #viup-wishlist-ext {
+  display: block !important;
+  max-height: 70vh;
+  opacity: 1;
+  overflow: auto;
+}
+
+
+
+.vi-up-sideitem:hover{  transform: translateY(-1px); }
+.vi-up-ico{  display:inline-flex; justify-content:center; color: #7D5B59; margin-bottom: 10px; width: 30px;}
+.vi-up-label{ font-size:11px; line-height:1; text-align:left; }
+
+.vi-up-divider{
+  height:1px; background:var(--viup-border); margin:8px 4px;
+}
+.vi-up-sectiontitle{
+  margin:6px 6px 2px;
+  font-size:10px;
+  letter-spacing:.12em;
+  color:var(--viup-brown-2);
+  text-transform:uppercase;
+}
+
+/* Stage (center) */
+.vi-up-stage{
+  display:flex; align-items:center; justify-content:center; position:relative;
+}
+.vi-up-canvas-wrap{
+  position:relative;
+  width: min(92%, 980px);
+  height: calc(100vh - 110px);
+  display:flex;
+  align-items:center;
+  justify-content:center;
+}
+.vi-up-artboard{
+  width: 150%;  /* match your invite ratio; replace when real canvas mounts */
+  height: 100%;
+  background:#fff;
+  border-radius: 14px;
+  box-shadow: var(--viup-shadow);
+  overflow:hidden;
+  display:flex; align-items:center; justify-content:center;
+}
+
+#vi-up-add-artboard {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  margin: 16px auto 0;       /* center horizontally, add space from artboard */
+  font-size: 22px;
+  width: 44px;
+  height: 44px;
+
+  border: none;
+  border-radius: 50%;
+  background: var(--viup-brown, #6D4C41); /* fallback brown */
+  color: #fff;
+  cursor: pointer;
+  box-shadow: 0 3px 8px rgba(0,0,0,0.15);
+  transition: transform 0.2s ease, background 0.2s ease;
+}
+
+#vi-up-add-artboard:hover {
+  background: #54372F;   /* darker on hover */
+  transform: scale(1.05);
+}
+
+#vi-up-add-artboard:active {
+  transform: scale(0.95);
+}
+.vi-up-art-img{ width:100%; height:100%; object-fit:cover; }
+
+/* Floating toolbar (bottom center) */
+.vi-up-floatbar{
+  position:absolute; left:50%; bottom:24px; transform:translateX(-50%);
+  background: var(--viup-ink);
+  color:#fff; border-radius:14px; padding:8px; display:flex; gap:6px;
+  box-shadow: 0 8px 24px rgba(0,0,0,.25);
+}
+.vi-up-fbtn{
+  width:36px; height:36px; border-radius:10px; background:transparent;
+  border:1px solid rgba(255,255,255,.2); color:#fff; cursor:pointer;
+}
+.vi-up-fbtn:hover{ background:rgba(255,255,255,.08); }
+
+/* Rightbar */
+.vi-up-rightbar {
+  
+  bottom: 400; /* stick to bottom of parent scroll area */
+  margin-left: 129px;
+  margin-right: auto;
+  
+  display:flex;
+  align-items:center;
+  justify-content:center;
+
+  padding:10px 500px;
+  background:#F7EFEB;
+  border-radius:0px;
+}
+.vi-up-zoomwrap {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 12px;                 /* space between slider and text */
+  background: #F7EFEB;       /* optional background */
+  padding: 6px 10px;         
+  
+  width: fit-content;        /* shrink to content */
+  margin: 0 auto;            /* center horizontally */
+}
+
+.vi-up-zoom {
+  width: 180px;              /* set slider width */
+}
+
+.vi-up-zoommeta {
+  display: flex;
+  gap: 12px;
+  font-size: 12px;
+  color: var(--viup-brown);
+}
+
+
+.viup-page-inner{
+  position: relative;
+  padding: 24px;
+}
+
+
+/* Responsive */
+@media (max-width: 1100px){
+  .vi-up-editor{ grid-template-columns: 70px 1fr 190px; }
+  .vi-up-artboard{ transform: scale(.9); transform-origin:center; }
+}
+@media (max-width: 900px){
+  .vi-up-rightbar{ display:none; }
+  .vi-up-editor{ grid-template-columns: 70px 1fr; }
+  .vi-up-artboard{ transform: scale(.8); }
+}
+
+/* Filter contents when the SECOND sidebar is opened by Photo Gallery */
+.vi-up-editor > .vi-up-editor.viup-photo-open > aside.vi-up-sidebar.viup-overlay-panel > * {
+  display: none !important;                 /* hide everything inside second aside */
+}
+
+/* …except the Photo Gallery extension panel inside the second aside */
+.vi-up-editor > .vi-up-editor.viup-photo-open > aside.vi-up-sidebar.viup-overlay-panel #viup-photo-ext {
+  display: block !important;
+}
+</style>
+<style>
+  
+  .footer-container {
+ position: absolute;
+    bottom: 137px;
+    width: 20.4vw;
+    background-color: var(--viup-footer-bg);
+    padding: 0rem 0.1rem 0.2rem;
+    z-index: 999;
+    clip-path: path("M0,0 H100% V100% H0 V0 Q50% 70 100% 0 Z");
+    left: 558px;
+}
+
+.footer-rsvp-wrapper {
+  position: absolute;
+  top: -1.2rem;
+  left: 52%;
+  transform: translateX(-50%);
+  transition: left 1s ease 1s, transform 1s ease 1s;
+  width: 53px;
+  height: 53px;
+  z-index: 2;
+}
+
+.footer-rsvp-wrapper.move-right {
+  left: 74.5%;
+  transform: translateX(-50%);
+}
+
+.footer-container::before {
+  content: "";
+  position: absolute;
+  top: -3.5px;
+  left: 52%;
+  transform: translateX(-50%);
+  width: 60px;
+  height: 40px;
+  background: white;
+  border-bottom-left-radius: 90px;
+  border-bottom-right-radius: 90px;
+  z-index: 1;
+  transition: left 200ms ease-in-out; /* ✅ Clean, fast, matching */
+}
+
+.footer-container.bump-shift::before {
+  left: 74.5%;
+}
+
+.footer-buttons {
+  position: relative;
+  height: 40px;
+  margin-top: 1.5rem;
+}
+
+.footer-side.left,
+.footer-side.right {
+  position: absolute;
+  top: -5px;
+  display: flex;
+  gap: 2rem;
+}
+.footer-side.right a:nth-child(1) {
+  margin-right: 1rem;
+}
+
+.footer-side.left {
+  left: 0.7rem;
+
+}
+
+.footer-side.right {
+  right: 0.7rem;
+}
+
+.footer-side a {
+  color: white;
+  text-decoration: none;
+  font-size: 0.75rem;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.3rem;
+  font-family: 'Montserrat', sans-serif;
+}
+
+.footer-side img{
+width:23px;
+height:23px;
+
+}
+
+.footer-side i {
+  font-size: 1.3rem;
+}
+
+.footer-side svg { fill: var(--viup-footer-text); }
+
+.footer-side .viup-label {
+  color: var(--viup-footer-text) !important;
+}
+
+.footer-label {
+  color: var(--viup-footer-text) !important;
+}
+
+.footer-icon {
+  filter: var(--viup-footer-icon-filter);
+}
+
+
+.footer-rsvp-text {
+  position: absolute;
+  top: 0%;
+  left: 52%;
+  transform: translate(-50%, 0);
+  color: white;
+  font-weight: bold;
+  font-size: 13px;
+  opacity: 1;
+  transition: transform 1s ease, top 1s ease, opacity 1s ease;
+  z-index: 3;
+}
+
+/* When it drops */
+.footer-rsvp-text.drop {
+  top: 31%; /* visually aligns into the black footer */
+  transform: translate(-50%, 0);
+}
+
+.footer-rsvp-text,
+.footer-side .viup-label,
+.footer-side img {
+  color: var(--viup-footer-text) !important;
+  fill: var(--viup-footer-text) !important;
+}
+
+
+/* RSVP Circle Button */
+.footer-rsvp {
+  background-color: #000;
+ 
+  border-radius: 50%;
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  overflow: hidden;
+}
+
+.footer-rsvp::after {
+  content: 'RSVP';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  transition: transform 0.8s ease, opacity 0.8s ease;
+  opacity: 1;
+}
+
+.footer-rsvp.animate-text::after {
+  transform: translate(-50%, 60px);
+  opacity: 0;
+}
+
+star-fly-in {
+  position: absolute;
+  color: white;
+  font-size: 1.2rem;
+  opacity: 0;
+  pointer-events: none;
+  transition: transform 0.8s ease, opacity 0.8s ease, left 0.8s ease, top 0.8s ease;
+  transform: translate(-50%, -50%) scale(1);
+  z-index: 10;
+}
+
+.star-fly-in.animate {
+  opacity: 1;
+  transform: translate(-50%, -50%) scale(2);
+}
+
+.star-fly-out {
+    position: absolute;
+  font-size: 1.2rem;
+  color: white;
+  z-index: 15;
+  opacity: 1;
+  pointer-events: none;
+  transform: translate(-50%, -50%) scale(2); /* start large */
+  transition: transform 0.8s ease, opacity 0.8s ease, left 0.8s ease, top 0.8s ease;
+}
+
+.floating-star {
+  position: absolute;
+  top: 28%;
+  left: 6%;
+  transform: translate(-50%, -50%) scale(1);
+  opacity: 1;
+  transition: all 0.6s ease;
+  font-size: 24px;
+  color: white;
+ 
+  z-index: 10;
+}
+
+.floating-star.visible {
+  top: -28%;
+  left: 5%;
+  transform: translate(-50%, -50%) scale(1.2);
+  opacity: 1;
+}
+
+/* Put this in your CSS */
+.canvas-host { position: relative; min-height: 100vh; } /* the parent wrapper */
+/* Stacked, scrollable "pages" */
+/* Each page is a 1000px slab, absolutely stacked */
+.viup-page-wrap{
+  position: absolute;
+  left: 0; right: 0;
+  margin: 0 auto;
+  width: 1080px;          /* or match your device width */
+  height: 1000px;         /* EXACT page height requested */
+  background: #fff;
+  outline: 1px dashed #ddd; /* dev-only */
+  display: block;
+}
+
+/* RSVP PANEL */
+.viup-ext-rsvp {
+  display: none;
+  padding: 20px;
+  background-color: #fff9f7;
+  border-left: 1px solid var(--viup-border);
+  height: 100%;
+  overflow-y: auto;
+}
+
+.viup-ext-rsvp.open {
+  display: block;
+}
+
+.viup-ext-rsvp .viup-field {
+  margin-bottom: 15px;
+}
+
+.viup-ext-rsvp label {
+  display: block;
+  font-size: 12px;
+  color: var(--viup-brown);
+  margin-bottom: 5px;
+  font-family: Montserrat, sans-serif;
+}
+
+.viup-ext-rsvp input {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid var(--viup-border);
+  border-radius: 10px;
+  outline: none;
+  background: #fff;
+}
+
+.viup-ext-rsvp .viup-btn-save {
+  background: var(--viup-brown);
+  color: #fff;
+  border: none;
+  padding: 10px 16px;
+  border-radius: 8px;
+  font-family: Montserrat, sans-serif;
+  cursor: pointer;
+  transition: 0.3s;
+}
+
+.viup-ext-rsvp .viup-btn-save:hover {
+  opacity: 0.85;
+}
+
+/* RSVP PANEL VISIBILITY (same pattern as others) */
+.vi-up-editor > .vi-up-editor.viup-rsvp-open > aside.vi-up-sidebar {
+  display: block !important;
+}
+
+.vi-up-editor > .vi-up-editor.viup-rsvp-open > aside.vi-up-sidebar.viup-overlay-panel {
+  transform: translateX(0);
+  pointer-events: auto;
+}
+
+.vi-up-editor > .vi-up-editor.viup-rsvp-open > aside.vi-up-sidebar.viup-overlay-panel > * {
+  display: none !important;
+}
+
+.vi-up-editor > .vi-up-editor.viup-rsvp-open #viup-rsvp-ext {
+  display: block !important;
+  max-height: 70vh;
+  opacity: 1;
+  overflow: auto;
+}
+
+
+
+</style>
+</head>
+<body>
+    <header class="header-viup">
+        <div class="header-viup-left">
+          <div class="logo"><img src="Logo\Vi-Up Submark.png" style="width:40px; height:40px;"></div>
+          <button class="icon-btn"><img src="ICN_canvas\Undo.svg"></button>
+          <button class="icon-btn" style="margin-left: -41.83px;"> <img src="ICN_canvas\Redo.svg"></button>
+          
+      
+          
+        </div>
+      
+        <div class="header-viup-right">
+          <span class="event-title">Maya & Asyraaf</span>
+          <button class="icon-btn"> <img src="ICN_canvas\Cloud_save.svg"></button>
+          <button class="play-btn"><div class="logo"><img src="play.png" ></div></button>
+          <button class="upgrade-btn"><i class="fa fa-gift" aria-hidden="true" style="margin-right: 10px;"></i>Upgrade Package</button>
+          <img src="user.jpg" alt="Profile Picture" class="user-image">
+          <button class="share-btn"><i class="fa fa-upload" aria-hidden="true" style="margin-right: 10px;"></i>Share</button>
+        </div>
+      </header>
+
+      <div class="vi-up-editor">
+        <!-- Left Sidebar -->
+        <aside class="vi-up-sidebar">
+          <button class="vi-up-sideitem" title="Templates">
+            <span class="vi-up-ico"><img src="ICN_canvas\template.svg" style=" filter: invert(38%) sepia(12%) saturate(560%) hue-rotate(320deg) brightness(92%) contrast(88%);"></span>
+            <span class="vi-up-label">Templates</span>
+          </button>
+          <button class="vi-up-sideitem" title="Elements">
+            <span class="vi-up-ico"><img src="ICN_canvas\element.svg" style=" filter: invert(38%) sepia(12%) saturate(560%) hue-rotate(320deg) brightness(92%) contrast(88%);"></span><span class="vi-up-label">Elements</span>
+          </button>
+          <button class="vi-up-sideitem" title="Text">
+            <span class="vi-up-ico"><img src="ICN_canvas\text.svg" style=" filter: invert(38%) sepia(12%) saturate(560%) hue-rotate(320deg) brightness(92%) contrast(88%);"></span><span class="vi-up-label">Text</span>
+          </button>
+
+          <div class="vi-up-divider"></div>
+
+          <button class="vi-up-sideitem" title="Photo Gallery">
+            <span class="vi-up-ico"><img src="ICN_canvas\photo_gallery.svg" style=" filter: invert(38%) sepia(12%) saturate(560%) hue-rotate(320deg) brightness(92%) contrast(88%);"></span><span class="vi-up-label">Photo Gallery</span>
+          </button>
+          <!-- Extension panel for Photo Gallery -->
+         
+          <button class="vi-up-sideitem" title="Music" id="viup-btn-music">
+            <span class="vi-up-ico"><img src="ICN_canvas\semiquaver.svg" style=" filter: invert(38%) sepia(12%) saturate(560%) hue-rotate(320deg) brightness(92%) contrast(88%);"></span>
+            <span class="vi-up-ico"></span><span class="vi-up-label">Music</span>
+          </button>
+      
+          
+          <button class="vi-up-sideitem" title="RSVP" >
+            <span class="vi-up-ico" style="width: 45px;"><img src="ICN_canvas\RESPONDVP.svg" style=" filter: invert(38%) sepia(12%) saturate(560%) hue-rotate(320deg) brightness(92%) contrast(88%);"></span><span class="vi-up-label">RSVP</span>
+          </button>
+      
+    
+          <button class="vi-up-sideitem" title="Contact">
+            <span class="vi-up-ico"><img src="ICN_canvas\contact.svg" style="filter: invert(38%) sepia(12%) saturate(560%) hue-rotate(320deg) brightness(92%) contrast(88%);"></span><span class="vi-up-label">Contact</span>
+          </button>
+          <button class="vi-up-sideitem" title="Location">
+            <span class="vi-up-ico" style="width: 45px;"><img src="ICN_canvas\location.svg" style="filter: invert(38%) sepia(12%) saturate(560%) hue-rotate(320deg) brightness(92%) contrast(88%);"></span><span class="vi-up-label">Location</span>
+          </button>
+          <button class="vi-up-sideitem" title="Calendar">
+            <span class="vi-up-ico" style="width: 45px;"><img src="ICN_canvas\calendar.svg" style="filter: invert(38%) sepia(12%) saturate(560%) hue-rotate(320deg) brightness(92%) contrast(88%);"></span><span class="vi-up-label">Calendar</span>
+          </button>
+          <button class="vi-up-sideitem" title="Money Gift">
+            <span class="vi-up-ico" style="width: 45px;"><img src="ICN_canvas\money_gift.svg" style="filter: invert(38%) sepia(12%) saturate(560%) hue-rotate(320deg) brightness(92%) contrast(88%);"></span><span class="vi-up-label">Money Gift</span>
+          </button>
+          <button class="vi-up-sideitem" id="viup-btn-wishlist" title="Wishlist">
+            <span class="vi-up-ico" style="width: 45px;">
+              <img src="ICN_canvas/gestbook.svg"
+                style="filter: invert(38%) sepia(12%) saturate(560%) hue-rotate(320deg) brightness(92%) contrast(88%);">
+            </span>
+            <span class="vi-up-label">Wishlist</span>
+          </button>
+      
+      
+        
+        </aside>
+        <div class="vi-up-editor">
+          <!-- Left Sidebar -->
+          <aside class="vi-up-sidebar">
+            <button class="vi-up-sideitem" title="Templates">
+              <span class="vi-up-ico"><img src="ICN_canvas\template.svg" style="filter: invert(38%) sepia(12%) saturate(560%) hue-rotate(320deg) brightness(92%) contrast(88%);"></span>
+              <span class="vi-up-label">Templates</span>
+            </button>
+            <button class="vi-up-sideitem" title="Elements">
+              <span class="vi-up-ico"><img src="ICN_canvas\element.svg" style="filter: invert(38%) sepia(12%) saturate(560%) hue-rotate(320deg) brightness(92%) contrast(88%);"></span><span class="vi-up-label">Elements</span>
+            </button>
+            <button class="vi-up-sideitem" title="Text">
+              <span class="vi-up-ico"><img src="ICN_canvas\text.svg" style="filter: invert(38%) sepia(12%) saturate(560%) hue-rotate(320deg) brightness(92%) contrast(88%);"></span><span class="vi-up-label">Text</span>
+            </button>
+
+              <!-- Contact extension panel (second sidebar) -->
+            <div id="viup-contact-ext" class="viup-ext-contact" aria-hidden="true">
+            
+
+  <div class="viup-ext-body">
+    <label class="viup-field">
+      <span>Name</span>
+      <input type="text" placeholder="Name">
+    </label>
+
+    <label class="viup-field">
+      <span>Phone Number</span>
+      <input type="tel" placeholder="+60 12-345 6789">
+    </label>
+
+    <div class="viup-actions">
+      <button type="button" class="viup-btn-add" title="Add another contact">+</button>
+      <button type="button" class="viup-btn-save">Save</button>
+    </div>
+  </div>
+</div>
+
+<!-- ELEMENTS extension panel -->
+<div id="viup-elements-ext" class="viup-ext-elements" aria-hidden="true">
+  
+  <div class="viup-ext-body">
+    <label class="viup-field">
+      <span>Search Elements</span>
+      <input type="text" placeholder="Shapes, stickers, backgrounds…" />
+    </label>
+
+    <div class="viup-elements-groups">
+      <h4 class="viup-subtitle">Shapes</h4>
+      <div class="viup-grid">
+        <div class="viup-shape"></div>
+        <div class="viup-circle"></div>
+        <div class="viup-triangle"></div>
+      </div>
+
+      <h4 class="viup-subtitle">Stickers</h4>
+      <div class="viup-grid">
+        <div class="viup-card"></div>
+        <div class="viup-card"></div>
+        <div class="viup-card"></div>
+      </div>
+
+      <h4 class="viup-subtitle">Backgrounds</h4>
+      <div class="viup-grid">
+        <div class="viup-card"></div>
+        <div class="viup-card"></div>
+        <div class="viup-card"></div>
+      </div>
+      
+    </div>
+  </div>
+</div>
+
+<!-- RSVP EXTENSION PANEL -->
+<div id="viup-rsvp-ext" class="viup-ext-rsvp" aria-hidden="true">
+  <h3 class="viup-ext-title">RSVP</h3>
+
+  <label class="viup-field">
+    <span>Max Guest Capacity</span>
+    <input type="number" placeholder="Enter number of guests">
+  </label>
+
+  <label class="viup-field">
+    <span>Navigation Bar</span>
+    <input type="color" value="#000000">
+  </label>
+
+  <label class="viup-field">
+    <span>Text and Icon</span>
+    <input type="color" value="#000000">
+  </label>
+
+  <div class="viup-actions">
+    <button type="button" class="viup-btn-save">Save</button>
+  </div>
+</div>
+
+<!-- LOCATION extension panel -->
+<div id="viup-location-ext" class="viup-ext-location" aria-hidden="true">
+
+  <div class="viup-ext-body">
+    <label class="viup-field">
+      <span>Location Address</span>
+      <input 
+  type="text" 
+  id="viup-location-input" 
+  placeholder="e.g., Dewan Seri Seroja, Putrajaya">
+    </label>
+    <div class="viup-actions">
+      <button type="button" class="viup-btn-save">Save</button>
+    </div>
+    <!-- Optional preview box to hold a static map or embed later -->
+    <div class="viup-mapbox" id="viup-mapbox">Map preview</div>
+  </div>
+</div>
+
+<div id="viup-music-ext" class="viup-ext-music viup-ext-inner" aria-hidden="true">
+  <h3 class="viup-ext-title">Music</h3>
+
+  <label>Upload Music File:</label>
+<input type="file" id="music-file" accept="audio/*">
+
+  <div class="viup-field">
+    <label for="music-link">Music Link</label>
+    <input type="text" id="music-link" placeholder="Paste a music or MP3 link">
+  </div>
+
+  <div class="viup-field">
+    <label for="music-start">Start Time</label>
+    <input type="text" id="music-start" placeholder="00:00">
+  </div>
+
+  <div class="viup-field">
+    <label for="music-end">End Time</label>
+    <input type="text" id="music-end" placeholder="00:00">
+  </div>
+
+  <div class="viup-actions">
+    <button class="viup-btn-save" id="save-music">Save</button>
+  </div>
+</div>
+
+<!-- MONEY GIFT extension panel -->
+<div id="viup-moneygift-ext" class="viup-ext-moneygift" aria-hidden="true">
+  
+  <div class="viup-ext-body">
+    <label class="viup-field">
+      <span>Bank</span>
+      <input type="text" placeholder="Maybank / CIMB / Public Bank…" />
+    </label>
+    <label class="viup-field">
+      <span>Account Number</span>
+      <input type="text" placeholder="0000 0000 0000" />
+    </label>
+    <div class="viup-drop">
+      <p><strong>Drag or drop</strong> images, or any file<br><small>or browse files on your device</small></p>
+    </div>
+    <div class="viup-actions">
+      <button type="button" class="viup-btn-save">Save</button>
+    </div>
+  </div>
+</div>
+
+<!-- TEMPLATES extension panel -->
+<div id="viup-templates-ext" class="viup-ext-templates" aria-hidden="true">
+ 
+
+  <div class="viup-ext-body">
+    <label class="viup-field" style="margin-bottom:12px;">
+      <input type="text" placeholder="Search Templates" />
+    </label>
+
+    <section class="viup-template-group">
+      <div class="viup-group-head">
+        <h4>Modern</h4><button class="viup-link">See All</button>
+      </div>
+      <div class="viup-templates-row">
+        <div class="viup-card"></div>
+        <div class="viup-card"></div>
+      </div>
+    </section>
+
+    <section class="viup-template-group">
+      <div class="viup-group-head">
+        <h4>Traditional</h4><button class="viup-link">See All</button>
+      </div>
+      <div class="viup-templates-row">
+        <div class="viup-card"></div>
+        <div class="viup-card"></div>
+      </div>
+    </section>
+
+    <section class="viup-template-group">
+      <div class="viup-group-head">
+        <h4>Floral</h4><button class="viup-link">See All</button>
+      </div>
+      <div class="viup-templates-row">
+        <div class="viup-card"></div>
+        <div class="viup-card"></div>
+      </div>
+    </section>
+  </div>
+</div>
+
+<div id="viup-wishlist-ext" class="viup-ext-wishlist" aria-hidden="true">
+  <h3 class="viup-ext-title">Wishlist</h3>
+
+  <label class="viup-field">
+    <span>Delivery Address</span>
+    <input type="text" placeholder="Enter your address">
+  </label>
+
+  <label class="viup-field">
+    <span>Phone Number</span>
+    <input type="text" placeholder="+60 12-345 6789">
+  </label>
+
+  <label class="viup-field">
+    <span>Item’s Link</span>
+    <input type="url" placeholder="https://example.com/item">
+  </label>
+
+  <div class="viup-actions">
+    <button type="button" class="viup-btn-add">+ Add Item</button>
+  </div>
+
+  <div class="viup-actions">
+    <button type="button" class="viup-btn-save">Save</button>
+  </div>
+</div>
+
+
+<!-- TEXT extension panel -->
+<div id="viup-text-ext" class="viup-ext-text" aria-hidden="true">
+  
+
+  <div class="viup-ext-body">
+    <label class="viup-field" style="margin-bottom:12px;">
+      <input type="text" placeholder="Search Fonts" />
+    </label>
+
+    <button type="button" class="viup-btn-block viup-add-text">
+      <span>🅣</span> Add a text box
+    </button>
+
+    <h4 class="viup-subtitle" style="margin-top:14px;">Default text styles</h4>
+    <button class="viup-pill" id="Heading">Add a heading</button>
+    <button class="viup-pill" id="SubHeading">Add a subheading</button>
+    <button class="viup-pill" id="BodyText">Add a body text</button>
+
+    <div class="viup-fonts-head">
+      <h4 class="viup-subtitle">Fonts</h4><button class="viup-link">See All</button>
+    </div>
+    <div class="viup-fonts">
+      <button class="viup-font-chip">Montserrat</button>
+      <button class="viup-font-chip">Inter</button>
+      <button class="viup-font-chip">Poppins</button>
+      <button class="viup-font-chip">Playfair Display</button>
+      <button class="viup-font-chip">Montaga</button>
+      <button class="viup-font-chip">Raleway</button>
+      <button class="viup-font-chip">Monotype Corsiva</button>
+    </div>
+  </div>
+</div>
+
+
+  
+            <div class="vi-up-divider"></div> <!--here is the place to expand-->
+  
+            <button class="vi-up-sideitem" title="Photo Gallery">
+              <span class="vi-up-ico"><img src="ICN_canvas\photo_gallery.svg" style="filter: invert(38%) sepia(12%) saturate(560%) hue-rotate(320deg) brightness(92%) contrast(88%);"></span><span class="vi-up-label">Photo Gallery</span>
+            </button>
+            <!-- Extension panel for Photo Gallery -->
+            <div id="viup-photo-ext" class="viup-ext-gallery" aria-hidden="true">
+              <div class="viup-ext-inner">
+                <div class="viup-ext-search">
+                  <input type="text" placeholder="Search Keywords, Tags, Colour" />
+                </div>
+                <div class="viup-ext-upload">
+                  <label for="gallery-file-input" style="cursor:pointer;">
+                    📸 Upload Images
+                  </label>
+                  <input type="file" id="gallery-file-input" accept="image/*" multiple style="display:none;">
+                </div>
+                
+                <h4 class="viup-ext-subtitle">Images</h4>
+                <div class="viup-ext-grid">
+                  <img src="https://picsum.photos/160/110?1" alt="thumb">
+                  <img src="https://picsum.photos/160/110?2" alt="thumb">
+                </div>
+              </div>
+            </div>
+            <button class="vi-up-sideitem" title="Music">
+              <span class="vi-up-ico"><img src="ICN_canvas\semiquaver.svg" style="filter: invert(38%) sepia(12%) saturate(560%) hue-rotate(320deg) brightness(92%) contrast(88%);"></span>
+              <span class="vi-up-ico"></span><span class="vi-up-label">Music</span>
+            </button>
+        
+            
+            <button class="vi-up-sideitem" title="RSVP">
+              <span class="vi-up-ico"><img src="ICN_canvas\RESPONDVP.svg" style="filter: invert(38%) sepia(12%) saturate(560%) hue-rotate(320deg) brightness(92%) contrast(88%);"></span><span class="vi-up-label">RSVP</span>
+            </button>
+        
+      
+            <button class="vi-up-sideitem" title="Contact">
+              <span class="vi-up-ico">☎️</span><span class="vi-up-label">Contact</span>
+            </button>
+            <!-- Calendar extension panel -->
+<div id="viup-calendar-ext" class="viup-ext-calendar" aria-hidden="true">
+
+  
+  
+
+  <div class="viup-ext-body">
+    <label class="viup-field">
+      <span>Event Date</span>
+      <input type="date" placeholder="YYYY-MM-DD">
+    </label>
+
+    <div class="viup-actions">
+      <button type="button" class="viup-btn-save">Save</button>
+    </div>
+  </div>
+</div>
+
+            <button class="vi-up-sideitem" title="Location">
+              <span class="vi-up-ico">📍</span><span class="vi-up-label">Location</span>
+            </button>
+            <button class="vi-up-sideitem" title="Calendar">
+              <span class="vi-up-ico">🗓️</span><span class="vi-up-label">Calendar</span>
+            </button>
+            <button class="vi-up-sideitem" title="Money Gift">
+              <span class="vi-up-ico">💌</span><span class="vi-up-label">Money Gift</span>
+            </button>
+            <button class="vi-up-sideitem" title="Wishlist">
+              <span class="vi-up-ico">🧾</span><span class="vi-up-label">Wishlist</span>
+            </button>
+        
+        
+          
+          </aside>
+          
+        <!-- Stage -->
+        <main class="vi-up-stage">
+           <!-- Toggle button -->
+    
+
+    <div id="gjs">
+      <h1 data-gjs-type="text">Welcome to Vi-up</h1>
+    </div>
+    <div class="footer-container">
+      <div class="footer-rsvp-wrapper">
+          <div class="footer-rsvp">RSVP</div>
+      </div>
+
+      <div class="footer-rsvp-text">RSVP</div>
+
+      <div class="footer-buttons">
+          <div class="footer-side left">
+              <a href="javascript:void(0);"  class="footer-guestbook">
+                  <img class="footer-icon" id="guestbook-icon" onclick="openGuestbook()" src="Guestbook.png">
+                  <span class="viup-label footer-label">Guestbook</span>
+              </a>
+
+              <a href="#" class="moneygift-toggle">
+                  <img class="footer-icon" id="moneygift-icon" src="MONEYGIFT.png">
+                  <span class="viup-label footer-label">Gift</span>
+              </a>
+          </div>
+
+          <div class="footer-side right">
+              <a href="javascript:void(0);" class="footer-info">
+                  <i class="fa-regular fa-star floating-star"></i>
+                  <span class="viup-label footer-label" style="top: 21px;
+                  position: absolute;
+                  right: 82px;">Info</span>
+              </a>
+
+              <button class="contact-toggle" style="background: none; border: none; color: white;">
+                  <img  class="footer-icon" id="contact-icon" src="Contact.png">
+                  <span class="viup-label footer-label" style="font-family:Montserrat;">Contact</span>
+              </button>
+          </div>
+
+      </div>
+  </div>
+    
+   
+        </main>
+        <!-- === Zoom + Page Bar === -->
+
+
+         <!-- Stylish Footer -->
+    <!--<div class="footer-container">
+      <div class="footer-rsvp-wrapper">
+          <div class="footer-rsvp">RSVP</div>
+      </div>
+
+      <div class="footer-rsvp-text">RSVP</div>
+
+      <div class="footer-buttons">
+          <div class="footer-side left">
+              <a href="javascript:void(0);"  class="footer-guestbook">
+                  <img id="guestbook-icon" onclick="openGuestbook()" src="Guestbook.png">
+                  <span class="footer-label">Guestbook</span>
+              </a>
+
+              <a href="#" class="moneygift-toggle">
+                  <img id="moneygift-icon" src="MONEYGIFT.png">
+                  <span class="footer-label">Gift</span>
+              </a>
+          </div>
+
+          <div class="footer-side right">
+              <a href="javascript:void(0);" class="footer-info">
+                  <i class="fa-regular fa-star floating-star"></i>
+                  <span class="footer-label" style="margin-bottom:-29px; margin-left:-2px;">Info</span>
+              </a>
+
+              <button class="contact-toggle" style="background: none; border: none; color: white;">
+                  <img id="contact-icon" src="Contact.png">
+                  <span class="footer-label" style="font-family:Montserrat;">Contact</span>
+              </button>
+          </div>
+
+      </div> -->
+  </div>
+  <div class="viup-zoombar">
+    <div class="zoom-section">
+      <button id="zoom-out" class="zoom-btn">−</button>
+      <input id="zoom-slider" type="range" min="25" max="200" value="100" />
+      <button id="zoom-in" class="zoom-btn">+</button>
+      <span id="zoom-percent"><b>100%</b></span>
+    </div>
+  
+    <div class="page-section">
+      <span id="page-count"><b>Pages</b> 1 / 1</span>
+      <button id="fullscreen-toggle" class="zoom-btn">
+        <i class="fa-solid fa-expand"></i>
+      </button>
+    </div>
+  </div>
+  
+         <!-- Core -->
+    
+    <!-- Free-move plugin (must load AFTER GrapesJS) -->
+    <script src="https://unpkg.com/grapesjs-plugin-absolute"></script>
+        <!--<button id="vi-up-add-page-above" class="viup-pill">Add Page Above</button>-->
+        <!-- Keep your existing button; we only change its behavior & label -->
+<button id="vi-up-add-page-below" class="viup-pillz">+</button>
+        <!-- Right Controls -->
+        
+        
+      </div>
+      
+     <!-- <aside class="vi-up-rightbar">
+        <div class="vi-up-zoomwrap">
+          <input type="range" min="25" max="200" value="100" class="vi-up-zoom" />
+          <div class="vi-up-zoommeta">
+            <span>100%</span>
+            <span>Pages | 1 / 1</span>
+          </div>
+        </div>
+      </aside>
+-->
+     
+      <script>
+        
+        const editor = grapesjs.init({
+          container: '#gjs',
+          fromElement: true,
+          height: '100%',
+          width: '100%',
+          storageManager: false,
+           // ✅ Force only Mobile Portrait
+  deviceManager: {
+    devices: [
+      {
+        id: 'mobilePortrait',
+        name: 'Mobile Portrait',
+        width: '390px',   // typical mobile width
+        height: '844px',  // typical mobile height
+      }
+    ],
+  },
+
+  plugins: ['grapesjs-plugin-absolute'],
+  pluginsOpts: {
+    'grapesjs-plugin-absolute': {
+      canvasRelative: true,
+    }
+  }
+          
+        });
+
+// Register a managed GrapesJS component for shapes
+editor.DomComponents.addType('viup-shape', {
+  model: {
+    defaults: {
+      tagName: 'div',
+      draggable: true,
+      droppable: false,
+      highlightable: true,
+      attributes: { class: 'viup-shape-el' },
+      style: {
+        position: 'absolute',
+        width: '180px',
+        height: '120px',
+        background: '#7D5B59',
+        border: '2px solid #6D4C41',
+        borderRadius: '12px',
+        cursor: 'move',
+      },
+      resizable: {
+        tl: 1, tr: 1, bl: 1, br: 1,
+        tc: 1, bc: 1, lc: 1, rc: 1,
+        keyWidth: 'width',
+        keyHeight: 'height',
+      },
+      rotatable: true,
+    },
+  },
+});
+
+editor.on('load', () => {
+  editor.addStyle(`
+    .gjs-resizer .gjs-resizer-rotator {
+      display: block !important;
+      background: #7D5B59;
+      border-radius: 50%;
+      width: 14px;
+      height: 14px;
+      top: -25px;
+      left: 50%;
+      transform: translateX(-50%);
+      cursor: grab;
+    }
+  `);
+});
+
+        // ✅ Force GrapesJS to always start in mobile portrait
+editor.setDevice('mobilePortrait');
+
+editor.on('load', () => {
+  // Add the font link into the canvas <head> so they appear in preview
+  const head = editor.Canvas.getDocument().head;
+  const link = document.createElement('link');
+  link.rel = 'stylesheet';
+  link.href = "https://fonts.googleapis.com/css2?family=Montserrat:wght@400;600&family=Poppins:wght@400;600&family=Roboto:wght@400;700&family=Inter:wght@400;600&family=Open+Sans:wght@400;600&family=Playfair+Display:wght@400;700&family=Great+Vibes&family=Alex+Brush&family=Pacifico&family=Lato:wght@400;700&family=Oswald:wght@400;700&family=Raleway:wght@400;600&display=swap";
+  head.appendChild(link);
+
+  // Add font list to GrapesJS Style Manager
+  const fontProp = editor.StyleManager.getProperty('typography', 'font-family');
+  if (fontProp) {
+    const fonts = [
+      // Custom + Google fonts
+      { id: "'Montserrat', sans-serif", label: 'Montserrat' },
+      { id: "'Poppins', sans-serif", label: 'Poppins' },
+      { id: "'Roboto', sans-serif", label: 'Roboto' },
+      { id: "'Inter', sans-serif", label: 'Inter' },
+      { id: "'Open Sans', sans-serif", label: 'Open Sans' },
+      { id: "'Playfair Display', serif", label: 'Playfair Display' },
+      { id: "'Great Vibes', cursive", label: 'Great Vibes' },
+      { id: "'Alex Brush', cursive", label: 'Alex Brush' },
+      { id: "'Pacifico', cursive", label: 'Pacifico' },
+      { id: "'Lato', sans-serif", label: 'Lato' },
+      { id: "'Oswald', sans-serif", label: 'Oswald' },
+      { id: "'Raleway', sans-serif", label: 'Raleway' },
+
+      // System / Local fonts
+      { id: "'ITC Avant Garde Gothic', sans-serif", label: 'ITC Avant Garde' },
+      { id: "'Batang', serif", label: 'Batang' },
+      { id: "'Impact', sans-serif", label: 'Impact' },
+      { id: "'Futura', sans-serif", label: 'Futura' },
+      { id: "'Baskerville', serif", label: 'Baskerville' },
+      { id: "'Tex Gyre Termes', serif", label: 'Tex Gyre Termes' },
+      { id: "'Calibri', sans-serif", label: 'Calibri' },
+      { id: "'Georgia', serif", label: 'Georgia' },
+      { id: "'Tahoma', sans-serif", label: 'Tahoma' },
+    ];
+
+    fontProp.set('options', fonts);
+  }
+});
+
+
+        
+
+document.addEventListener('DOMContentLoaded', () => {
+  const galleryBtn = document.querySelector('.vi-up-sideitem[title="Photo Gallery"]');
+  const galleryExt = document.getElementById('viup-photo-ext');
+
+  if (galleryBtn && galleryExt) {
+    galleryBtn.addEventListener('click', () => {
+      galleryExt.classList.toggle('open');
+      galleryExt.setAttribute('aria-hidden', !galleryExt.classList.contains('open'));
+    });
+  }
+});
+
+// Make pages behave like layers inside the canvas
+
+
+
+
+
+
+
+
+
+const PAGE_HEIGHT = 1000;
+
+// Make an empty page section (no built-in heading)
+function makeEmptyPageSection(){
+  return `<section class="viup-page-wrap"></section>`;
+}
+
+/*Optional: extend canvas height so it scrolls
+function ensureExpander(totalHeight){
+  const wrapper = editor.getWrapper();
+  let expander = wrapper.find('#viup-expander')[0];
+  if (!expander) {
+    expander = wrapper.append('<div id="viup-expander"></div>')[0];
+    expander.addStyle({
+      position: 'relative', width: '1px', height: '0px',
+      pointerEvents: 'none', opacity: '0'
+    });
+  }
+  expander.addStyle({ height: `${totalHeight}px` });
+}*/
+
+function addPageBelowMain() {
+  const wrapper = editor.getWrapper();
+  const PAGE_HEIGHT = 1000; // each page height in px
+
+  // Find all pages
+  let pages = wrapper.find('.viup-page-wrap');
+  if (!pages.length) {
+    // Create first page wrapper and move only the visible design area (not toolbars)
+    const main = wrapper.append('<section class="viup-page-wrap"></section>')[0];
+    const kids = [...wrapper.components()];
+    kids.forEach(ch => {
+      if (
+        ch !== main &&
+        !ch.getEl()?.classList?.contains('viup-page-wrap') &&
+        ch.getAttributes().id !== 'viup-expander'
+      ) {
+        main.append(ch);
+      }
+    });
+    main.addStyle({ minHeight: `${PAGE_HEIGHT}px` });
+    pages = [main];
+  }
+
+  // Create new empty page
+  const newPage = wrapper.append('<section class="viup-page-wrap"></section>')[0];
+  newPage.addStyle({
+    position: 'relative',
+    width: '100%',
+    minHeight: `${PAGE_HEIGHT}px`,
+    borderTop: '2px dashed #ccc',
+  });
+
+  newPage.append({
+    type: 'text',
+    content: `Page ${pages.length + 1}`,
+    style: {
+      fontSize: '24px',
+      textAlign: 'center',
+      marginTop: '400px',
+      color: '#888',
+    }
+  });
+
+  // Adjust scroll
+  const totalHeight = (pages.length + 1) * PAGE_HEIGHT;
+  wrapper.view.el.style.minHeight = `${totalHeight}px`;
+
+  // Smooth scroll to new page
+  const frame = editor.Canvas.getFrameEl();
+  frame?.contentWindow?.scrollTo({ top: totalHeight - PAGE_HEIGHT, behavior: 'smooth' });
+}
+
+
+// One listener only
+document.getElementById('vi-up-add-page-below')
+  ?.addEventListener('click', addPageBelowMain);
+
+
+        // Ensure all text behaves like a block container and wraps
+function fixTextBox(comp) {
+  if (!comp.is('text')) return;
+
+  comp.addStyle({
+    display: 'block',
+    width: '200px',                   // give a default width (editable later)
+    height: 'auto',
+    whiteSpace: 'normal',
+    overflowWrap: 'break-word',
+    wordBreak: 'break-word',
+    boxSizing: 'border-box'
+  });
+}
+
+// Apply to existing text on load
+editor.on('load', () => {
+  editor.getWrapper().findType('text').forEach(fixTextBox);
+});
+
+// 1) Global canvas CSS so long words NEVER overflow (even while typing)
+editor.on('load', () => {
+  editor.addStyle(`
+    [data-gjs-type="text"]{
+      display:block;
+      box-sizing:border-box;
+      white-space:normal;
+      overflow-wrap:anywhere;   /* breaks aaaaaaaaa... */
+      word-break:break-word;    /* legacy fallback */
+      height:auto;
+    }
+    /* also enforce wrap inside any nested spans/divs created by the RTE */
+    [data-gjs-type="text"] *{
+      overflow-wrap:anywhere;
+      word-break:break-word;
+    }
+  `);
+});
+
+// 2) Re-apply "box" rules whenever editing starts/ends or content changes
+function enforceTextBox(comp){
+  if (!comp?.is?.('text')) return;
+  comp.addStyle({
+    display: 'block',
+    boxSizing: 'border-box',
+    whiteSpace: 'normal',
+    overflowWrap: 'anywhere',
+    wordBreak: 'break-word',
+    height: 'auto',
+    width: comp.getStyle().width || '300px'  // ensure it actually has a width
+  });
+}
+
+// keep height auto while typing & after edits
+editor.on('component:update:content', m => enforceTextBox(m));
+editor.on('rte:enable',    () => { const s = editor.getSelected(); enforceTextBox(s); });
+editor.on('rte:disable',   () => { const s = editor.getSelected(); enforceTextBox(s); });
+
+// also run once for anything already on canvas
+editor.on('load', () => editor.getWrapper().findType('text').forEach(enforceTextBox));
+
+editor.on('component:add', comp => {
+  // Only care about top-level DIVs (direct children of <body>)
+  const parent = comp.parent();
+  if (!parent) return; // safety
+
+  if (comp.get('tagName') === 'div' && parent.is('body')) {
+    const wrapper = editor.getWrapper();
+    const allDivs = wrapper.find('div');
+
+    // Ignore the first div, but act when a second one appears
+    if (allDivs.length > 1) {
+      // Create a new <section>
+      const newSection = wrapper.append('<section class="viup-page-wrap"></section>')[0];
+
+      newSection.addStyle({
+        position: 'relative',
+        width: '100%',
+        minHeight: '1000px',
+        background: '#fff',
+        borderTop: '2px dashed #ccc',
+      });
+
+      // Move the newest div into the new section
+      newSection.append(comp);
+
+      // Optional label
+      newSection.append({
+        type: 'text',
+        content: `Page ${wrapper.find('.viup-page-wrap').length}`,
+        style: {
+          textAlign: 'center',
+          color: '#888',
+          marginTop: '400px',
+          fontSize: '24px',
+        }
+      });
+
+      // Auto scroll to the new section
+      const frame = editor.Canvas.getFrameEl();
+      const totalHeight = wrapper.find('.viup-page-wrap').length * 1000;
+      wrapper.view.el.style.minHeight = `${totalHeight}px`;
+      frame?.contentWindow?.scrollTo({ top: totalHeight - 1000, behavior: 'smooth' });
+    }
+  }
+});
+
+// Apply to any newly added text
+editor.on('component:add', comp => fixTextBox(comp));
+
+  
+        // Make existing text absolute on load (so it's draggable anywhere)
+        editor.on('load', () => {
+          editor.getWrapper().find('[data-gjs-type=text]').forEach(c => {
+            c.addStyle({ position: 'absolute', top: '40px', left: '40px' });
+            c.set('resizable', { tl:1,tr:1,bl:1,br:1,tc:1,bc:1,lc:1,rc:1 });
+          });
+          updateDragMode(); // set initial drag mode based on toggle
+        });
+
+        
+  
+        // Add a “Free Text” block you can drop anywhere (already absolute)
+        const bm = editor.BlockManager;
+        bm.add('free-text', {
+          label: 'Free Text',
+          category: 'Basic',
+          content: `<p data-gjs-type="text" style="position:absolute; top:60px; left:60px; ">
+            Edit me & drag me anywhere
+          </p>`
+        });
+
+        
+
+// Rectangle (no classes)
+bm.add('shape-rect', {
+  label: 'Rectangle',
+  category: 'Shapes',
+  content: {
+    type: 'default',
+    tagName: 'div',
+    draggable: true,
+    selectable: true,
+    rotatable: true,
+    resizable: {
+      tl: 1, tr: 1, bl: 1, br: 1,
+      tc: 1, bc: 1, lc: 1, rc: 1,
+      keyWidth: 'width',
+      keyHeight: 'height',
+    },
+    style: {
+      position: 'absolute',
+      width: '180px',
+      height: '120px',
+      background: '#7D5B59',
+      border: '2px solid #6D4C41',
+      borderRadius: '12px',
+      cursor: 'move',
+    },
+  },
+});
+
+// Circle (no classes)
+bm.add('shape-circle', {
+  label: 'Circle',
+  category: 'Shapes',
+  content: {
+    type: 'default',
+    tagName: 'div',
+    draggable: true,
+    selectable: true,
+    rotatable: true,
+    resizable: {
+      tl: 1, tr: 1, bl: 1, br: 1,
+      tc: 1, bc: 1, lc: 1, rc: 1,
+      keyWidth: 'width',
+      keyHeight: 'height',
+    },
+    style: {
+      position: 'absolute',
+      width: '140px',
+      height: '140px',
+      background: '#7D5B59',
+      border: '2px solid #6D4C41',
+      cursor: 'move',
+      borderTopLeftRadius: '50%',
+      borderTopRightRadius: '50%',
+      borderBottomRightRadius: '50%',
+      borderBottomLeftRadius: '50%',
+    },
+  },
+});
+
+// Triangle (SVG; still no classes)
+bm.add('shape-triangle', {
+  label: 'Triangle',
+  category: 'Shapes',
+  content: {
+    // Use an SVG component directly
+    type: 'svg',
+    draggable: true,
+    selectable: true,
+    rotatable: true,
+    resizable: {
+      tl: 1, tr: 1, bl: 1, br: 1,
+      tc: 1, bc: 1, lc: 1, rc: 1,
+      keyWidth: 'width',
+      keyHeight: 'height',
+    },
+    style: {
+      position: 'absolute',
+      width: '180px',
+      height: '160px',
+      display: 'block',
+      cursor: 'move',
+    },
+    // Build the polygon inside the SVG
+    components: [{
+      // polygon node
+      type: 'svg',
+      tagName: 'polygon',
+      attributes: {
+        points: '90,10 170,150 10,150',
+        fill: '#7D5B59',
+        stroke: '#6D4C41',
+        'stroke-width': '4',
+      },
+    }],
+  },
+});
+
+
+
+
+
+
+// Make dropped shapes resizable + neatly centered
+// Make dropped shapes resizable + rotatable + neatly centered
+
+
+
+(function wireElementsShapes() {
+  const root = document.getElementById('viup-elements-ext');
+  if (!root) return;
+
+  const tileRect = root.querySelector('.viup-shape');
+  const tileCirc = root.querySelector('.viup-circle');
+  const tileTri  = root.querySelector('.viup-triangle');
+
+  function makeResizableAndSelect(comp) {
+  if (!comp) return;
+
+  // Enable resizing and rotation
+  comp.set('resizable', {
+    tl: 1, tr: 1, bl: 1, br: 1,
+    tc: 1, bc: 1, lc: 1, rc: 1,
+    keyWidth: 'width',
+    keyHeight: 'height'
+  });
+  comp.set('rotatable', true);
+  comp.addStyle({ position: 'absolute', cursor: 'move' });
+
+  // Select + center it
+  editor.select(comp);
+  setTimeout(() => centerInCanvas(comp), 0);
+}
+
+  tileRect?.addEventListener('click', () => {
+  const comp = editor.addComponents({
+    type: 'default',
+    tagName: 'div',
+    style: {
+      position: 'absolute',
+      width: '180px',
+      height: '120px',
+      background: '#7D5B59',
+      border: '2px solid #6D4C41',
+      borderRadius: '12px',
+      cursor: 'move',
+    },
+    resizable: {
+      tl: 1, tr: 1, bl: 1, br: 1,
+      tc: 1, bc: 1, lc: 1, rc: 1,
+      keyWidth: 'width',
+      keyHeight: 'height',
+    },
+    rotatable: true,
+  });
+  editor.select(comp);
+});
+
+// ======= SHAPE BUTTONS (CIRCLE + TRIANGLE) =======
+
+// ---- Circle ----
+tileCirc?.addEventListener('click', () => {
+  // create a raw component model (not HTML string)
+  const comp = editor.DomComponents.addComponent({
+    type: 'default',
+    tagName: 'div',
+    style: {
+      position: 'absolute',
+      width: '140px',
+      height: '140px',
+      background: '#7D5B59',
+      border: '2px solid #6D4C41',
+      cursor: 'move',
+    },
+    resizable: {
+      tl: 1, tr: 1, bl: 1, br: 1,
+      tc: 1, bc: 1, lc: 1, rc: 1,
+      keyWidth: 'width',
+      keyHeight: 'height',
+    },
+    rotatable: true,
+  });
+
+  // Force equal width/height when resizing → keeps it round
+  comp.on('resizing', ev => {
+    const style = comp.getStyle();
+    style.height = style.width;
+    comp.addStyle(style);
+  });
+
+  // Apply 50% radius to all corners at the DOM level (this bypasses GrapesJS parsing)
+  const el = comp.view?.el;
+  if (el) {
+    el.style.borderRadius = '50%';
+  }
+
+  editor.select(comp);
+});
+
+
+// ---- Triangle ----
+tileTri?.addEventListener('click', () => {
+  // create an SVG triangle directly (no nested SVG)
+  const comp = editor.DomComponents.addComponent({
+    tagName: 'svg',
+    attributes: {
+      xmlns: 'http://www.w3.org/2000/svg',
+      viewBox: '0 0 180 160',
+    },
+    style: {
+      position: 'absolute',
+      width: '180px',
+      height: '160px',
+      display: 'block',
+      cursor: 'move',
+    },
+    components: [
+      {
+        tagName: 'polygon',
+        attributes: {
+          points: '90,10 170,150 10,150',
+          fill: '#7D5B59',
+          stroke: '#6D4C41',
+          'stroke-width': '4',
+        },
+      },
+    ],
+    resizable: {
+      tl: 1, tr: 1, bl: 1, br: 1,
+      tc: 1, bc: 1, lc: 1, rc: 1,
+      keyWidth: 'width',
+      keyHeight: 'height',
+    },
+    rotatable: true,
+  });
+
+  // Preserve triangle proportions when resizing
+  comp.on('resizing', () => {
+    const style = comp.getStyle();
+    const aspect = 160 / 180; // base ratio
+    style.height = `${parseFloat(style.width) * aspect}px`;
+    comp.addStyle(style);
+  });
+
+  editor.select(comp);
+});
+
+
+// ---- Rotation knob style (once) ----
+editor.on('load', () => {
+  editor.addStyle(`
+    .gjs-resizer .gjs-resizer-rotator {
+      display:block !important;
+      width:14px;
+      height:14px;
+      border-radius:50%;
+      background:#7D5B59;
+      cursor:grab;
+      top:-25px;
+      left:50%;
+      transform:translateX(-50%);
+    }
+  `);
+});
+})();
+
+
+
+        
+  
+        // Style Manager: expose positioning props for fine control
+        editor.StyleManager.addSector('positioning', {
+          name: 'Positioning',
+          open: true,
+          properties: [
+            { property: 'position', type: 'select', defaults: 'absolute',
+              options: [
+                { id:'absolute', label:'absolute' },
+                { id:'relative', label:'relative' },
+                { id:'fixed',    label:'fixed' },
+                { id:'static',   label:'static' },
+              ]
+            },
+            'top','left','right','bottom','z-index'
+          ]
+        });
+  
+        // ---- Free-drag toggle (your requested pattern) ----
+        let freeDrag = true;
+        const dragBtn = document.getElementById('vi-up-toggle-drag');
+  
+        function setDragModeAbsolute(enabled) {
+          // Provided by the plugin: 'absolute' for free-move, 'translate' for normal flow
+          editor.setDragMode(enabled ? 'absolute' : 'translate');
+        }
+  
+        function updateDragMode() {
+          setDragModeAbsolute(freeDrag);
+          if (dragBtn) dragBtn.textContent = freeDrag ? 'Free Move: ON' : 'Free Move: OFF';
+        }
+  
+        if (dragBtn) {
+          dragBtn.addEventListener('click', () => {
+            freeDrag = !freeDrag;
+            updateDragMode();
+          });
+        }
+
+        
+        // Make a basic absolute text (no transform)
+function createFreeTextHTML(txt = 'New Text') {
+  return `
+    <p data-gjs-type="text" style="position:absolute;margin:0; ">
+      ${txt}
+    </p>`;
+}
+
+// Center the component in pixels (so the plugin can drag smoothly)
+function centerInCanvas(comp) {
+  const frame = editor.Canvas.getFrameEl();
+  const doc = frame?.contentDocument;
+  if (!doc || !comp?.view?.el) return;
+
+  const vw = doc.documentElement.clientWidth;
+  const vh = doc.documentElement.clientHeight;
+  const el = comp.view.el;
+  const cw = el.offsetWidth  || 120;  // fallback sizes
+  const ch = el.offsetHeight || 30;
+
+  const left = Math.max(0, (vw - cw) / 2);
+  const top  = Math.max(0, (vh - ch) / 2);
+
+  comp.addStyle({
+    left: `${left}px`,
+    top:  `${top}px`,
+    right: 'auto',
+    bottom: 'auto',
+    transform: 'none',
+  });
+}
+
+
+// Ensure the block exists
+if (!editor.BlockManager.get('free-text')) {
+  editor.BlockManager.add('free-text', {
+    label: 'Free Text',
+    category: 'Basic',
+    content: '<p data-gjs-type="text" style="position:absolute;left:60px;top:60px;margin:0;">Edit me</p>',
+  });
+}
+
+const textBtn = document.querySelector('.vi-up-sideitem[title="Text"]');
+const HeadBtn = document.getElementById("Heading");
+const SubHeadBtn = document.getElementById("SubHeading");
+const Bodytext = document.getElementById("BodyText");
+if (textBtn) {
+  //CLICK -> insert centered text (your working code can stay)
+  HeadBtn.addEventListener('click', () => {
+    const comp = editor.getWrapper().append('<p data-gjs-type="text" style="position:absolute;margin:0;font-size:80px;">New Text</p>')[0];
+    comp.set('resizable', { tl:1,tr:1,bl:1,br:1,tc:1,bc:1,lc:1,rc:1 });
+    setTimeout(() => centerInCanvas(comp), 0);
+    editor.select(comp);
+  });
+
+  //CLICK -> insert centered text (your working code can stay)
+  SubHeadBtn.addEventListener('click', () => {
+    const comp = editor.getWrapper().append('<p data-gjs-type="text" style="position:absolute;margin:0;">New Text</p>')[0];
+    comp.set('resizable', { tl:1,tr:1,bl:1,br:1,tc:1,bc:1,lc:1,rc:1 });
+    setTimeout(() => centerInCanvas(comp), 0);
+    editor.select(comp);
+  });
+
+  //CLICK -> insert centered text (your working code can stay)
+  Bodytext.addEventListener('click', () => {
+    const comp = editor.getWrapper().append('<p data-gjs-type="text" style="position:absolute;margin:5;height:50px;">.</p>')[0];
+    comp.set('resizable', { tl:1,tr:1,bl:1,br:1,tc:1,bc:1,lc:1,rc:1 });
+    setTimeout(() => centerInCanvas(comp), 0);
+    editor.select(comp);
+  });
+
+
+  // DRAG -> follow mouse and drop on canvas
+  textBtn.setAttribute('draggable', 'true');
+  textBtn.addEventListener('dragstart', (e) => {
+    // required by some browsers to initiate DnD
+    try { e.dataTransfer.setData('text/plain', ''); } catch {}
+    const block = editor.BlockManager.get('free-text');
+    if (block) editor.BlockManager.startDrag(block, e);
+  });
+  textBtn.addEventListener('dragend', () => {
+    editor.BlockManager.stopDrag();
+  });
+}
+
+
+      </script>
+
+
+  
+<script>
+  document.addEventListener('DOMContentLoaded', () => {
+    // editors
+    const editors = document.querySelectorAll('.vi-up-editor');
+    const outerEditor = editors[0];
+    const innerEditor = editors[1] || outerEditor.querySelector('.vi-up-editor');
+  
+    // sidebars
+    const sidebars = outerEditor.querySelectorAll(':scope > aside.vi-up-sidebar');
+    const firstSidebar  = sidebars[0];
+    const secondSidebar = sidebars[1] || (innerEditor && innerEditor.querySelector('aside.vi-up-sidebar'));
+  
+    // buttons (outer sidebar)
+    const btnPhoto     = outerEditor.querySelector('.vi-up-sideitem[title="Photo Gallery"]');
+    const btnContact   = outerEditor.querySelector('.vi-up-sideitem[title="Contact"]');
+    const btnCalendar  = outerEditor.querySelector('.vi-up-sideitem[title="Calendar"]');
+    const btnElements  = outerEditor.querySelector('.vi-up-sideitem[title="Elements"]');
+    const btnLocation  = outerEditor.querySelector('.vi-up-sideitem[title="Location"]');
+    const btnMoneygift = outerEditor.querySelector('.vi-up-sideitem[title="Money Gift"]');
+    const btnTemplates = outerEditor.querySelector('.vi-up-sideitem[title="Templates"]');
+    const btnText      = outerEditor.querySelector('.vi-up-sideitem[title="Text"]');
+    const btnMusic     = outerEditor.querySelector('.vi-up-sideitem[title="Music"]'); // 🎵 NEW MUSIC
+    const btnWishlist  = outerEditor.querySelector('.vi-up-sideitem[title="Wishlist"]'); // 🧾 NEW WISHLIST
+    const btnRSVP = outerEditor.querySelector('.vi-up-sideitem[title="RSVP"]');
+    // panels (inside second sidebar)
+    const panelPhoto      = secondSidebar?.querySelector('#viup-photo-ext');
+    const panelContact    = secondSidebar?.querySelector('#viup-contact-ext');
+    const panelCalendar   = secondSidebar?.querySelector('#viup-calendar-ext');
+    const panelElements   = secondSidebar?.querySelector('#viup-elements-ext');
+    const panelLocation   = secondSidebar?.querySelector('#viup-location-ext');
+    const panelMoneygift  = secondSidebar?.querySelector('#viup-moneygift-ext');
+    const panelTemplates  = secondSidebar?.querySelector('#viup-templates-ext');
+    const panelText       = secondSidebar?.querySelector('#viup-text-ext');
+    const panelMusic      = secondSidebar?.querySelector('#viup-music-ext'); // 🎵 NEW MUSIC
+    const panelWishlist   = secondSidebar?.querySelector('#viup-wishlist-ext'); // 🧾 NEW WISHLIST
+    const panelRSVP = secondSidebar?.querySelector('#viup-rsvp-ext');
+    if (secondSidebar) secondSidebar.classList.add('viup-overlay-panel');
+  
+    function closeAllPanels() {
+      innerEditor?.classList.remove(
+        'viup-photo-open',
+        'viup-contact-open',
+        'viup-calendar-open',
+        'viup-elements-open',
+        'viup-location-open',
+        'viup-moneygift-open',
+        'viup-templates-open',
+        'viup-text-open',
+        'viup-music-open', // 🎵 NEW MUSIC
+        'viup-wishlist-open',
+        'viup-rsvp-open'
+      );
+  
+      [panelPhoto, panelContact, panelCalendar, panelElements, panelLocation, panelMoneygift, panelTemplates, panelText, panelMusic, panelWishlist]
+        .forEach(p => { p?.setAttribute('aria-hidden','true'); p?.classList.remove('open'); });
+    }
+  
+    function openPanel(kind) {
+      closeAllPanels();
+      if (!innerEditor || !secondSidebar) return;
+  
+      if (kind === 'photo'     && panelPhoto)     { innerEditor.classList.add('viup-photo-open');     panelPhoto.classList.add('open');     panelPhoto.setAttribute('aria-hidden','false'); }
+      else if (kind === 'contact'   && panelContact)   { innerEditor.classList.add('viup-contact-open');   panelContact.classList.add('open');   panelContact.setAttribute('aria-hidden','false'); }
+      else if (kind === 'calendar'  && panelCalendar)  { innerEditor.classList.add('viup-calendar-open');  panelCalendar.classList.add('open');  panelCalendar.setAttribute('aria-hidden','false'); }
+      else if (kind === 'elements'  && panelElements)  { innerEditor.classList.add('viup-elements-open');  panelElements.classList.add('open');  panelElements.setAttribute('aria-hidden','false'); }
+      else if (kind === 'location'  && panelLocation)  { innerEditor.classList.add('viup-location-open');  panelLocation.classList.add('open');  panelLocation.setAttribute('aria-hidden','false'); }
+      else if (kind === 'moneygift' && panelMoneygift) { innerEditor.classList.add('viup-moneygift-open'); panelMoneygift.classList.add('open'); panelMoneygift.setAttribute('aria-hidden','false'); }
+      else if (kind === 'templates' && panelTemplates) { innerEditor.classList.add('viup-templates-open'); panelTemplates.classList.add('open'); panelTemplates.setAttribute('aria-hidden','false'); }
+      else if (kind === 'text'      && panelText)      { innerEditor.classList.add('viup-text-open');      panelText.classList.add('open');      panelText.setAttribute('aria-hidden','false'); }
+      else if (kind === 'music'     && panelMusic)     { innerEditor.classList.add('viup-music-open');     panelMusic.classList.add('open');     panelMusic.setAttribute('aria-hidden','false'); } // 🎵 NEW MUSIC
+      else if (kind === 'wishlist' && panelWishlist) {
+  innerEditor.classList.add('viup-wishlist-open');
+  panelWishlist.classList.add('open');
+  panelWishlist.setAttribute('aria-hidden', 'false');
+  
+}
+else if (kind === 'rsvp' && panelRSVP) {
+  innerEditor.classList.add('viup-rsvp-open');
+  panelRSVP.classList.add('open');
+  panelRSVP.setAttribute('aria-hidden', 'false');
+}
+      if (typeof setLeftbarWidth === 'function') setLeftbarWidth();
+    }
+  
+    function togglePanel(kind) {
+      const alreadyOpen =
+        (kind === 'photo'     && innerEditor?.classList.contains('viup-photo-open'))     ||
+        (kind === 'contact'   && innerEditor?.classList.contains('viup-contact-open'))   ||
+        (kind === 'calendar'  && innerEditor?.classList.contains('viup-calendar-open'))  ||
+        (kind === 'elements'  && innerEditor?.classList.contains('viup-elements-open'))  ||
+        (kind === 'location'  && innerEditor?.classList.contains('viup-location-open'))  ||
+        (kind === 'moneygift' && innerEditor?.classList.contains('viup-moneygift-open')) ||
+        (kind === 'templates' && innerEditor?.classList.contains('viup-templates-open')) ||
+        (kind === 'text'      && innerEditor?.classList.contains('viup-text-open'))      ||
+        (kind === 'music'     && innerEditor?.classList.contains('viup-music-open'));    // 🎵 NEW MUSIC
+        (kind === 'wishlist'     && innerEditor?.classList.contains('viup-wishlist-open'));
+        (kind === 'rsvp'     && innerEditor?.classList.contains('viup-rsvp-open'));  
+      alreadyOpen ? closeAllPanels() : openPanel(kind);
+    }
+  
+    // wire buttons
+    btnPhoto    ?.addEventListener('click', () => togglePanel('photo'));
+    btnContact  ?.addEventListener('click', () => togglePanel('contact'));
+    btnCalendar ?.addEventListener('click', () => togglePanel('calendar'));
+    btnElements ?.addEventListener('click', () => togglePanel('elements'));
+    btnLocation ?.addEventListener('click', () => togglePanel('location'));
+    btnMoneygift?.addEventListener('click', () => togglePanel('moneygift'));
+    btnTemplates?.addEventListener('click', () => togglePanel('templates'));
+    btnText     ?.addEventListener('click', () => togglePanel('text'));
+    btnMusic    ?.addEventListener('click', () => togglePanel('music')); // 🎵 NEW MUSIC
+    btnWishlist?.addEventListener('click', () => openPanel('wishlist'));
+    btnRSVP?.addEventListener('click', () => togglePanel('rsvp'));
+    /* Optional hooks */
+    document.querySelector('.viup-add-text')?.addEventListener('click', () => {
+      const ev = new CustomEvent('viup:addText', { detail: { preset: 'body' }});
+      document.dispatchEvent(ev);
+    });
+  });
+
+  const input = document.getElementById("viup-location-input");
+const mapbox = document.getElementById("viup-mapbox");
+
+input.addEventListener("change", () => {
+  const location = encodeURIComponent(input.value.trim());
+  if (!location) return;
+
+  // Default to Google Maps
+  const googleURL = `https://www.google.com/maps?q=${location}&output=embed`;
+  
+  // (Optional) detect if user typed “waze” or selected a toggle
+  const useWaze = location.toLowerCase().includes("waze:");
+  const wazeLocation = location.replace(/^waze:/i, "").trim();
+  const wazeURL = `https://embed.waze.com/iframe?zoom=16&lat=0&lon=0&navigate=yes&q=${encodeURIComponent(wazeLocation)}`;
+
+  // Replace map preview
+  mapbox.innerHTML = `
+    <iframe
+      src="${useWaze ? wazeURL : googleURL}"
+      width="100%"
+      height="400"
+      style="border:0; border-radius:10px;"
+      allowfullscreen
+      loading="lazy">
+    </iframe>
+  `;
+});
+
+
+
+</script>
+<script>
+  // === UNIVERSAL MUSIC PLAYER (YouTube + File/URL) ===
+  
+  // Load YouTube API once and safely store when ready
+  let YTReady = false;
+  let YTReadyCallbacks = [];
+  function onYouTubeIframeAPIReady() {
+    YTReady = true;
+    YTReadyCallbacks.forEach(fn => fn());
+  }
+  
+  // Inject YouTube API script
+  (function() {
+    if (!document.querySelector('script[src*="youtube.com/iframe_api"]')) {
+      const tag = document.createElement('script');
+      tag.src = "https://www.youtube.com/iframe_api";
+      document.body.appendChild(tag);
+    }
+  })();
+  
+  let viupAudio = null;
+  let viupYTPlayer = null;
+  
+  function parseTimeToSeconds(t) {
+    if (!t) return 0;
+    const parts = t.split(':').map(Number);
+    if (parts.length === 3) return parts[0]*3600 + parts[1]*60 + parts[2];
+    if (parts.length === 2) return parts[0]*60 + parts[1];
+    return Number(t) || 0;
+  }
+  function isYouTubeLink(url) { return /youtu\.?be/.test(url); }
+  function getYouTubeID(url) {
+    const m = url.match(/(?:v=|\/)([0-9A-Za-z_-]{11})/);
+    return m ? m[1] : null;
+  }
+  
+  document.getElementById('save-music')?.addEventListener('click', () => {
+    const linkInput = document.getElementById('music-link');
+    const link  = linkInput?.value.trim() || "";
+    const start = parseTimeToSeconds(document.getElementById('music-start').value);
+    const end   = parseTimeToSeconds(document.getElementById('music-end').value);
+  
+    // If file input exists, check for uploaded file
+    const fileInput = document.getElementById('music-file');
+    const file = fileInput?.files?.[0] || null;
+  
+    if (!link && !file) {
+      alert("Please provide a YouTube link, MP3 URL, or upload a file.");
+      return;
+    }
+  
+    // Stop previous players
+    if (viupAudio) { viupAudio.pause(); viupAudio.remove(); viupAudio = null; }
+    if (viupYTPlayer) { viupYTPlayer.stopVideo(); viupYTPlayer.destroy(); viupYTPlayer = null; }
+  
+    // === FILE / MP3 MODE ===
+    if (file || (!isYouTubeLink(link))) {
+      let src = "";
+      if (file) {
+        src = URL.createObjectURL(file); // create a temporary file URL
+      } else {
+        src = link;
+      }
+  
+      viupAudio = document.createElement('audio');
+      viupAudio.src = src;
+      viupAudio.controls = true;
+      viupAudio.autoplay = true;
+      Object.assign(viupAudio.style, { position:'fixed', bottom:'10px', right:'10px', zIndex:'9999' });
+      document.body.appendChild(viupAudio);
+  
+      viupAudio.addEventListener('loadedmetadata', () => viupAudio.currentTime = start);
+      if (end > 0) viupAudio.addEventListener('timeupdate', () => {
+        if (viupAudio.currentTime >= end) viupAudio.pause();
+      });
+      return;
+    }
+  
+    // === YOUTUBE MODE ===
+    const vid = getYouTubeID(link);
+    if (!vid) return alert("Could not extract YouTube ID.");
+  
+    let playerDiv = document.getElementById('viup-yt-player');
+    if (!playerDiv) {
+      playerDiv = document.createElement('div');
+      playerDiv.id = 'viup-yt-player';
+      Object.assign(playerDiv.style, { position:'fixed', bottom:'10px', right:'10px', width:'320px', height:'180px', zIndex:'9999' });
+      document.body.appendChild(playerDiv);
+    }
+  
+    const initYT = () => {
+      viupYTPlayer = new YT.Player('viup-yt-player', {
+        videoId: vid,
+        playerVars: { start, controls: 1 },
+        events: {
+          onReady: e => e.target.playVideo(),
+          onStateChange: e => {
+            if (e.data === YT.PlayerState.PLAYING && end > 0) {
+              const check = setInterval(() => {
+                if (viupYTPlayer.getCurrentTime() >= end) {
+                  viupYTPlayer.pauseVideo();
+                  clearInterval(check);
+                }
+              }, 300);
+            }
+          }
+        }
+      });
+    };
+  
+    if (YTReady) initYT(); else YTReadyCallbacks.push(initYT);
+  });
+  </script>
+  <script>
+    // === MAKE UPLOADED GALLERY IMAGES DRAGGABLE & RESIZABLE ===
+    document.addEventListener('DOMContentLoaded', () => {
+      const fileInput = document.getElementById('gallery-file-input');
+      const galleryGrid = document.querySelector('#viup-photo-ext .viup-ext-grid');
+    
+      if (!fileInput || !galleryGrid || typeof editor === 'undefined') return;
+    
+      fileInput.addEventListener('change', (e) => {
+        const files = Array.from(e.target.files);
+        if (!files.length) return;
+    
+        files.forEach(file => {
+          if (!file.type.startsWith('image/')) return;
+    
+          const reader = new FileReader();
+          reader.onload = (ev) => {
+            // 1️⃣ Preview in gallery
+            const thumb = document.createElement('img');
+            thumb.src = ev.target.result;
+            thumb.alt = file.name;
+            thumb.style.width = '100%';
+            thumb.style.borderRadius = '6px';
+            thumb.style.cursor = 'pointer';
+            galleryGrid.appendChild(thumb);
+    
+            // 2️⃣ Allow click to add into GrapesJS canvas as draggable/resizable image
+            thumb.addEventListener('click', () => {
+              const comp = editor.addComponents({
+                type: 'image',
+                src: ev.target.result,
+                style: {
+                  position: 'absolute',
+                  top: '50px',
+                  left: '50px',
+                  width: '200px',
+                  height: 'auto',
+                },
+                resizable: {
+                  tl: 1, tr: 1, bl: 1, br: 1,
+                  tc: 1, bc: 1, lc: 1, rc: 1,
+                  keyWidth: 'width',
+                  keyHeight: 'height',
+                },
+                draggable: true,
+              });
+    
+              // Optional centering helper
+              const frame = editor.Canvas.getFrameEl();
+              const doc = frame?.contentDocument;
+              if (doc && comp.view?.el) {
+                const vw = doc.documentElement.clientWidth;
+                const el = comp.view.el;
+                const cw = el.offsetWidth || 120;
+                el.style.left = `${(vw - cw) / 2}px`;
+              }
+            });
+          };
+          reader.readAsDataURL(file);
+        });
+    
+        fileInput.value = '';
+      });
+    });
+    </script>
+    <script>
+      // --- UNDO & REDO BUTTON HANDLERS ---
+      document.addEventListener("DOMContentLoaded", () => {
+        const undoBtn = document.querySelector('.icon-btn img[src*="Undo.svg"]')?.closest('button');
+        const redoBtn = document.querySelector('.icon-btn img[src*="Redo.svg"]')?.closest('button');
+    
+        if (undoBtn) {
+          undoBtn.addEventListener('click', () => {
+            editor.runCommand('core:undo');
+            console.log('🕑 Undo triggered');
+          });
+        }
+    
+        if (redoBtn) {
+          redoBtn.addEventListener('click', () => {
+            editor.runCommand('core:redo');
+            console.log('⏩ Redo triggered');
+          });
+        }
+      });
+
+      // === Background Color Presets ===
+document.addEventListener('DOMContentLoaded', () => {
+  const backgroundCards = document.querySelectorAll('#viup-elements-ext .viup-subtitle:nth-of-type(3) ~ .viup-grid .viup-card');
+  const colors = ['#A7C7E7', '#FDFD96', '#98FB98']; // blue, yellow, green
+
+  backgroundCards.forEach((card, i) => {
+    card.style.background = colors[i]; // visually show color
+    card.style.cursor = 'pointer';
+    card.title = `Apply ${colors[i]} background`;
+
+    card.addEventListener('click', () => {
+      const artboard = editor.getWrapper(); // your main canvas root
+      artboard.addStyle({ background: colors[i] });
+
+      // Update GrapesJS color picker (if open)
+      const spVal = document.querySelector('.sp-input, .sp-val, input[type="color"]');
+      if (spVal) {
+        spVal.value = colors[i];
+        spVal.dispatchEvent(new Event('input', { bubbles: true }));
+      }
+
+      // Optional: brief visual feedback
+      card.style.transform = 'scale(0.95)';
+      setTimeout(() => card.style.transform = 'scale(1)', 200);
+    });
+  });
+});
+
+// === Sticker Presets ===
+document.addEventListener('DOMContentLoaded', () => {
+  // Select sticker section cards
+  const stickerCards = document.querySelectorAll('#viup-elements-ext .viup-subtitle:nth-of-type(2) ~ .viup-grid .viup-card');
+
+  // Preset sticker image URLs (can be local or remote)
+  const stickers = [
+    'https://cdn-icons-png.flaticon.com/512/616/616408.png', // 🐻 example
+    'https://cdn-icons-png.flaticon.com/512/616/616490.png', // 🐰
+    'https://cdn-icons-png.flaticon.com/512/616/616408.png'  // 🐱
+  ];
+
+  // Style the cards to show sticker previews
+  stickerCards.forEach((card, i) => {
+    const url = stickers[i];
+    card.style.backgroundImage = `url('${url}')`;
+    card.style.backgroundSize = 'contain';
+    card.style.backgroundRepeat = 'no-repeat';
+    card.style.backgroundPosition = 'center';
+    card.style.cursor = 'pointer';
+
+    // When clicked → add to GrapesJS canvas
+    card.addEventListener('click', () => {
+      const wrapper = editor.getWrapper();
+      const newSticker = wrapper.append({
+        type: 'image',
+        attributes: { src: url },
+        style: {
+          position: 'absolute',
+          width: '100px',
+          height: '100px',
+          top: `${Math.random() * 200 + 50}px`,
+          left: `${Math.random() * 100 + 50}px`,
+          cursor: 'move'
+        },
+      });
+
+      // Optional: instantly select the new sticker
+      editor.select(newSticker);
+
+      // Small click animation
+      card.style.transform = 'scale(0.9)';
+      setTimeout(() => (card.style.transform = 'scale(1)'), 150);
+    });
+  });
+});
+    </script>
+    <script>
+      document.addEventListener("DOMContentLoaded", () => {
+        const slider = document.getElementById("zoom-slider");
+        const percent = document.getElementById("zoom-percent");
+        const zoomIn = document.getElementById("zoom-in");
+        const zoomOut = document.getElementById("zoom-out");
+        const fullscreenBtn = document.getElementById("fullscreen-toggle");
+        const pageCount = document.getElementById("page-count");
+        const canvasFrame = () => editor.Canvas.getFrameEl();
+      
+        // === Zoom Handling ===
+        function applyZoom(value) {
+          const zoom = value / 100;
+          editor.Canvas.getBody().style.transform = `scale(${zoom})`;
+          editor.Canvas.getBody().style.transformOrigin = "top center";
+          percent.innerHTML = `<b>${value}%</b>`;
+        }
+      
+        slider.addEventListener("input", e => applyZoom(e.target.value));
+        zoomIn.addEventListener("click", () => {
+          slider.value = Math.min(200, +slider.value + 10);
+          applyZoom(slider.value);
+        });
+        zoomOut.addEventListener("click", () => {
+          slider.value = Math.max(25, +slider.value - 10);
+          applyZoom(slider.value);
+        });
+      
+        // === Fullscreen Toggle ===
+        fullscreenBtn.addEventListener("click", () => {
+          const elem = document.documentElement;
+          if (!document.fullscreenElement) {
+            elem.requestFullscreen();
+            fullscreenBtn.innerHTML = '<i class="fa-solid fa-compress"></i>';
+          } else {
+            document.exitFullscreen();
+            fullscreenBtn.innerHTML = '<i class="fa-solid fa-expand"></i>';
+          }
+        });
+      
+        // === Optional: Page Count (update dynamically if you use addPageBelowMain)
+        function updatePageCount() {
+          const total = editor.getWrapper().find('.viup-page-wrap').length || 1;
+          pageCount.innerHTML = `<b>Pages</b> 1 / ${total}`;
+        }
+        editor.on('component:add', updatePageCount);
+        editor.on('component:remove', updatePageCount);
+      });
+      </script>
+      <script>
+     
+editor.on('load', () => {
+  
+  const mayaxTemplate = `
+
+   <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Maya & Asyraf – Wedding Invitation</title>
+  <link rel="icon" href="Text-Logo\Logo_MayaAsyraaf.png" type="image/png">
+  <!-- Google Fonts -->
+  <link href="https://fonts.googleapis.com/css2?family=Alegreya&family=Arizonia&family=Beau+Rivage&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://fonts.cdnfonts.com/css/tex-gyre-termes" />
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css"/>
+   <!-- Parisienne -->
+<link href="https://fonts.googleapis.com/css2?family=Parisienne&display=swap" rel="stylesheet">
+
+<!-- Alex Brush -->
+<link href="https://fonts.googleapis.com/css2?family=Alex+Brush&display=swap" rel="stylesheet">
+<link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Montserrat&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@24,400,0,0&icon_names=info" />
+
+  <style>
+  * {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+  
+  }
+
+  body {
+   font-family: 'Alegreya', serif;
+background-color: #FEF8F7; 
+background-size: cover;
+min-height: 100vh;
+display: flex;
+flex-direction: column;
+align-items: center;
+justify-content: flex-start;
+position: relative;
+overflow-x: hidden;
+animation: fadeIn 1.5s ease-in-out both;
+  }
+
+html, body {
+scroll-padding-top: 1px; /* anchors work properly */
+
+}
+
+  .invitation-wrapper {
+   width: 90vw;
+max-width: 200vw;
+padding: 32.5vh 1rem 9rem;
+margin-bottom:70px;
+text-align: center;
+background: url('YOUR_FLORAL_IMAGE.png') no-repeat center top;
+background-size: contain;
+background-repeat: no-repeat;
+animation: fadeIn 2s ease-in-out both;
+animation-delay: 0.3s;
+  }
+
+  .invitation-wrapper p {
+    font-size: inherit; 
+    margin-bottom: 0.8rem;
+  }
+
+  .walimatulurus {
+    font-family: Playfair Display;
+    font-size: 1.5rem;
+  color:#A9925C;
+  }
+
+  .couple-name {
+   font-size: 70px;
+   font-family: 'Beau Rivage', cursive;
+   line-height: 1.2;
+letter-spacing: 0.01em;
+color: #A9925C;
+-webkit-font-smoothing: antialiased;
+-moz-osx-font-smoothing: grayscale;
+   
+  }
+
+  .ampersand {
+    font-size: 2.4rem;
+    margin: 0.5rem 0;
+   color:#A9925C;
+  }
+
+  .highlight {
+    font-weight: bold;
+    font-size: 1.2rem;
+   color:#A9925C;
+  }
+
+  .date {
+    font-size: 1.4rem;
+   
+    margin-bottom: 0.5rem;
+   color:#A9925C;
+  }
+
+  /* Curved Footer */
+
+.footer-container {
+position: sticky;
+bottom: 0;
+ width: 100vw;
+background-color: #000;
+padding: 0rem 0.1rem 0.2rem;
+z-index: 999;
+clip-path: path("M0,0 H100% V100% H0 V0 Q50% 70 100% 0 Z");
+}
+
+.footer-rsvp-wrapper {
+position: absolute;
+top: -1.2rem;
+left: 52%;
+transform: translateX(-50%);
+transition: left 1s ease 1s, transform 1s ease 1s;
+width: 53px;
+height: 53px;
+z-index: 2;
+}
+
+.footer-rsvp-wrapper.move-right {
+left: 74.5%;
+transform: translateX(-50%);
+}
+
+.footer-container::before {
+content: "";
+position: absolute;
+top: -3.5px;
+left: 52%;
+transform: translateX(-50%);
+width: 60px;
+height: 40px;
+background: white;
+border-bottom-left-radius: 90px;
+border-bottom-right-radius: 90px;
+z-index: 1;
+transition: left 200ms ease-in-out; /* ✅ Clean, fast, matching */
+}
+
+.footer-container.bump-shift::before {
+left: 74.5%;
+}
+
+.footer-buttons {
+position: relative;
+height: 40px;
+margin-top: 1.5rem;
+}
+
+.footer-side.left,
+.footer-side.right {
+position: absolute;
+top: -5px;
+display: flex;
+gap: 4rem;
+}
+.footer-side.right a:nth-child(1) {
+margin-right: 1rem;
+}
+
+.footer-side.left {
+left: 1.7rem;
+
+}
+
+.footer-side.right {
+right: 1.7rem;
+}
+
+.footer-side a {
+color: white;
+text-decoration: none;
+font-size: 0.75rem;
+display: flex;
+flex-direction: column;
+align-items: center;
+gap: 0.3rem;
+font-family: 'Montserrat', sans-serif;
+}
+
+.footer-side img{
+width:23px;
+height:23px;
+
+}
+
+.footer-side i {
+font-size: 1.3rem;
+}
+
+.footer-rsvp-text {
+position: absolute;
+top: 0%;
+left: 52%;
+transform: translate(-50%, 0);
+color: white;
+font-weight: bold;
+font-size: 13px;
+opacity: 1;
+transition: transform 1s ease, top 1s ease, opacity 1s ease;
+z-index: 3;
+}
+
+/* When it drops */
+.footer-rsvp-text.drop {
+top: 31%; /* visually aligns into the black footer */
+transform: translate(-50%, 0);
+}
+
+/* RSVP Circle Button */
+.footer-rsvp {
+background-color: #000;
+
+border-radius: 50%;
+width: 100%;
+height: 100%;
+display: flex;
+align-items: center;
+justify-content: center;
+position: relative;
+overflow: hidden;
+}
+
+.footer-rsvp::after {
+content: 'RSVP';
+position: absolute;
+top: 50%;
+left: 50%;
+transform: translate(-50%, -50%);
+transition: transform 0.8s ease, opacity 0.8s ease;
+opacity: 1;
+}
+
+.footer-rsvp.animate-text::after {
+transform: translate(-50%, 60px);
+opacity: 0;
+}
+
+star-fly-in {
+position: absolute;
+color: white;
+font-size: 1.2rem;
+opacity: 0;
+pointer-events: none;
+transition: transform 0.8s ease, opacity 0.8s ease, left 0.8s ease, top 0.8s ease;
+transform: translate(-50%, -50%) scale(1);
+z-index: 10;
+}
+
+.star-fly-in.animate {
+opacity: 1;
+transform: translate(-50%, -50%) scale(2);
+}
+
+.star-fly-out {
+  position: absolute;
+font-size: 1.2rem;
+color: white;
+z-index: 15;
+opacity: 1;
+pointer-events: none;
+transform: translate(-50%, -50%) scale(2); /* start large */
+transition: transform 0.8s ease, opacity 0.8s ease, left 0.8s ease, top 0.8s ease;
+}
+
+.floating-star {
+position: absolute;
+top: 28%;
+left: 6%;
+transform: translate(-50%, -50%) scale(1);
+opacity: 1;
+transition: all 0.6s ease;
+font-size: 24px;
+color: white;
+
+z-index: 10;
+}
+
+.floating-star.visible {
+top: -28%;
+left: 5%;
+transform: translate(-50%, -50%) scale(1.2);
+opacity: 1;
+}
+
+
+  @media (max-width: 789px) {
+    .couple-name {
+      font-size: 70px;
+   font-family: 'Dancing Script' regular;
+   line-height: 1.2;
+letter-spacing: 0.01em;
+color: #A9925C;
+-webkit-font-smoothing: antialiased;
+-moz-osx-font-smoothing: grayscale;
+    }
+  
+    .walimatulurus {
+    font-family: 'Playfair Display' regular;
+    font-size: 25px;
+  color:#A9925C;
+  font-weight:400px;
+  top:118px
+  left:97px
+  }
+
+.label-top {
+font-size: 22px;
+font-weight:400px;
+line-height:100%;
+font-family: 'Playfair Display', serif;
+color: #A9925C;
+margin-bottom: 0.2rem;
+}
+
+
+   .ampersand {
+    font-size: 45px;
+  font-family:Dancing Script;
+    margin: 0.5rem 0;
+   color:#A9925C;
+  }
+
+  .highlight {
+    font-weight: 400;
+    font-size: 3vw;
+   color:#A9925C;
+   margin-bottom:-23px;
+   margin-top:-255px;
+   font-family:'TeXGyreTermes', serif;
+   font-style:italic;
+  }
+
+.highlights {
+    font-weight: 400;
+    font-size: 3vw;
+   color:#A9925C;
+   margin-bottom:-23px;
+   margin-top:59px;
+   font-family:'TeXGyreTermes', serif;
+   font-style:italic;
+  }
+
+  .date {
+    font-size: 4vw;
+    font-family:Dancing Script;
+    margin-bottom: 15px;
+   color:#A9925C;
+   z-index:0;
+   
+  }
+
+.day {
+font-size: 6vw;
+color: #A9925C;
+font-family:Dancing Script;
+z-index:0;
+position:absolute;
+top:1345px;
+}
+
+#rsvpSubmitButtons {
+display: flex;
+justify-content: center;
+gap: 10px;
+margin-top: 20px;
+height: auto;
+width: 100%;
+}
+
+.venue.bottom {
+font-style: italic;
+font-size: 1rem;
+margin-top: -0.4rem;
+color: #A9925C;
+}
+
+  .footer-side.left,
+.footer-side.right {
+position: absolute;
+top: -5px;
+display: flex;
+gap: 3rem;
+margin-left:-10px;
+}
+.footer-side.right a:nth-child(1) {
+margin-right: -0.3rem;
+}
+
+.footer-side.left {
+left: 1.5rem;
+}
+
+.footer-side.right {
+right: 0.7rem;
+}
+
+.footer-side a {
+color: white;
+text-decoration: none;
+font-size: 1rem;
+display: flex;
+flex-direction: column;
+align-items: center;
+gap: 0.2rem;
+font-family: 'Montserrat', sans-serif;
+}
+
+.footer-side i {
+font-size: 1.3rem;
+}
+
+
+
+
+.amp-move {
+font-size: 40px;
+position: absolute;
+bottom: 0;
+left: 0;
+opacity: 0;
+transform: translate(0, 0) rotate(0deg);
+transition: all 2s ease-out;
+}
+
+.amp-move.animate {
+opacity: 1;
+transform: translate(130px, -180px) rotate(-20deg); /* tweak as needed */
+}
+
+.parents-wrapper {
+text-align: center;
+margin-bottom: 2rem;
+padding: 0 1rem;
+}
+
+.parents .parent-top,
+.parents .parent-bottom {
+font-family: 'TeXGyreTermes', serif;
+font-size: 18px;
+color: #000000;
+margin: 0.5rem 0;
+margin-bottom:30px;
+}
+
+.startingword{
+font-family: 'TeXGyreTermes', serif;
+font-size: 15px;
+color: #000000;
+margin: 20.5rem 0;
+margin-bottom:50px;
+}
+
+.invitation{
+font-size:18px;
+font-family:'TeXGyreTermes', serif;
+justify-text:center;
+line-height:24px;
+margin-bottom:24px;
+z-index:0;
+text-align: center;
+font-style:italic;
+}
+.amp-container span {
+font-size: 22px;
+display: inline-block;
+color: ##000000;
+margin: 0.5rem 0;
+margin-bottom:17px;
+font-family:'TeXGyreTermes', serif;
+}
+
+.bridegroom-wrapper {
+text-align: center;
+margin-top: 2rem;
+margin-bottom:20rem;
+padding: 0 1rem;
+}
+
+.bride, .groom {
+font-family:'TeXGyreTermes', serif;
+font-size: 20px;
+font-weight: bold;
+color: ##000000;
+line-height: 1.4;
+letter-spacing: 1px;
+margin: 0.5rem 0;
+font-style:italic;
+}
+
+#amp {
+font-size: 36px;
+color: #5e3e3c;
+margin: 0.5rem 0;
+}
+
+.event-details-wrapper {
+text-align: center;
+padding: 2rem 1.5rem;
+font-family:Playfair Display ;
+margin-bottom:20rem;
+color: #2c2c2c;
+
+}
+
+.event-block {
+margin-bottom: 2.5rem;
+}
+
+.event-heading {
+font-size: 22px;
+font-weight: bold;
+color: #000000;
+margin-bottom: 0.3rem;
+font-family:'TeXGyreTermes', serif;
+}
+
+.event-text {
+font-size: 20px;
+line-height: 1.6;
+color: #000000;
+font-family:'TeXGyreTermes', serif;
+}
+
+.itinerary-wrapper {
+
+text-align: left;
+padding: 2rem 1.5rem;
+ margin-bottom:20rem;
+ margin-left:2.5rem;
+color: #2c2c2c;
+}
+
+.itinerary-heading {
+text-align: center;
+font-size: 35px;
+font-weight: bold;
+margin-bottom: 3rem;
+margin-left:0rem;
+color: #000000;
+font-family:'TeXGyreTermes', serif;
+}
+
+.itinerary-item {
+font-size: 20px;
+margin-bottom: 25px;
+line-height: 1.6;
+color: #000000;
+font-family:'TeXGyreTermes', serif;
+font-style:italic;
+}
+
+.bismillah{
+text-align: center;
+  margin-top: -51px;
+  margin-left: 87px;
+  width: 170px;
+}
+
+.time {
+font-weight: bold;
+color: #000000;
+font-size: 20px;
+font-family:'TeXGyreTermes', serif;
+}
+
+.countdown-wrapper {
+text-align: center;
+
+color: #000;
+margin-bottom:34rem;
+}
+
+.countdown-title {
+font-size: 35px;
+font-weight: bold;
+margin-bottom: 2rem;
+font-family:'TeXGyreTermes', serif;
+margin-top: 125px;
+}
+
+.countdown-container {
+display: flex;
+justify-content: center;
+flex-wrap: wrap;
+gap: 1rem;
+}
+
+.countdown-box {
+display: flex;
+flex-direction: column;
+align-items: center;
+height:60px;
+ min-width: 35px;
+ box-shadow: inset 0 -2px 0 rgba(0, 0, 0, 0.15);
+ 
+}
+
+.countdown-box span {
+margin-bottom: 0.3rem;
+font-size: 16px;
+font-weight: bold;
+font-family:Lato;
+
+
+}
+
+.countdown-box div {
+background: linear-gradient(to bottom, #796F65, #DFCCBA );
+border-radius: 12px;
+padding: 2.5rem 1.2rem;
+font-size: 28px;
+font-weight: bold;
+box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+min-width: 70px;
+font-family:Inter;
+ line-height: 1;
+ position: relative;
+}
+.countdown-box div::after {
+content: '';
+position: absolute;
+top: 50%;
+left: 10%;
+width: 80%;
+height: 1px;
+background-color: black;
+transform: translateY(-50%);
+opacity: 0.5;
+}
+
+
+.gallery-wrapper {
+text-align: center;
+padding: 3rem 1.5rem;
+font-family: 'Poppins', sans-serif;
+margin-bottom:22rem;
+}
+
+.gallery-title {
+font-size: 35px;
+font-weight: bold;
+margin-bottom: 2rem;
+color: #000;
+font-family:'TeXGyreTermes', serif;
+}
+
+.gallery-image img {
+width: 100%;
+max-width: 210px;
+border-radius: 12px;
+box-shadow: 0 8px 12px rgba(0,0,0,0.15);
+transition: transform 0.3s ease;
+}
+
+.gallery-image img:hover {
+transform: scale(1.02);
+}
+
+.gallery-image {
+position: relative;
+width: 100%;
+max-width: 600px;
+margin-inline: auto;
+height: auto;
+overflow: hidden;
+}
+
+.gallery-slide {
+position: absolute;
+width: 100%;
+height: auto;
+opacity: 0;
+transition: opacity 1s ease-in-out;
+}
+
+#rsvpSubmitButtons {
+  display: flex !important;
+}
+
+.gallery-slide.active {
+opacity: 1;
+position: relative;
+z-index: 1;
+}
+
+.guestbook-wrapper {
+text-align: center;
+padding: 23rem 4rem;
+font-family: 'Poppins', sans-serif;
+margin-bottom: 10rem;
+
+background-image: url('PAPER.png');
+background-repeat: no-repeat;
+background-position: center;
+background-size: 115vw 168vh;
+
+transform: rotate(90deg) scale(1.2);
+transform-origin: center center;
+
+/* ← only these two lines added: */
+min-width: 100vw;
+min-height: 100vh;
+
+ /* 🍷 Drop shadow elegance */
+ box-shadow: 2px 9px 20px rgba(0, 0, 0, 1);
+}
+
+.guestbook-title {
+font-size: 35px;
+font-weight: bold;
+margin-bottom: 1.5rem;
+color: #000;
+font-family:'TeXGyreTermes', serif;
+margin-top: -285px;
+}
+
+.guestbook-message {
+font-size: 25px;
+font-style: italic;
+font-family: Playball;
+color: #222;
+margin-bottom: 1rem;
+font-weight:600;
+white-space: normal;
+overflow-wrap: break-word;
+word-wrap: break-word;
+hyphens: auto;
+max-width: 80%;
+}
+
+.guestbook-sender {
+font-size: 15px;
+font-family: Playball;
+color: #555;
+}
+
+.guestbook-pagination {
+display: flex;
+justify-content: center;
+gap: 0.5rem;
+margin-top: 1.5rem;
+position: absolute;
+  bottom: 40px;
+  left: 175px;
+}
+
+.page-number, .page-next {
+background: #f2ede9;
+border: 1px solid #d2c4b4;
+border-radius: 6px;
+padding: 0.4rem 0.8rem;
+font-size: 16px;
+font-weight: bold;
+font-family: 'Inter', sans-serif;
+color: #333;
+cursor: pointer;
+transition: background 0.2s, transform 0.2s;
+box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+.page-number:hover, .page-next:hover {
+background: #e4dbd4;
+transform: scale(1.05);
+}
+
+.page-number.active {
+background: #c4b6a6;
+color: white;
+border-color: #aa9985;
+}
+
+.prayer-wrapper {
+text-align: center;
+padding: 3rem 2rem;
+font-family: 'Poppins', sans-serif;
+color: #111;
+margin-bottom:2.7rem;
+margin-top: 9rem;
+   opacity: 0;
+transition: opacity 1.4s ease-in-out;
+}
+
+.prayer-wrapper.visible {
+opacity: 1;
+}
+
+.prayer-title {
+font-size: 35px;
+font-weight: bold;
+margin-bottom: 9.5rem;
+font-family:'TeXGyreTermes', serif;
+}
+
+.prayer-text {
+font-size: 22px;
+line-height: 26px;
+margin-bottom: 7rem;
+padding: 0 1rem;
+font-family:'TeXGyreTermes', serif;
+}
+
+.wedding-tag {
+font-style: italic;
+font-size: 25px;
+color: #333;
+margin-bottom: 1rem;
+font-family:'TeXGyreTermes', serif;
+}
+
+.footer-credit {
+font-size: 15px;
+color: #666;
+margin-bottom: 0.3rem;
+font-family:'TeXGyreTermes', serif;
+}
+
+.footer-brand {
+font-size: 25px;
+font-weight: bold;
+color: #8a3f3f;
+font-family:Roboto;
+}
+
+.contact-card {
+position: sticky;
+bottom: 68px; /* Make room for footer */
+z-index: 4;
+ background: white;
+padding: 3rem;
+
+width: 100%;
+max-width: 600px;
+margin: 0 auto;
+border-radius: 28px 23px 0px 5px;
+}
+
+.contact-popup {
+bottom: 68px;
+}
+
+.info-popup {
+ position: fixed;
+bottom: 48px;
+z-index: 4;
+padding: 0;
+width: auto;
+background: none;
+box-shadow: none;
+display: none;
+}
+
+.info-popup.active-background {
+background: white;
+padding: 3rem;
+border-radius: 12px;
+}
+
+.info-popup.active-backgrounds {
+background: white;
+padding: 2rem;
+border-radius: 12px;
+}
+
+.rsvp-popup{
+bottom: 68px;
+}
+
+text-align: center;
+z-index: 9999;
+animation: fadeIn 0.4s ease-in-out;
+font-family: 'Poppins', sans-serif;
+}
+
+.contact-card h3 {
+font-size: 22px;
+margin-bottom: 1rem;
+color: #000;
+text-align: center;
+}
+
+.contact-person {
+display: flex;
+justify-content: space-between;
+align-items: center;
+margin: 1rem 0;
+font-size: 18px;
+color: #000;
+font-family: 'Montserrat', sans-serif;
+}
+
+.contact-person .icons a {
+margin-left: 1rem;
+color: #000;
+font-size: 1.2rem;
+}
+
+.moneygift-card {
+position: sticky;
+bottom: 68px;
+left: 0;
+right: 0;
+background: white;
+padding: 4rem 2rem;
+border-radius: 25px 25px 0 0;
+box-shadow: 0 8px 20px rgba(0, 0, 0, 0.2);
+font-family: 'Poppins', sans-serif;
+text-align: center;
+z-index: 5; /* above the RSVP button */
+animation: fadeIn 0.3s ease-in-out;
+ max-width: 500px;
+width: 100%;
+margin: 0 auto;
+}
+.moneygift-card h3 {
+font-size: 22px;
+margin-bottom: 1rem;
+color: #000;
+text-align: center;
+font-family: 'Montserrat', sans-serif;
+}
+
+/* Apply same structure as guestbook */
+.bank-info input,
+.account-wrapper input {
+width: 100%;
+padding: 1rem;
+font-size: 1rem;
+border-radius: 12px;
+border: none;
+background: #fef7f3;
+color: #000;
+box-sizing: border-box;
+transition: all 0.3s ease;
+}
+
+.bank-info input:focus,
+.account-wrapper input:focus {
+padding: 1.2rem;
+border: 2px solid black;
+background: #fff;
+}
+
+/* Wrapper fixes */
+.bank-info,
+.account-wrapper {
+width: 100%;
+margin-bottom: 1rem;
+font-family: 'Montserrat', sans-serif;
+}
+
+/* Align button without jump */
+.account-wrapper {
+display: flex;
+align-items: center;
+gap: 0.5rem;
+}
+
+.account-wrapper button {
+padding: 1rem;
+border-radius: 12px;
+background: transparent;
+border: none;
+cursor: pointer;
+transition: transform 0.2s ease;
+display: flex;
+align-items: center;
+justify-content: center;
+}
+
+.account-wrapper button:hover {
+
+}
+
+.account-wrapper button i {
+color: #7b4b3a; /* adjust to your theme */
+font-size: 1.1rem;
+}
+
+/* QR centered and stable */
+.qr-wrapper {
+display: flex;
+justify-content: center;
+height: 220px;
+margin-top: 20px;
+}
+
+.qr-wrapper img {
+width: 200px;
+height: auto;
+border-radius: 12px;
+box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+transition: transform 0.2s ease;
+}
+
+.qr-wrapper img:hover {
+transform: scale(1.03);
+}
+
+/* <!--rsvp click effect --> */
+
+
+.rsvp-card {
+position: fixed;
+bottom: 100px; /* ⚠️ Set this ABOVE your footer height */
+left: 0;
+right: 0;
+background: white;
+padding: 2rem 1.5rem;
+border-radius: 25px 25px 0 0;
+box-shadow: 0 8px 20px rgba(0, 0, 0, 0.2);
+font-family: 'Poppins', sans-serif;
+text-align: center;
+z-index: 9999; /* ⬆️ make sure it's higher than your footer */
+display: none;
+}
+
+
+.rsvp-inputs {
+display: none;
+margin-top: 1.5rem;
+max-width: 500px;
+margin-inline: auto;
+}
+
+.rsvp-inputs input {
+width: 100%;
+padding: 1rem;
+font-size: 1rem;
+border-radius: 12px;
+border: none;
+background: #fef7f3;
+color: #000;
+margin-bottom: 1rem;
+box-sizing: border-box;
+}
+
+.rsvp-submit-buttons {
+display: flex;
+justify-content: center;
+gap: 1rem;
+margin-top: 1rem;
+margin-bottom: -4rem;
+}
+
+.rsvp-submit-buttons button {
+padding: 0.8rem 1.5rem;
+border-radius: 22px;
+background: white;
+border: 2px solid #000;
+font-weight: bold;
+cursor: pointer;
+transition: all 0.2s ease;
+-webkit-appearance: none;
+  appearance: none;
+  color: black;
+}
+
+.rsvp-submit-buttons button:hover {
+background: black;
+color: white;
+}
+
+
+.rsvp-card h3 {
+font-size: 1.3rem;
+margin-bottom: 1rem;
+color: #000;
+}
+
+.rsvp-options {
+display: flex;
+justify-content: center;
+gap: 2rem;
+}
+
+
+.rsvp-options button {
+padding: 0.8rem 1.5rem;
+border: 2px solid black;
+background: transparent;
+border-radius: 30px;
+font-weight: bold;
+cursor: pointer;
+transition: all 0.3s ease;
+-webkit-appearance: none;
+  appearance: none;
+  color: black;
+}
+
+.rsvp-options button.selected {
+background: black;
+color: white;
+}
+
+.rsvp-options button.accept:hover {
+background: black;
+color: white;
+}
+
+.rsvp-options button.decline:hover {
+background: #eee;
+}
+
+.rsvp-toggle {
+display: flex;
+gap: 1rem;
+margin-top: 0.5rem;
+}
+
+.rsvp-toggle label {
+font-weight: bold;
+cursor: pointer;
+}
+
+.rsvp-toggle input[type="radio"] {
+margin-right: 0.25rem;
+}
+
+.rsvp-form {
+display: none;
+flex-direction: column;
+align-items: center;
+gap: 1rem;
+margin-bottom: 4rem; /* ← make room for buttons to breathe */
+}
+
+.rsvp-form .form-group {
+margin-bottom: 1rem;
+}
+
+.rsvp-form input {
+width: 100%;
+padding: 0.75rem;
+border-radius: 10px;
+border: 1px solid #ccc;
+outline: none;
+}
+.fade-in-section {
+opacity: 0;
+transform: translateY(40px);
+transition: opacity 1s ease-out, transform 1s ease-out;
+will-change: opacity, transform;
+}
+
+.fade-in-section.is-visible {
+opacity: 1;
+transform: none;
+}
+
+
+.info-toggle-buttons {
+display: flex;
+justify-content: center;
+gap: 1rem;
+margin-bottom: 1rem;
+}
+
+.info-toggle-buttons button {
+padding: 0.5rem 1.2rem;
+border-radius: 25px;
+border: 1px solid #000;
+background: #fff;
+font-weight: bold;
+font-family: 'Poppins', sans-serif;
+cursor: pointer;
+}
+
+.info-floating-buttons {
+display: flex;
+justify-content: center;
+gap: 2rem;
+margin-top: 2rem;
+}
+
+.info-line {
+font-size: 13px;
+color: #555;
+margin-top: 6px;
+display: flex;
+align-items: center;
+gap: 6px;
+line-height: 1.4;
+font-family: 'Montserrat', sans-serif;
+margin-bottom: 6px;
+}
+
+
+.floating-btn {
+ background-color: #000;
+color: white;
+width: 56px;
+height: 56px;
+border-radius: 50%;
+/* //border: 4px solid white; */
+display: flex;
+flex-direction: column;
+align-items: center;
+justify-content: center;
+font-family: 'Poppins', sans-serif;
+font-size: 0.7rem;
+cursor: pointer;
+box-shadow: 0 4px 10px rgba(0,0,0,0.15);
+transition: transform 0.2s ease, background-color 0.3s ease;
+left:300px;
+justify-content: center;
+margin-left: 21px;
+margin-right: -8px;
+margin-bottom: 3px;
+}
+
+.envmaya{
+width: 228px;
+  Height: 144.17752075195312px;
+  Top: 216px;
+  Left: 82px;
+  z-index: 2;
+  margin-top: 243px;
+  margin-bottom: 27px;
+}
+
+.floating-btn i {
+font-size: 1.2rem;
+margin-bottom: 0.2rem;
+}
+
+.floating-btn:hover {
+transform: scale(1.05);
+background-color: #222;
+}
+
+.floating-btn span {
+font-size: 0.65rem;
+margin-top: 2px;
+}
+
+#info-buttons {
+position: fixed;
+bottom: 87px; /* adjust this to move up/down */
+left: 69vw;
+transform: translateX(-50%);
+display: flex;
+gap: 1rem;
+z-index: 999;
+}
+
+.map-links a,
+.calendar-links a {
+display: block;
+margin-top: 0.5rem;
+text-decoration: none;
+color: #000;
+font-weight: bold;
+text-align: center;
+
+
+}
+
+.guestbook-form {
+background: #fff;
+padding: 2rem;
+border-radius: 12px;
+margin: 2rem auto;
+width: 90%;
+box-shadow: 0 0 10px rgba(0,0,0,0.05);
+font-family: 'Montserrat', sans-serif;
+}
+
+.form-group {
+position: relative;
+margin-bottom: 2rem;
+font-family: Montserrat;
+
+}
+
+.form-group textarea,
+.form-group input {
+width: 100%;
+padding: 1.2rem 1rem 0.4rem;
+font-size: 1rem;
+border: 2px solid #ccc;
+border-radius: 8px;
+background: transparent;
+outline: none;
+transition: border-color 0.3s ease;
+appearance: none; /* remove default arrow for consistency */
+-webkit-appearance: none;
+-moz-appearance: none;
+
+}
+
+.form-group select {
+background-image: url("data:image/svg+xml;utf8,<svg fill='%23333' height='24' viewBox='0 0 24 24' width='24' xmlns='http://www.w3.org/2000/svg'><path d='M7 10l5 5 5-5z'/></svg>");
+background-repeat: no-repeat;
+background-position: right 1rem center;
+background-size: 1rem;
+}
+
+.form-group select.styled-select {
+width: 100%;
+padding: 1.2rem 1rem 0.4rem;
+font-size: 1rem;
+border: 2px solid #ccc;
+border-radius: 8px;
+background-color: transparent;
+outline: none;
+appearance: none;
+-webkit-appearance: none;
+-moz-appearance: none;
+transition: border-color 0.3s ease;
+color: #333;
+}
+
+.styled-select {
+box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+}
+
+/* Add shadow when the select is focused/open */
+.styled-select:focus {
+box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+}
+
+/* Optional: improve dropdown look on hover/focus */
+.styled-select option {
+background-color: white;
+color: #333;
+}
+
+/* Optional: Style the label similar to inputs */
+.form-group label {
+font-size: 0.9rem;
+color: #999;
+display: block;
+margin-top: 0.4rem;
+}
+
+
+.form-group label {
+position: absolute;
+top: 50%;
+left: 1rem;
+transform: translateY(-50%);
+background: #fff;
+padding: 0 4px;
+color: #aaa;
+font-size: 1rem;
+pointer-events: none;
+transition: all 0.3s ease;
+}
+
+.form-group.focused label {
+top: 0;
+left: 0.8rem;
+transform: translateY(-50%) scale(0.8);
+color: #5a2d2d;
+}
+
+
+.form-group input:focus {
+border-color: #5a2d2d;
+}
+
+.btn-submit {
+width: 100%;
+padding: 0.8rem;
+background-color: #7D5B59;
+color: #fff;
+border: none;
+border-radius: 25px;
+font-size: 1rem;
+font-weight: bold;
+cursor: pointer;
+transition: background-color 0.3s ease;
+}
+
+.btn-submit:hover {
+background-color: #431f1f;
+}
+
+.guestbook-overlay {
+position: fixed;
+top: 0;
+left: 0;
+width: 100%;
+height:100%;
+padding-top: 38vh;/* Push the modal downward */
+display: flex;
+justify-content: center;
+align-items: flex-start; /* Align to top */
+z-index: 10; /* Ensure it's above the RSVP button */
+opacity: 0;
+visibility: hidden;
+
+
+}
+
+.guestbook-overlay.show {
+opacity: 1;
+visibility: visible;
+}
+
+.guestbook-modal {
+background: white;
+padding: 3.86rem;
+border-radius: 20px;
+box-shadow: 0 8px 24px rgba(0, 0, 0, 0.2);
+width: 132vw;
+max-width: 132vw;
+max-height:400vh;
+height:61vh;
+text-align: center;
+margin-top: 1.5vh;
+
+}
+/* //this is the input area */
+
+.input-container {
+position: relative;
+margin-top: 1.5rem;
+}
+
+.input-container textarea,
+.input-container input {
+width: 100%;
+padding: 1rem;
+border: 2px solid #835c59;
+border-radius: 10px;
+background-color: #fef9f8;
+font-size: 1rem;
+outline: none;
+}
+
+.input-container label {
+position: absolute;
+top: -0.7rem;
+left: 1rem;
+background-color: #fef9f8;
+padding: 0 0.3rem;
+font-size: 0.9rem;
+color: #835c59;
+font-family: 'Montserrat', sans-serif;
+}
+
+.input-with-icon {
+position: relative;
+display: inline-block;
+width: 100%;
+
+}
+
+.input-with-icon input {
+width: 100%;
+padding-right: 40px; /* space for clipboard button */
+box-sizing: border-box;
+
+}
+
+.copy-btn {
+position: absolute;
+top: 30px;
+right: 10px;
+transform: translateY(-50%);
+background: #835c59;
+border: none;
+cursor: pointer;
+font-size: 1rem;
+margin-top:-8px;
+
+
+}
+
+.guestbook-buttons {
+display: flex;
+justify-content: space-evenly;
+margin-top: 1.5rem;
+-webkit-appearance: none;
+  appearance: none;
+  color: black;
+}
+
+.guestbook-buttons button {
+padding: 0.8rem 1.5rem;
+font-weight: bold;
+border: 2px solid black;
+border-radius: 30px;
+background: transparent;
+cursor: pointer;
+-webkit-appearance: none;
+  appearance: none;
+  color: black;
+}
+
+.guestbook-next {
+background: none;
+border: none;
+font-size: 2rem;
+cursor: pointer;
+color: #000;
+margin-top: 1rem;
+transition: transform 0.2s ease;
+}
+
+.guestbook-next:hover {
+transform: scale(1.2);
+}
+
+body.lock-scroll {
+overflow: hidden;
+height: 100vh;
+}
+
+
+  }
+@keyframes fadeIn {
+0% {
+  opacity: 0;
+  transform: translateY(30px);
+}
+100% {
+  opacity: 1;
+  transform: translateY(0);
+}
+}
+
+@keyframes ampFlight {
+0% {
+  transform: translate(0, 0) ;
+  opacity: 0;
+}
+50% {
+  transform: translate(0, -100px) ;
+  opacity: 1;
+}
+100% {
+  transform: translate(0, -180px) ;
+  opacity: 1;
+}
+}
+
+.amp-move.animate {
+animation: ampFlight 2.2s ease-out forwards;
+}
+
+
+
+.open-button {
+font-family: 'TeXGyreTermes', serif;
+font-weight:400px;
+font-style:italic;
+font-size: 34px;
+color: #2f2f2f;
+width:184px;
+height:40px;
+top:145px;
+left:-5px;
+text-align: center;
+display: block;
+position: relative;
+z-index:9999;
+
+
+}
+
+.Undangan {
+font-family: 'TeXGyreTermes', serif;
+font-weight:400px;
+font-style:italic;
+font-size: 20px;
+color: #2f2f2f;
+width:84px;
+height:27px;
+top:200px;
+left:153pxpx;
+text-align: center;
+display: block;
+position: relative;
+z-index:9999;
+
+
+}.Wali {
+font-family: 'TeXGyreTermes', serif;
+font-weight:400px;
+font-style:italic;
+font-size: 25px;
+color: #2f2f2f;
+width:148px;
+height:34px;
+top:203px;
+left:121pxpx;
+text-align: center;
+display: block;
+position: relative;
+z-index:9999;
+
+
+}
+.MayaxAsyraaf{
+width: 211px;
+  height: auto;
+  margin-top: 110px;
+}
+
+.Maya {
+font-family: Parisienne;
+font-weight:400px;
+font-style:Regular;
+font-size: 60px;
+color: #2f2f2f;
+width:163px;
+height:82.18px;
+top:242px;
+left:-45px;
+text-align: center;
+display: block;
+position: relative;
+z-index:9999;
+
+
+}
+.asyraff {
+font-family: Alex Brush;
+font-weight:400px;
+font-style:Regular;
+font-size: 60px;
+color: #2f2f2f;
+width:163px;
+height:82.18px;
+top:172px;
+left:5px;
+text-align: center;
+display: block;
+position: relative;
+z-index:9999;
+
+
+}
+.ampersands {
+font-family: Alex Brush;
+font-weight:400px;
+font-style:Regular;
+font-size: 55px;
+color: #2f2f2f;
+width:163px;
+height:82.18px;
+top:182px;
+left:70px;
+text-align: center;
+display: block;
+position: relative;
+z-index:9999;
+
+
+}
+
+.sigil {
+display: block;
+margin: 0 auto;
+width: 100px; /* or your size */
+width: 160px; 
+height:160px; 
+top:371px; 
+left:118px; 
+margin-top: 
+-100px; 
+cursor: pointer; 
+z-index: 4;
+}
+
+.head-img{
+width: 572px; 
+margin-top:-463px; 
+left:-91px;
+}
+
+body-img{
+width: 100%; 
+max-width: 900px; 
+margin-top: -20px; 
+z-index: 0;
+}
+/* INITIAL STYLES (optional - if needed to reset) */
+.Undangan,
+.Wali,
+img[alt="Mayaxasyraff"],
+.head-img,
+.sigil,
+.body-img,
+.open-button {
+transition: transform 1s ease-in-out;
+}
+
+/* ANIMATION CLASSES */
+.envelope-open .Undangan,
+.envelope-open .Wali,
+.envelope-open img[alt="Mayaxasyraff"],
+.envelope-open .head-img,
+.envelope-open .sigil {
+transform: translateY(-600px);
+}
+
+.envelope-open .body-img,
+.envelope-open .open-button {
+transform: translateY(600px);
+}
+.envelope-open {
+ animation: fadeOut 1s ease-in-out 1s forwards;
+pointer-events: none;
+}
+
+.move-up,
+.move-down {
+transition: transform 1s ease, opacity 1s ease;
+}
+
+/* Animate upward */
+.move-up {
+transform: translateY(-60vh);
+opacity: 0;
+}
+
+/* Animate downward */
+.move-down {
+transform: translateY(60vh);
+opacity: 0;
+}
+
+/* Fade out envelope overlay */
+.fade-out {
+opacity: 0;
+pointer-events: none;
+transition: opacity 0.3s ease;
+}
+
+@keyframes fadeOut {
+0% {
+  opacity: 0;
+}
+100% {
+  opacity: 0;
+  visibility: hidden;
+}
+}
+
+.floral-border-overlay {
+position: fixed;
+top: 0;
+left: -9vw;
+width: 116vw;
+height: 102vh;
+background-image: url('Border Flower/7.png'); /* Transparent center PNG */
+background-size: contain;
+background-repeat: no-repeat;
+background-position: center;
+pointer-events: none;
+z-index: 0;
+transition: transform 1s ease-in-out, opacity 1.2s ease-in-out;
+opacity: 1;
+
+}
+
+.floral-border-overlay.fade-out {
+opacity: 0;
+transition: opacity 0.8s ease; /* only fades when entering guestbook */
+}
+
+/* Don't let it cover the footer */
+.footer-container {
+z-index: 20;
+position: sticky;
+}
+
+.paper-overlay {
+position: fixed;
+bottom: -100%; /* start off screen */
+left: 50%;
+transform: translateX(-50%) translateY(0);
+transition: transform 1s ease-in-out, opacity 1.2s ease-in-out;
+z-index: -2;
+width: 90vw;
+max-width: 1000px;
+pointer-events: none;
+opacity: 0;
+
+}
+
+.paper-overlay.active {
+bottom: 0;
+transform: translateX(-50%) translateY(0%);
+opacity: 1;
+}
+
+.paper-overlay.exit-left {
+transform: translateX(-200%) scale(1.2974, 1.3964);
+opacity: 0;
+}
+
+.paper-overlay.scaled {
+transform: translateX(-50%) translateY(0%) scale(1.2, 9.3964);
+}
+
+.paper-overlay.scaled img.paper-bg {
+transform: scale(1.2974, 1.3964);
+transition: transform 1.2s ease-in-out;
+}
+
+.footer-guestbook,
+.moneygift-toggle,
+.footer-info,
+.contact-toggle {
+display: flex;
+flex-direction: column;
+align-items: center;
+justify-content: center;
+text-decoration: none;
+}
+
+.footer-label {
+font-size: 0.65rem;
+color: white;
+margin-top: 4px;
+}
+
+#music-btn {
+position: fixed;
+bottom: 54.5rem;
+right: 1.5rem;
+padding: 0.7rem 1.2rem;
+background-color: #000;
+color: #fff;
+font-family: 'Poppins', sans-serif;
+border: none;
+border-radius: 8px;
+cursor: pointer;
+z-index: 999;
+box-shadow: 0 4px 10px rgba(0,0,0,0.2);
+}
+
+@font-face {
+font-family: 'TeXGyreTermes';
+src: url('fonts/texgyretermes-regular.otf') format('opentype');
+font-weight: normal;
+font-style: normal;
+}
+
+@font-face {
+font-family: 'TeXGyreTermes';
+src: url('fonts/texgyretermes-bold.otf') format('opentype');
+font-weight: bold;
+font-style: normal;
+}
+
+@media (max-height: 844px), (max-width: 375px) {
+.countdown-wrapper {
+  display: flex !important;
+  flex-direction: row !important;
+  justify-content: center;
+  align-items: flex-start;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  transform: scale(0.9);
+  margin-top: 1rem;
+}
+
+.guestbook-pagination {
+display: flex;
+justify-content: center;
+gap: 0.5rem;
+margin-top: 1.5rem;
+position: absolute;
+  bottom: 40px;
+  left: 150px !important;
+}
+
+.countdown-segment {
+  flex: 1 1 auto;
+  max-width: 80px;
+}
+
+.footer-buttons {
+  padding-bottom: 6vh; /* Creates more space at bottom if buttons overflow */
+}
+
+
+
+.guestbook-wrapper {
+  margin-bottom: 10vh; /* Lift content to avoid bottom cut-off */
+}
+
+.guestbook-modal{
+  background: white;
+  padding: 3.86rem;
+  border-radius: 20px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.2);
+  width: 132vw;
+  max-width: 132vw;
+  max-height: 400vh;
+  height: 71vh;
+  text-align: center;
+  margin-top: -17.5vh;
+}
+
+.guestbook-pagination {
+  position: relative;
+  bottom: 0;
+  margin-top: 1rem;
+  display: flex;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  
+}
+
+.guestbook-wrapper input,
+.guestbook-wrapper textarea {
+  margin-bottom: 10px;
+  font-size: 0.85rem;
+}
+
+.guestbook-message,
+.guestbook-sender {
+  font-size: 0.9rem;
+}
+
+.bismillah{
+text-align: center;
+  margin-top: 1000px;
+  margin-left: 30px;
+  width: 140px;
+  
+}
+.MayaxAsyraaf{
+width: 200px;
+  height: 100px;
+  margin-top: 100px;
+  
+}
+.highlight {
+      font-weight: 400;
+      font-size: 3vw;
+      color: #A9925C;
+      margin-bottom: -37px;
+      margin-top: -245px;
+      font-family: 'TeXGyreTermes', serif;
+      font-style: italic;
+  }
+
+  .day {
+      font-size: 6vw;
+      color: #A9925C;
+      font-family: Dancing Script;
+      z-index: 0;
+      
+  }
+
+  .date {
+      font-size: 4vw;
+      font-family: Dancing Script;
+      margin-bottom: 15px;
+      color: #A9925C;
+      z-index: 0;
+      position: absolute;
+      top:1410px;
+  }
+
+.floating-star.visible {
+  top: -28%;
+  left: 14%;
+  transform: translate(-50%, -50%) scale(1.2);
+  opacity: 1;
+}
+.head-img{
+width: 572px;
+  margin-top: -463px;
+  left: -91px;
+}
+.sigil{
+display: block;
+  margin: 0 auto;
+  width: 100px;
+  width: 160px;
+  height: 160px;
+  top: 371px;
+  left: 118px;
+  margin-top: -100px;
+  cursor: pointer;
+  z-index: 4;
+}
+.Undangan {
+  font-family: 'TeXGyreTermes', serif;
+  font-weight: 400px;
+  font-style: italic;
+  font-size: 20px;
+  color: #2f2f2f;
+  width: 84px;
+  height: 27px;
+  top: -55px;
+  left: 0px;
+  text-align: center;
+  display: block;
+  position: relative;
+  z-index: 9999;
+}
+
+.Wali {
+  font-family: 'TeXGyreTermes', serif;
+  font-weight: 400px;
+  font-style: italic;
+  font-size: 25px;
+  color: #2f2f2f;
+  width: 148px;
+  height: 34px;
+  top: -64px;
+  left: 121pxpx;
+  text-align: center;
+  display: block;
+  position: relative;
+  z-index: 9999;
+}
+
+.envmaya{
+width: 228px;
+  Height: 144.17752075195312px;
+  Top: 216px;
+  Left: 82px;
+  z-index: 2;
+  margin-top: 173px;
+  margin-bottom: 27px;
+}
+.sigil {
+      display: block;
+      margin: 0 auto;
+      width: 100px;
+      width: 120px;
+      height: 120px;
+      top: 371px;
+      left: 118px;
+      margin-top: -91px;
+      cursor: pointer;
+      z-index: 4;
+  }
+
+  .open-button {
+  font-family: 'TeXGyreTermes', serif;
+  font-weight: 400px;
+  font-style: italic;
+  font-size: 34px;
+  color: #2f2f2f;
+  width: 184px;
+  height: 40px;
+  top: 113px;
+  left: -5px;
+  text-align: center;
+  display: block;
+  position: relative;
+  z-index: 9999;
+}
+
+}
+
+@media (max-width: 430px) {
+.guestbook-wrapper {
+text-align: center;
+padding: 23rem 30px;
+font-family: 'Poppins', sans-serif;
+margin-bottom: 10rem;
+
+background-image: url('PAPER.png');
+background-repeat: no-repeat;
+background-position: center;
+background-size: 115vw 168vh;
+
+transform: rotate(90deg) scale(1.2);
+transform-origin: center center;
+
+/* ← only these two lines added: */
+min-width: 100vw;
+min-height: 100vh;
+
+ /* 🍷 Drop shadow elegance */
+ box-shadow: 2px 9px 20px rgba(0, 0, 0, 1);
+}
+.guestbook-message {
+font-size: 18px;
+font-style: italic;
+font-family: Playball;
+color: #222;
+margin-bottom: 1rem;
+font-weight:600;
+white-space: normal;
+overflow-wrap: break-word;
+word-wrap: break-word;
+hyphens: auto;
+max-width: 80%;
+}
+.guestbook-title {
+font-size: 35px;
+font-weight: bold;
+margin-bottom: 1.5rem;
+color: #000;
+font-family:'TeXGyreTermes', serif;
+margin-top: -285px;
+}
+.guestbook-pagination {
+display: flex;
+justify-content: center;
+gap: 0.5rem;
+position: absolute;
+  bottom: 40px;
+  left: 175px;
+}
+}
+
+
+
+
+
+
+
+
+/* === GUESTBOOK BUTTON FIX (Make sure it's always visible) === */
+
+
+  </style>
+  <body>
+  
+   
+    
+
+
+    <div id="envelope-cover" style="position: absolute; margin:-96px; background-color: #f5e8dd; height:1000px; width:405px;  z-index: 9999; display: flex; align-items: center; flex-direction: column; overflow: hidden;">
+        <span class="Undangan">Undangan</span>
+        <span class="Wali">Walimatulurus</span>
+        <img src="Text-Logo/Maya&Asyraaf_Blk.png" alt="Mayaxasyraff" class="envmaya"></img>
+        <span class="open-button">Press to open</span>
+        <img src="Envelope Intro (2)/Envelope Intro/head.png" alt="Envelope Head" class="head-img">
+        <img src="Envelope Intro (2)/Envelope Intro/seal.png" alt="Seal" class="sigil" onclick="openInvitation(),toggleMusic()"></img>
+        <img src="Envelope Intro (2)/Envelope Intro/body.png" alt="Envelope Body" class="body-img"></img>
+      </div>
+
+      
+    <div>
+        <div class="bismillah">
+            <img src="Text-Logo/bismillah.png" alt="Bismillah" style="max-width: 100%; height: auto;">
+        </div>
+        <div style="text-align: center; margin: 20px 0;">
+            <img src="Text-Logo/Maya&Asyraaf_Gold.png" alt="Maya & Asyraaf" class="MayaxAsyraaf">
+        </div>
+
+        <div class="highlight">	What began as a simple connection <br>blossomed into a love full of laughter, faith and dreams</div>
+        <div class="highlights">	you are invinted to the day love finds its forever for,</div>
+
+
+    </div>
+  <div class="day">26 October 2025 | Sunday</div>
+    <div class="date">SkyGlass Designer Event Hall</div>
+
+    <div style="text-align: center;  z-index:0; margin-top:260px;">
+        <img src="Text-Logo/Logo_MayaAsyraaf.png" alt="MA Logo" style="width: 23px; height: auto;">
+    </div>
+
+    
+        <div class="parents">
+            <p class="startingword">Assalamualaikum WBT & Salam Sejahtera</p>
+            <p class="parent-top">
+                SHEIKH SHAMSHRUL <br> HEDRA BIN SHEIKH MUSA
+            </p>
+
+            <div class="amp-container">
+                <span>&</span>
+            </div>
+
+            <p class="parent-bottom">
+                NORMARLINA BINTI HJ MOHD DAUD
+            </p>
+        </div>
+
+  <p class="invitation">
+        
+        “Dengan penuh hormat dan takzim,<br> sukacita menjunjung Pengiran berangkat <br> menjemput Pehin / Dato / Datin <br>/ Awang / Dayang / Tuan / Puan / Cik<br>untuk bersama - sama memeriahkan majlis<br> walimatulurus puteri kami dan pasangannya”
+  </p>
+
+    
+        <p class="bride">SITI MAYA NADHIRAH BINTI<br>SHEIKH SHAMSHRUL HEDRA</p>
+        <div style="font-size:35px;font-family:'TeXGyreTermes', serif;">&</div>
+        <p class="groom">MUHAMMAD NUR ASYRAAF <br> BIN AZMAN</p>
+    
+
+    
+
+        <div class="event-block">
+            <h3 class="event-heading" style="margin-top:20.5rem;">Date</h3>
+            <p class="event-text">26 October 2025</p>
+        </div>
+
+        <div class="event-block">
+            <h3 class="event-heading">Time</h3>
+            <p class="event-text">9.00 AM – 2.00 PM</p>
+        </div>
+
+        <div class="event-block">
+            <h3 class="event-heading">Venue</h3>
+            <p class="event-text">
+                SkyGlass Designer Event Hall <br>
+                T5-22-01, Tower 5, Sky Park @ Cyberjaya,<br>
+                Jalan Teknokrat 1, Cyber 3,<br>
+                63000 Cyberjaya, Selangor
+            </p>
+        </div>
+
+        <div class="event-block">
+          <h3 class="event-heading">Dress Code</h3>
+          <p class="event-text">
+            Pakaian Tradisional – <br>Baju Kurung, Baju Melayu Lengkap,<br> Batik atau lain-lain pakaian <br>tradisional yang sopan
+          </p>
+      </div>
+
+     <h3 class="itinerary-heading" style="margin-top:20rem;">Itinerary</h3>
+
+        <div class="itinerary-item"><span class="time">9.00 AM</span> : Ketibaan para jemputan</div>
+        <div class="itinerary-item"><span class="time">9.30 AM</span> : Majlis Akad Nikah </div>
+        <div class="itinerary-item"><span class="time">10.00 AM</span> : Bacaan doa (diikuti dengan jamuan ringan)</div>
+        <div class="itinerary-item"><span class="time">11.30 AM</span> : Majlis bersanding</div>
+        <div class="itinerary-item"><span class="time">12.00 PM</span> : Jamuan makan bermula</div>
+        <div class="itinerary-item"><span class="time">2.00 PM</span> : Majlis bersurai</div>
+
+        <div class="itinerary-item"><span class="time"></span><b>Jemput hadir mengikut masa yang ditetapkan</b> </div>
+
+        <h3 class="countdown-title" style="margin-top:20rem;">Counting Days</h3>
+
+        
+            <div class="countdown-box">
+                <span style="font-family:'TeXGyreTermes', serif; font-style:italic;">Day</span>
+                <div id="days">00</div>
+            </div>
+            <div class="countdown-box">
+                <span style="font-family:'TeXGyreTermes', serif; font-style:italic;">Hour</span>
+                <div id="hours">00</div>
+            </div>
+            <div class="countdown-box">
+                <span style="font-family:'TeXGyreTermes', serif; font-style:italic;">Minute</span>
+                <div id="minutes">00</div>
+            </div>
+            <div class="countdown-box">
+                <span style="font-family:'TeXGyreTermes', serif; font-style:italic;">Second</span>
+                <div id="seconds">00</div>
+            </div>
+        
+     <h3 class="gallery-title" style="margin-top:20rem;">Gallery</h3>
+
+        <div class="gallery-image">
+            <img src="gallery-photo.jpg" alt="Wedding Photo 1" class="gallery-slide active">
+            <img src="gallery-photo2.jpg" alt="Wedding Photo 2" class="gallery-slide">
+        </div>
+
+<h3 class="prayer-title" style="margin-top:20rem;">Prayer</h3>
+
+        <p class="prayer-text">
+            Semoga Allah melimpahkan <br>
+            keberkahan kepadamu dan <br>
+            keberkahan atas pernikahanmu,<br>
+            serta mengumpulkan kalian <br>
+            berdua dalam kebaikan
+        </p>
+
+        <p class="wedding-tag">#MayaXAsyraaf</p>
+        <p class="footer-credit">Made for your special day by</p>
+        <a href="https://vi-up.com/"><img src="Logo/Vi-Up Submark.png" class="footer-brand" style="width:31px; height:28px; margin-top:5px; left: 159px;
+        top: 7356px;
+        position: absolute;
+        width: 31px;
+        height: 28px;"></img></a>
+
+
+        
+        
+  </body>
+  
+    
+  `;
+  window.mayaxTemplate = mayaxTemplate;
+
+  editor.BlockManager.add('template-mayaxasyraaf', {
+    label: `
+      <div style="display:flex;flex-direction:column;align-items:center;gap:4px">
+        <img src="ICN_canvas/MayaxAsyraafPreview.png" style="width:60px;height:60px;border-radius:6px;">
+        <span>Maya & Asyraaf</span>
+      </div>
+    `,
+    category: 'Wedding Templates',
+    content: mayaxTemplate
+  });
+});
+</script>
+<script>
+  // RSVP EXTENSION PANEL COLOR PICKERS
+const rsvpPanel = document.getElementById("viup-rsvp-ext");
+
+// Select the inputs in order
+const navBarColorInput = rsvpPanel.querySelectorAll("input[type='color']")[0];
+const textIconColorInput = rsvpPanel.querySelectorAll("input[type='color']")[1];
+
+// 1. Update Footer Background Color
+navBarColorInput.addEventListener("input", (e) => {
+  const color = e.target.value;
+  document.documentElement.style.setProperty("--viup-footer-bg", color);
+});
+
+textIconColorInput.addEventListener("input", (e) => {
+  const color = e.target.value;
+  document.documentElement.style.setProperty("--viup-footer-text", color);
+
+  // Create filter from selected color
+  document.documentElement.style.setProperty(
+    "--viup-footer-icon-filter",
+    generateFilter(color)
+  );
+});
+
+</script>
+  <script>
+// Wait for page loaded
+document.querySelector(".share-btn").addEventListener("click", () => {
+
+// Use the original raw HTML string
+const finalHTML = `
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+</head>
+<body>
+${window.mayaxTemplate}
+</body>
+</html>`;
+
+const blob = new Blob([finalHTML], { type: "text/html" });
+const link = document.createElement("a");
+link.href = URL.createObjectURL(blob);
+link.download = "testexport.html";
+link.click();
+URL.revokeObjectURL(link.href);
+});
+
+</script>
+
+  
+  
+    
+
+</body>
+<script>
+  // ===== Vi-Up GrapesJS Boot =====
+  (function() {
+    // 1) Init editor
+    const editor = grapesjs.init({
+      container: '#vi-up-gjs',
+      height: '100%',
+      width: '100%',
+      fromElement: false,
+      storageManager: false,
+      canvas: {
+        styles: [
+          'https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap'
+        ]
+      }
+    });
+  
+    // 2) Make “free move” (absolute) compatible across 0.21.x
+    function setDragModeAbsolute(abs = true) {
+      // Prefer API if present, else set on model (works on 0.21.7)
+      if (typeof editor.setDragMode === 'function') {
+        editor.setDragMode(abs ? 'absolute' : 'translate');
+      } else {
+        editor.getModel().set('dragMode', abs ? 'absolute' : 'translate');
+      }
+    }
+  
+    // 3) Basic blocks (text, image, divider, button)
+    editor.BlockManager.add('viup-text', {
+      label: 'Text',
+      category: 'Vi-Up',
+      content: {
+        type: 'vi-up-text',
+        content: 'Edit me!',
+        style: { 'font-size': '18px', 'line-height': '1.5' }
+      }
+    });
+  
+    editor.BlockManager.add('viup-image', {
+      label: 'Image',
+      category: 'Vi-Up',
+      content: '<img src="https://picsum.photos/600/400" style="max-width:100%;display:block;" />'
+    });
+  
+    editor.BlockManager.add('viup-divider', {
+      label: 'Divider',
+      category: 'Vi-Up',
+      content: { type: 'vi-up-divider' }
+    });
+  
+    editor.BlockManager.add('viup-button', {
+      label: 'Button',
+      category: 'Vi-Up',
+      content: { type: 'vi-up-button' }
+    });
+  
+    // 4) Custom components (Text / Divider / Button) with working traits
+    editor.DomComponents.addType('vi-up-text', {
+      isComponent: el => el?.classList?.contains('vi-up-text'),
+      model: {
+        defaults: {
+          tagName: 'p',
+          classes: ['vi-up-text'],
+          content: 'Edit me!',
+          traits: [
+            { type:'text', name:'txt', label:'Text' },
+            { type:'number', name:'fs', label:'Font Size', min:10, max:96 },
+            { type:'color', name:'color', label:'Color' }
+          ],
+          styles: { 'font-size':'18px', color:'#222' }
+        },
+        init() {
+          this.on('change:txt', () => this.set('content', this.get('txt') || ''));
+          this.on('change:fs', () => this.addStyle({ 'font-size': (this.get('fs') || 18) + 'px' }));
+          this.on('change:color', () => this.addStyle({ color: this.get('color') || '#222' }));
+        }
+      }
+    });
+  
+    editor.DomComponents.addType('vi-up-divider', {
+      isComponent: el => el?.classList?.contains('vi-up-divider') || el?.tagName === 'HR',
+      model: {
+        defaults: {
+          tagName: 'hr',
+          classes: ['vi-up-divider'],
+          traits: [
+            { type:'select', name:'borderStyle', label:'Style', options:[
+              { id:'solid',  label:'Solid' },
+              { id:'dashed', label:'Dashed' },
+              { id:'dotted', label:'Dotted' }
+            ]},
+            { type:'color', name:'borderColor', label:'Color' },
+            { type:'number', name:'thick', label:'Thickness', min:1, max:12 }
+          ],
+          styles: { border: '1px solid #ccc', 'margin':'16px 0' }
+        },
+        init() {
+          const apply = () => {
+            const style = this.get('borderStyle') || 'solid';
+            const col   = this.get('borderColor') || '#ccc';
+            const w     = Math.max(1, this.get('thick') || 1);
+            this.addStyle({ border: `${w}px ${style} ${col}` });
+          };
+          this.on('change:borderStyle change:borderColor change:thick', apply);
+        }
+      }
+    });
+  
+    editor.DomComponents.addType('vi-up-button', {
+      isComponent: el => el?.classList?.contains('vi-up-button'),
+      model: {
+        defaults: {
+          tagName: 'a',
+          classes: ['vi-up-button'],
+          content: 'Click Me',
+          attributes: { href: '#', title: 'Button' },
+          traits: [
+            { type:'text', name:'labelText', label:'Label' },
+            { type:'text', name:'href', label:'Link' },
+            { type:'checkbox', name:'targetBlank', label:'Open in new tab' },
+            { type:'color', name:'bg', label:'Background' },
+            { type:'color', name:'fg', label:'Text' },
+            { type:'number', name:'radius', label:'Radius', min:0, max:40 }
+          ],
+          styles: {
+            display:'inline-block', padding:'10px 16px',
+            background:'#6D4C41', color:'#fff',
+            'border-radius':'8px', 'text-decoration':'none', 'font-weight':'600'
+          }
+        },
+        init() {
+          this.on('change:labelText', () => this.set('content', this.get('labelText') || ''));
+          this.on('change:href', () => this.addAttributes({ href: this.get('href') || '#' }));
+          this.on('change:targetBlank', () => this.addAttributes({ target: this.get('targetBlank') ? '_blank' : '' }));
+          this.on('change:bg', () => this.addStyle({ background: this.get('bg') || '#6D4C41' }));
+          this.on('change:fg', () => this.addStyle({ color: this.get('fg') || '#fff' }));
+          this.on('change:radius', () => this.addStyle({ 'border-radius': (this.get('radius') || 8) + 'px' }));
+        }
+      }
+    });
+  
+    // 5) Double-click to edit text content (nice UX)
+    editor.on('component:dblclick', (cmp) => {
+      if (cmp.is('vi-up-text') || cmp.is('text')) {
+        editor.runCommand('core:open-sm');
+        editor.runCommand('core:component-edit', { component: cmp });
+      }
+    });
+  
+    // 6) Free-drag toggle (wired to your header button if present)
+    let freeDrag = true;
+    const dragBtn = document.getElementById('vi-up-toggle-drag');
+    function updateDragMode() {
+      setDragModeAbsolute(freeDrag);
+      if (dragBtn) dragBtn.textContent = freeDrag ? 'Free Move: ON' : 'Free Move: OFF';
+    }
+    if (dragBtn) {
+      dragBtn.addEventListener('click', () => {
+        freeDrag = !freeDrag;
+        updateDragMode();
+      });
+    }
+    editor.on('load', updateDragMode);
+  
+    // 7) ARTBOARDS (multi-page) — create, list, and switch
+    //    Uses GrapesJS Pages API. Each artboard is an independent page with its own canvas content.
+    const pagesUI = document.getElementById('vi-up-artboards'); // optional list UI
+  
+    function createArtboardName(n) {
+      return `Artboard ${n}`;
+    }
+  
+    function createArtboard({ width = 1080, height = 1920, preset = 'Custom' } = {}) {
+  const count = editor.Pages.getAll().length + 1;
+  const id = `artboard-${Date.now()}-${Math.floor(Math.random() * 9999)}`;
+  const name = `Artboard ${count}`;
+
+  // Use FRAMES (more reliable across 0.21.x)
+  const page = editor.Pages.add({
+    id,
+    name,
+    frames: [{
+      // Optional page-specific CSS for a visible “board”
+      styles: `
+        body { margin: 0; padding: 0; }
+        .viup-page-wrap {
+          width: ${width}px;
+          min-height: ${height}px;
+          margin: 24px auto;
+          box-sizing: border-box;
+          background: #fff;
+          outline: 1px dashed #ddd;
+        }
+      `,
+      component: `
+        <div class="viup-page-wrap" data-preset="${preset}">
+          <section style="padding:24px;">
+            <h1 style="margin:0 0 8px 0;font-size:28px;font-weight:700;">${name}</h1>
+            <p style="margin:0;color:#666;">Start designing this artboard…</p>
+          </section>
+        </div>
+      `
+    }]
+  });
+
+  // Force-activate the new page
+  editor.Pages.setActive(page);
+
+  // Sometimes the canvas needs a tick to re-render the new frame
+  setTimeout(() => {
+    editor.render();           // ensure re-render
+    editor.Canvas.render();    // ensure canvas refresh
+  }, 0);
+
+  renderArtboardList?.();
+  return page;
+}
+  
+    function renderArtboardList() {
+      if (!pagesUI) return;
+      const pages = editor.Pages.getAll();
+      const active = editor.Pages.getActive();
+      pagesUI.innerHTML = '';
+      pages.forEach(pg => {
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'viup-artboard-chip';
+        btn.style.cssText = `
+          padding:6px 10px;margin:4px;border-radius:8px;border:1px solid #ddd;cursor:pointer;
+          background:${pg === active ? '#eee' : '#fff'};
+        `;
+        btn.textContent = pg.get('name');
+        btn.title = pg.get('id');
+        btn.addEventListener('click', () => {
+          editor.Pages.setActive(pg);
+          renderArtboardList();
+        });
+        pagesUI.appendChild(btn);
+      });
+    }
+  
+    // Wire header “Add Artboard” button
+    const addBtn = document.getElementById('vi-up-add-artboard');
+    if (addBtn) {
+      addBtn.addEventListener('click', () => {
+        // Example: prompt a simple preset; swap to your own UI if you like.
+        // Presets: Mobile (390x844), Poster (1080x1920), Square (1080x1080)
+        const pick = (window.prompt('Artboard preset: mobile | poster | square | custom', 'poster') || 'poster').toLowerCase();
+        let spec = { width:1080, height:1920, preset:'Poster' };
+        if (pick === 'mobile') spec = { width:390, height:844, preset:'Mobile' };
+        if (pick === 'square') spec = { width:1080, height:1080, preset:'Square' };
+        if (pick === 'custom') {
+          const w = parseInt(window.prompt('Width (px):', '1080') || '1080', 10);
+          const h = parseInt(window.prompt('Height (px):', '1920') || '1920', 10);
+          spec = { width: isNaN(w)?1080:w, height:isNaN(h)?1920:h, preset:'Custom' };
+        }
+        createArtboard(spec);
+      });
+    }
+  
+    // Create an initial artboard if none exist
+    editor.on('load', () => {
+      if (!editor.Pages.getAll().length) {
+        createArtboard({ width:1080, height:1920, preset:'Poster' });
+      } else {
+        renderArtboardList();
+      }
+    });
+  
+    // Expose a tiny API for debugging in console (optional)
+    window.ViUp = {
+      editor,
+      addArtboard: createArtboard,
+      listArtboards: () => editor.Pages.getAll().map(p => p.get('name')),
+      setFreeMove: (on) => { freeDrag = !!on; updateDragMode(); }
+    };
+  })();
+  </script>
+  

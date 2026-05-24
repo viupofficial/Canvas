@@ -1,0 +1,3556 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Maya & Asyraf – Wedding Invitation</title>
+  <link rel="icon" href="Text-Logo\Logo_MayaAsyraaf.png" type="image/png">
+  <!-- Google Fonts -->
+  <link href="https://fonts.googleapis.com/css2?family=Alegreya&family=Arizonia&family=Beau+Rivage&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://fonts.cdnfonts.com/css/tex-gyre-termes" />
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css"/>
+   <!-- Parisienne -->
+<link href="https://fonts.googleapis.com/css2?family=Parisienne&display=swap" rel="stylesheet">
+
+<!-- Alex Brush -->
+<link href="https://fonts.googleapis.com/css2?family=Alex+Brush&display=swap" rel="stylesheet">
+<link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Montserrat&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@24,400,0,0&icon_names=info" />
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+	  
+    }
+
+    body {
+     font-family: 'Alegreya', serif;
+  background-color: #FEF8F7; 
+  background-size: cover;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-start;
+  position: relative;
+  overflow-x: hidden;
+  animation: fadeIn 1.5s ease-in-out both;
+    }
+	
+	html, body {
+  scroll-padding-top: 1px; /* anchors work properly */
+  
+}
+
+    .invitation-wrapper {
+     width: 90vw;
+  max-width: 200vw;
+  padding: 32.5vh 1rem 9rem;
+  margin-bottom:70px;
+  text-align: center;
+  background: url('YOUR_FLORAL_IMAGE.png') no-repeat center top;
+  background-size: contain;
+  background-repeat: no-repeat;
+  animation: fadeIn 2s ease-in-out both;
+  animation-delay: 0.3s;
+    }
+
+    .invitation-wrapper p {
+      font-size: inherit; 
+      margin-bottom: 0.8rem;
+    }
+
+    .walimatulurus {
+      font-family: Playfair Display;
+      font-size: 1.5rem;
+	  color:#A9925C;
+    }
+
+    .couple-name {
+     font-size: 70px;
+		 font-family: 'Beau Rivage', cursive;
+		 line-height: 1.2;
+  letter-spacing: 0.01em;
+  color: #A9925C;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+	   
+    }
+
+    .ampersand {
+      font-size: 2.4rem;
+      margin: 0.5rem 0;
+	   color:#A9925C;
+    }
+
+    .highlight {
+      font-weight: bold;
+      font-size: 1.2rem;
+	   color:#A9925C;
+    }
+
+    .date {
+      font-size: 1.4rem;
+     
+      margin-bottom: 0.5rem;
+	   color:#A9925C;
+    }
+
+    /* Curved Footer */
+	
+	.footer-container {
+  position: sticky;
+  bottom: 0;
+   width: 100vw;
+  background-color: #000;
+  padding: 0rem 0.1rem 0.2rem;
+  z-index: 999;
+  clip-path: path("M0,0 H100% V100% H0 V0 Q50% 70 100% 0 Z");
+}
+
+.footer-rsvp-wrapper {
+  position: absolute;
+  top: -1.2rem;
+  left: 52%;
+  transform: translateX(-50%);
+  transition: left 1s ease 1s, transform 1s ease 1s;
+  width: 53px;
+  height: 53px;
+  z-index: 2;
+}
+
+.footer-rsvp-wrapper.move-right {
+  left: 74.5%;
+  transform: translateX(-50%);
+}
+
+.footer-container::before {
+  content: "";
+  position: absolute;
+  top: -3.5px;
+  left: 52%;
+  transform: translateX(-50%);
+  width: 60px;
+  height: 40px;
+  background: white;
+  border-bottom-left-radius: 90px;
+  border-bottom-right-radius: 90px;
+  z-index: 1;
+  transition: left 200ms ease-in-out; /* ✅ Clean, fast, matching */
+}
+
+.footer-container.bump-shift::before {
+  left: 74.5%;
+}
+
+.footer-buttons {
+  position: relative;
+  height: 40px;
+  margin-top: 1.5rem;
+}
+
+.footer-side.left,
+.footer-side.right {
+  position: absolute;
+  top: -5px;
+  display: flex;
+  gap: 4rem;
+}
+.footer-side.right a:nth-child(1) {
+  margin-right: 1rem;
+}
+
+.footer-side.left {
+  left: 1.7rem;
+
+}
+
+.footer-side.right {
+  right: 1.7rem;
+}
+
+.footer-side a {
+  color: white;
+  text-decoration: none;
+  font-size: 0.75rem;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.3rem;
+  font-family: 'Montserrat', sans-serif;
+}
+
+.footer-side img{
+width:23px;
+height:23px;
+
+}
+
+.footer-side i {
+  font-size: 1.3rem;
+}
+
+.footer-rsvp-text {
+  position: absolute;
+  top: 0%;
+  left: 52%;
+  transform: translate(-50%, 0);
+  color: white;
+  font-weight: bold;
+  font-size: 13px;
+  opacity: 1;
+  transition: transform 1s ease, top 1s ease, opacity 1s ease;
+  z-index: 3;
+}
+
+/* When it drops */
+.footer-rsvp-text.drop {
+  top: 31%; /* visually aligns into the black footer */
+  transform: translate(-50%, 0);
+}
+
+/* RSVP Circle Button */
+.footer-rsvp {
+  background-color: #000;
+ 
+  border-radius: 50%;
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  overflow: hidden;
+}
+
+.footer-rsvp::after {
+  content: 'RSVP';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  transition: transform 0.8s ease, opacity 0.8s ease;
+  opacity: 1;
+}
+
+.footer-rsvp.animate-text::after {
+  transform: translate(-50%, 60px);
+  opacity: 0;
+}
+
+star-fly-in {
+  position: absolute;
+  color: white;
+  font-size: 1.2rem;
+  opacity: 0;
+  pointer-events: none;
+  transition: transform 0.8s ease, opacity 0.8s ease, left 0.8s ease, top 0.8s ease;
+  transform: translate(-50%, -50%) scale(1);
+  z-index: 10;
+}
+
+.star-fly-in.animate {
+  opacity: 1;
+  transform: translate(-50%, -50%) scale(2);
+}
+
+.star-fly-out {
+    position: absolute;
+  font-size: 1.2rem;
+  color: white;
+  z-index: 15;
+  opacity: 1;
+  pointer-events: none;
+  transform: translate(-50%, -50%) scale(2); /* start large */
+  transition: transform 0.8s ease, opacity 0.8s ease, left 0.8s ease, top 0.8s ease;
+}
+
+.floating-star {
+  position: absolute;
+  top: 28%;
+  left: 6%;
+  transform: translate(-50%, -50%) scale(1);
+  opacity: 1;
+  transition: all 0.6s ease;
+  font-size: 24px;
+  color: white;
+ 
+  z-index: 10;
+}
+
+.floating-star.visible {
+  top: -28%;
+  left: 5%;
+  transform: translate(-50%, -50%) scale(1.2);
+  opacity: 1;
+}
+  
+
+    @media (max-width: 789px) {
+      .couple-name {
+        font-size: 70px;
+		 font-family: 'Dancing Script' regular;
+		 line-height: 1.2;
+  letter-spacing: 0.01em;
+  color: #A9925C;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+      }
+	  
+	    .walimatulurus {
+      font-family: 'Playfair Display' regular;
+      font-size: 25px;
+	  color:#A9925C;
+	  font-weight:400px;
+	  
+    }
+	
+	.label-top {
+  font-size: 22px;
+  font-weight:400px;
+  line-height:100%;
+  font-family: 'Playfair Display', serif;
+  color: #A9925C;
+  margin-bottom: 0.2rem;
+}
+
+
+     .ampersand {
+      font-size: 45px;
+	  font-family:Dancing Script;
+      margin: 0.5rem 0;
+	   color:#A9925C;
+    }
+
+    .highlight {
+      font-weight: 400;
+      font-size: 3vw;
+	   color:#A9925C;
+	   margin-bottom:-23px;
+	   margin-top:-255px;
+	   font-family:'TeXGyreTermes', serif;
+	   font-style:italic;
+    }
+	
+	.highlights {
+      font-weight: 400;
+      font-size: 3vw;
+	   color:#A9925C;
+	   margin-bottom:-23px;
+	   margin-top:59px;
+	   font-family:'TeXGyreTermes', serif;
+	   font-style:italic;
+    }
+
+    .date {
+      font-size: 4vw;
+      font-family:Dancing Script;
+      margin-bottom: 15px;
+	   color:#A9925C;
+	   z-index:0;
+	   margin-top: 6px;
+    }
+	
+	.day {
+  font-size: 6vw;
+  color: #A9925C;
+  font-family:Dancing Script;
+  z-index:0;
+}
+
+#rsvpSubmitButtons {
+  display: flex;
+  justify-content: center;
+  gap: 10px;
+  margin-top: 20px;
+  height: auto;
+  width: 100%;
+}
+
+.venue.bottom {
+  font-style: italic;
+  font-size: 1rem;
+  margin-top: -0.4rem;
+  color: #A9925C;
+}
+
+    .footer-side.left,
+.footer-side.right {
+  position: absolute;
+  top: -5px;
+  display: flex;
+  gap: 3rem;
+  margin-left:-10px;
+}
+.footer-side.right a:nth-child(1) {
+  margin-right: -0.3rem;
+}
+
+.footer-side.left {
+  left: 1.5rem;
+}
+
+.footer-side.right {
+  right: 0.7rem;
+}
+
+.footer-side a {
+  color: white;
+  text-decoration: none;
+  font-size: 1rem;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.2rem;
+  font-family: 'Montserrat', sans-serif;
+}
+
+.footer-side i {
+  font-size: 1.3rem;
+}
+
+
+
+
+.amp-move {
+  font-size: 40px;
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  opacity: 0;
+  transform: translate(0, 0) rotate(0deg);
+  transition: all 2s ease-out;
+}
+
+.amp-move.animate {
+  opacity: 1;
+  transform: translate(130px, -180px) rotate(-20deg); /* tweak as needed */
+}
+
+.parents-wrapper {
+  text-align: center;
+  margin-bottom: 2rem;
+  padding: 0 1rem;
+}
+
+.parents .parent-top,
+.parents .parent-bottom {
+  font-family: 'TeXGyreTermes', serif;
+  font-size: 18px;
+  color: #000000;
+  margin: 0.5rem 0;
+  margin-bottom:30px;
+}
+
+.startingword{
+ font-family: 'TeXGyreTermes', serif;
+  font-size: 15px;
+  color: #000000;
+  margin: 0.5rem 0;
+  margin-bottom:50px;
+  }
+
+.invitation{
+font-size:18px;
+font-family:'TeXGyreTermes', serif;
+justify-text:center;
+line-height:24px;
+margin-bottom:24px;
+z-index:0;
+text-align: center;
+font-style:italic;
+}
+.amp-container span {
+  font-size: 22px;
+  display: inline-block;
+  color: ##000000;
+  margin: 0.5rem 0;
+  margin-bottom:17px;
+  font-family:'TeXGyreTermes', serif;
+}
+
+.bridegroom-wrapper {
+  text-align: center;
+  margin-top: 2rem;
+  margin-bottom:20rem;
+  padding: 0 1rem;
+}
+
+.bride, .groom {
+  font-family:'TeXGyreTermes', serif;
+  font-size: 20px;
+  font-weight: bold;
+  color: ##000000;
+  line-height: 1.4;
+  letter-spacing: 1px;
+  margin: 0.5rem 0;
+  font-style:italic;
+}
+
+#amp {
+  font-size: 36px;
+  color: #5e3e3c;
+  margin: 0.5rem 0;
+}
+
+.event-details-wrapper {
+  text-align: center;
+  padding: 2rem 1.5rem;
+  font-family:Playfair Display ;
+  margin-bottom:20rem;
+  color: #2c2c2c;
+
+}
+
+.event-block {
+  margin-bottom: 2.5rem;
+}
+
+.event-heading {
+  font-size: 22px;
+  font-weight: bold;
+  color: #000000;
+  margin-bottom: 0.3rem;
+  font-family:'TeXGyreTermes', serif;
+}
+
+.event-text {
+  font-size: 20px;
+  line-height: 1.6;
+  color: #000000;
+  font-family:'TeXGyreTermes', serif;
+}
+
+.itinerary-wrapper {
+  
+  text-align: left;
+  padding: 2rem 1.5rem;
+   margin-bottom:20rem;
+   margin-left:2.5rem;
+  color: #2c2c2c;
+}
+
+.itinerary-heading {
+  text-align: center;
+  font-size: 35px;
+  font-weight: bold;
+  margin-bottom: 3rem;
+  margin-left:-4rem;
+  color: #000000;
+  font-family:'TeXGyreTermes', serif;
+}
+
+.itinerary-item {
+  font-size: 20px;
+  margin-bottom: 25px;
+  line-height: 1.6;
+  color: #000000;
+  font-family:'TeXGyreTermes', serif;
+  font-style:italic;
+}
+
+.bismillah{
+  text-align: center;
+    margin-top: -51px;
+    margin-left: 87px;
+    width: 170px;
+}
+
+.time {
+  font-weight: bold;
+  color: #000000;
+  font-size: 20px;
+  font-family:'TeXGyreTermes', serif;
+}
+
+.countdown-wrapper {
+  text-align: center;
+
+  color: #000;
+  margin-bottom:34rem;
+}
+
+.countdown-title {
+  font-size: 35px;
+  font-weight: bold;
+  margin-bottom: 2rem;
+  font-family:'TeXGyreTermes', serif;
+  margin-top: 125px;
+}
+
+.countdown-container {
+  display: flex;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 1rem;
+}
+
+.countdown-box {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  height:60px;
+   min-width: 35px;
+   box-shadow: inset 0 -2px 0 rgba(0, 0, 0, 0.15);
+   
+}
+
+.countdown-box span {
+  margin-bottom: 0.3rem;
+  font-size: 16px;
+  font-weight: bold;
+  font-family:Lato;
+  
+  
+}
+
+.countdown-box div {
+  background: linear-gradient(to bottom, #796F65, #DFCCBA );
+  border-radius: 12px;
+  padding: 2.5rem 1.2rem;
+  font-size: 28px;
+  font-weight: bold;
+  box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+  min-width: 70px;
+  font-family:Inter;
+   line-height: 1;
+   position: relative;
+}
+.countdown-box div::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 10%;
+  width: 80%;
+  height: 1px;
+  background-color: black;
+  transform: translateY(-50%);
+  opacity: 0.5;
+}
+
+
+.gallery-wrapper {
+  text-align: center;
+  padding: 3rem 1.5rem;
+  font-family: 'Poppins', sans-serif;
+  margin-bottom:22rem;
+}
+
+.gallery-title {
+  font-size: 35px;
+  font-weight: bold;
+  margin-bottom: 2rem;
+  color: #000;
+  font-family:'TeXGyreTermes', serif;
+}
+
+.gallery-image img {
+  width: 100%;
+  max-width: 360px;
+  border-radius: 12px;
+  box-shadow: 0 8px 12px rgba(0,0,0,0.15);
+  transition: transform 0.3s ease;
+}
+
+.gallery-image img:hover {
+  transform: scale(1.02);
+}
+
+.gallery-image {
+  position: relative;
+  width: 100%;
+  max-width: 600px;
+  margin-inline: auto;
+  height: auto;
+  overflow: hidden;
+}
+
+.gallery-slide {
+  position: absolute;
+  width: 100%;
+  height: auto;
+  opacity: 0;
+  transition: opacity 1s ease-in-out;
+}
+
+#rsvpSubmitButtons {
+    display: flex !important;
+  }
+
+.gallery-slide.active {
+  opacity: 1;
+  position: relative;
+  z-index: 1;
+}
+
+.guestbook-wrapper {
+  text-align: center;
+  padding: 23rem 4rem;
+  font-family: 'Poppins', sans-serif;
+  margin-bottom: 10rem;
+
+  background-image: url('PAPER.png');
+  background-repeat: no-repeat;
+  background-position: center;
+  background-size: 115vw 168vh;
+
+  transform: rotate(90deg) scale(1.2);
+  transform-origin: center center;
+
+  /* ← only these two lines added: */
+  min-width: 100vw;
+  min-height: 100vh;
+
+   /* 🍷 Drop shadow elegance */
+   box-shadow: 2px 9px 20px rgba(0, 0, 0, 1);
+}
+
+.guestbook-title {
+  font-size: 35px;
+  font-weight: bold;
+  margin-bottom: 1.5rem;
+  color: #000;
+  font-family:'TeXGyreTermes', serif;
+  margin-top: -220px;
+}
+
+.guestbook-message {
+  font-size: 25px;
+  font-style: italic;
+  font-family: Playball;
+  color: #222;
+  margin-bottom: 1rem;
+  font-weight:600;
+  white-space: normal;
+  overflow-wrap: break-word;
+  word-wrap: break-word;
+  hyphens: auto;
+  max-width: 80%;
+}
+
+.guestbook-sender {
+  font-size: 15px;
+  font-family: Playball;
+  color: #555;
+}
+
+.guestbook-pagination {
+  display: flex;
+  justify-content: center;
+  gap: 0.5rem;
+  margin-top: 1.5rem;
+}
+
+.page-number, .page-next {
+  background: #f2ede9;
+  border: 1px solid #d2c4b4;
+  border-radius: 6px;
+  padding: 0.4rem 0.8rem;
+  font-size: 16px;
+  font-weight: bold;
+  font-family: 'Inter', sans-serif;
+  color: #333;
+  cursor: pointer;
+  transition: background 0.2s, transform 0.2s;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+.page-number:hover, .page-next:hover {
+  background: #e4dbd4;
+  transform: scale(1.05);
+}
+
+.page-number.active {
+  background: #c4b6a6;
+  color: white;
+  border-color: #aa9985;
+}
+
+.prayer-wrapper {
+  text-align: center;
+  padding: 3rem 2rem;
+  font-family: 'Poppins', sans-serif;
+  color: #111;
+  margin-bottom:2.7rem;
+margin-top: 9rem;
+     opacity: 0;
+  transition: opacity 1.4s ease-in-out;
+}
+
+.prayer-wrapper.visible {
+  opacity: 1;
+}
+
+.prayer-title {
+  font-size: 35px;
+  font-weight: bold;
+  margin-bottom: 9.5rem;
+  font-family:'TeXGyreTermes', serif;
+}
+
+.prayer-text {
+  font-size: 22px;
+  line-height: 26px;
+  margin-bottom: 7rem;
+  padding: 0 1rem;
+  font-family:'TeXGyreTermes', serif;
+}
+
+.wedding-tag {
+  font-style: italic;
+  font-size: 25px;
+  color: #333;
+  margin-bottom: 1rem;
+  font-family:'TeXGyreTermes', serif;
+}
+
+.footer-credit {
+  font-size: 15px;
+  color: #666;
+  margin-bottom: 0.3rem;
+  font-family:'TeXGyreTermes', serif;
+}
+
+.footer-brand {
+  font-size: 25px;
+  font-weight: bold;
+  color: #8a3f3f;
+  font-family:Roboto;
+}
+
+.contact-card {
+  position: sticky;
+  bottom: 68px; /* Make room for footer */
+  z-index: 4;
+   background: white;
+  padding: 3rem;
+ 
+  width: 100%;
+  max-width: 600px;
+  margin: 0 auto;
+  border-radius: 28px 23px 0px 5px;
+}
+
+.contact-popup {
+  bottom: 68px;
+}
+
+.info-popup {
+   position: fixed;
+  bottom: 48px;
+  z-index: 4;
+  padding: 0;
+  width: auto;
+  background: none;
+  box-shadow: none;
+  display: none;
+}
+
+.info-popup.active-background {
+  background: white;
+  padding: 3rem;
+  border-radius: 12px;
+}
+
+.info-popup.active-backgrounds {
+  background: white;
+  padding: 2rem;
+  border-radius: 12px;
+}
+
+.rsvp-popup{
+bottom: 68px;
+}
+
+  text-align: center;
+  z-index: 9999;
+  animation: fadeIn 0.4s ease-in-out;
+  font-family: 'Poppins', sans-serif;
+}
+
+.contact-card h3 {
+  font-size: 22px;
+  margin-bottom: 1rem;
+  color: #000;
+  text-align: center;
+}
+
+.contact-person {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin: 1rem 0;
+  font-size: 18px;
+  color: #000;
+  font-family: 'Montserrat', sans-serif;
+}
+
+.contact-person .icons a {
+  margin-left: 1rem;
+  color: #000;
+  font-size: 1.2rem;
+}
+
+.moneygift-card {
+  position: sticky;
+  bottom: 68px;
+  left: 0;
+  right: 0;
+  background: white;
+  padding: 4rem 2rem;
+  border-radius: 25px 25px 0 0;
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.2);
+  font-family: 'Poppins', sans-serif;
+  text-align: center;
+  z-index: 5; /* above the RSVP button */
+  animation: fadeIn 0.3s ease-in-out;
+   max-width: 500px;
+  width: 100%;
+  margin: 0 auto;
+}
+.moneygift-card h3 {
+  font-size: 22px;
+  margin-bottom: 1rem;
+  color: #000;
+  text-align: center;
+  font-family: 'Montserrat', sans-serif;
+}
+
+/* Apply same structure as guestbook */
+.bank-info input,
+.account-wrapper input {
+  width: 100%;
+  padding: 1rem;
+  font-size: 1rem;
+  border-radius: 12px;
+  border: none;
+  background: #fef7f3;
+  color: #000;
+  box-sizing: border-box;
+  transition: all 0.3s ease;
+}
+
+.bank-info input:focus,
+.account-wrapper input:focus {
+  padding: 1.2rem;
+  border: 2px solid black;
+  background: #fff;
+}
+
+/* Wrapper fixes */
+.bank-info,
+.account-wrapper {
+  width: 100%;
+  margin-bottom: 1rem;
+  font-family: 'Montserrat', sans-serif;
+}
+
+/* Align button without jump */
+.account-wrapper {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.account-wrapper button {
+  padding: 1rem;
+  border-radius: 12px;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  transition: transform 0.2s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.account-wrapper button:hover {
+ 
+}
+
+.account-wrapper button i {
+  color: #7b4b3a; /* adjust to your theme */
+  font-size: 1.1rem;
+}
+
+/* QR centered and stable */
+.qr-wrapper {
+  display: flex;
+  justify-content: center;
+  height: 220px;
+  margin-top: 20px;
+}
+
+.qr-wrapper img {
+  width: 200px;
+  height: auto;
+  border-radius: 12px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  transition: transform 0.2s ease;
+}
+
+.qr-wrapper img:hover {
+  transform: scale(1.03);
+}
+
+/* <!--rsvp click effect --> */
+
+
+.rsvp-card {
+  position: fixed;
+  bottom: 100px; /* ⚠️ Set this ABOVE your footer height */
+  left: 0;
+  right: 0;
+  background: white;
+  padding: 2rem 1.5rem;
+  border-radius: 25px 25px 0 0;
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.2);
+  font-family: 'Poppins', sans-serif;
+  text-align: center;
+  z-index: 9999; /* ⬆️ make sure it's higher than your footer */
+  display: none;
+}
+
+
+.rsvp-inputs {
+  display: none;
+  margin-top: 1.5rem;
+  max-width: 500px;
+  margin-inline: auto;
+}
+
+.rsvp-inputs input {
+  width: 100%;
+  padding: 1rem;
+  font-size: 1rem;
+  border-radius: 12px;
+  border: none;
+  background: #fef7f3;
+  color: #000;
+  margin-bottom: 1rem;
+  box-sizing: border-box;
+}
+
+.rsvp-submit-buttons {
+  display: flex;
+  justify-content: center;
+  gap: 1rem;
+  margin-top: 1rem;
+  margin-bottom: -4rem;
+}
+
+.rsvp-submit-buttons button {
+  padding: 0.8rem 1.5rem;
+  border-radius: 22px;
+  background: white;
+  border: 2px solid #000;
+  font-weight: bold;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  -webkit-appearance: none;
+    appearance: none;
+    color: black;
+}
+
+.rsvp-submit-buttons button:hover {
+  background: black;
+  color: white;
+}
+
+
+.rsvp-card h3 {
+  font-size: 1.3rem;
+  margin-bottom: 1rem;
+  color: #000;
+}
+
+.rsvp-options {
+  display: flex;
+  justify-content: center;
+  gap: 2rem;
+}
+
+
+.rsvp-options button {
+  padding: 0.8rem 1.5rem;
+  border: 2px solid black;
+  background: transparent;
+  border-radius: 30px;
+  font-weight: bold;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  -webkit-appearance: none;
+    appearance: none;
+    color: black;
+}
+
+.rsvp-options button.selected {
+  background: black;
+  color: white;
+}
+
+.rsvp-options button.accept:hover {
+  background: black;
+  color: white;
+}
+
+.rsvp-options button.decline:hover {
+  background: #eee;
+}
+
+.rsvp-toggle {
+  display: flex;
+  gap: 1rem;
+  margin-top: 0.5rem;
+}
+
+.rsvp-toggle label {
+  font-weight: bold;
+  cursor: pointer;
+}
+
+.rsvp-toggle input[type="radio"] {
+  margin-right: 0.25rem;
+}
+
+.rsvp-form {
+  display: none;
+  flex-direction: column;
+  align-items: center;
+  gap: 1rem;
+  margin-bottom: 4rem; /* ← make room for buttons to breathe */
+}
+
+.rsvp-form .form-group {
+  margin-bottom: 1rem;
+}
+
+.rsvp-form input {
+  width: 100%;
+  padding: 0.75rem;
+  border-radius: 10px;
+  border: 1px solid #ccc;
+  outline: none;
+}
+.fade-in-section {
+  opacity: 0;
+  transform: translateY(40px);
+  transition: opacity 1s ease-out, transform 1s ease-out;
+  will-change: opacity, transform;
+}
+
+.fade-in-section.is-visible {
+  opacity: 1;
+  transform: none;
+}
+
+
+.info-toggle-buttons {
+  display: flex;
+  justify-content: center;
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+
+.info-toggle-buttons button {
+  padding: 0.5rem 1.2rem;
+  border-radius: 25px;
+  border: 1px solid #000;
+  background: #fff;
+  font-weight: bold;
+  font-family: 'Poppins', sans-serif;
+  cursor: pointer;
+}
+
+.info-floating-buttons {
+  display: flex;
+  justify-content: center;
+  gap: 2rem;
+  margin-top: 2rem;
+}
+
+.info-line {
+  font-size: 13px;
+  color: #555;
+  margin-top: 6px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  line-height: 1.4;
+  font-family: 'Montserrat', sans-serif;
+  margin-bottom: 6px;
+}
+
+
+.floating-btn {
+   background-color: #000;
+  color: white;
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  /* //border: 4px solid white; */
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  font-family: 'Poppins', sans-serif;
+  font-size: 0.7rem;
+  cursor: pointer;
+  box-shadow: 0 4px 10px rgba(0,0,0,0.15);
+  transition: transform 0.2s ease, background-color 0.3s ease;
+  left:300px;
+  justify-content: center;
+  margin-left: 21px;
+  margin-right: -8px;
+  margin-bottom: 3px;
+}
+
+.envmaya{
+  width: 228px;
+    Height: 144.17752075195312px;
+    Top: 216px;
+    Left: 82px;
+    z-index: 2;
+    margin-top: 243px;
+    margin-bottom: 27px;
+}
+
+.floating-btn i {
+  font-size: 1.2rem;
+  margin-bottom: 0.2rem;
+}
+
+.floating-btn:hover {
+  transform: scale(1.05);
+  background-color: #222;
+}
+
+.floating-btn span {
+  font-size: 0.65rem;
+  margin-top: 2px;
+}
+
+#info-buttons {
+  position: fixed;
+  bottom: 87px; /* adjust this to move up/down */
+  left: 69vw;
+  transform: translateX(-50%);
+  display: flex;
+  gap: 1rem;
+  z-index: 999;
+}
+
+.map-links a,
+.calendar-links a {
+  display: block;
+  margin-top: 0.5rem;
+  text-decoration: none;
+  color: #000;
+  font-weight: bold;
+  text-align: center;
+  
+
+}
+
+.guestbook-form {
+  background: #fff;
+  padding: 2rem;
+  border-radius: 12px;
+  margin: 2rem auto;
+  width: 90%;
+  box-shadow: 0 0 10px rgba(0,0,0,0.05);
+  font-family: 'Montserrat', sans-serif;
+}
+
+.form-group {
+  position: relative;
+  margin-bottom: 2rem;
+  font-family: Montserrat;
+  
+}
+
+.form-group textarea,
+.form-group input {
+  width: 100%;
+  padding: 1.2rem 1rem 0.4rem;
+  font-size: 1rem;
+  border: 2px solid #ccc;
+  border-radius: 8px;
+  background: transparent;
+  outline: none;
+  transition: border-color 0.3s ease;
+  appearance: none; /* remove default arrow for consistency */
+  -webkit-appearance: none;
+  -moz-appearance: none;
+
+}
+
+.form-group select {
+  background-image: url("data:image/svg+xml;utf8,<svg fill='%23333' height='24' viewBox='0 0 24 24' width='24' xmlns='http://www.w3.org/2000/svg'><path d='M7 10l5 5 5-5z'/></svg>");
+  background-repeat: no-repeat;
+  background-position: right 1rem center;
+  background-size: 1rem;
+}
+
+.form-group select.styled-select {
+  width: 100%;
+  padding: 1.2rem 1rem 0.4rem;
+  font-size: 1rem;
+  border: 2px solid #ccc;
+  border-radius: 8px;
+  background-color: transparent;
+  outline: none;
+  appearance: none;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  transition: border-color 0.3s ease;
+  color: #333;
+}
+
+.styled-select {
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+}
+
+/* Add shadow when the select is focused/open */
+.styled-select:focus {
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+}
+
+/* Optional: improve dropdown look on hover/focus */
+.styled-select option {
+  background-color: white;
+  color: #333;
+}
+
+/* Optional: Style the label similar to inputs */
+.form-group label {
+  font-size: 0.9rem;
+  color: #999;
+  display: block;
+  margin-top: 0.4rem;
+}
+
+
+.form-group label {
+  position: absolute;
+  top: 50%;
+  left: 1rem;
+  transform: translateY(-50%);
+  background: #fff;
+  padding: 0 4px;
+  color: #aaa;
+  font-size: 1rem;
+  pointer-events: none;
+  transition: all 0.3s ease;
+}
+
+.form-group.focused label {
+  top: 0;
+  left: 0.8rem;
+  transform: translateY(-50%) scale(0.8);
+  color: #5a2d2d;
+}
+
+
+.form-group input:focus {
+  border-color: #5a2d2d;
+}
+
+.btn-submit {
+  width: 100%;
+  padding: 0.8rem;
+  background-color: #7D5B59;
+  color: #fff;
+  border: none;
+  border-radius: 25px;
+  font-size: 1rem;
+  font-weight: bold;
+  cursor: pointer;
+  transition: background-color 0.3s ease;
+}
+
+.btn-submit:hover {
+  background-color: #431f1f;
+}
+
+.guestbook-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height:100%;
+  padding-top: 38vh;/* Push the modal downward */
+  display: flex;
+  justify-content: center;
+  align-items: flex-start; /* Align to top */
+  z-index: 10; /* Ensure it's above the RSVP button */
+  opacity: 0;
+  visibility: hidden;
+  
+  
+}
+
+.guestbook-overlay.show {
+  opacity: 1;
+  visibility: visible;
+}
+
+.guestbook-modal {
+  background: white;
+  padding: 3.86rem;
+  border-radius: 20px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.2);
+  width: 132vw;
+  max-width: 132vw;
+  max-height:400vh;
+  height:61vh;
+  text-align: center;
+  margin-top: 1.5vh;
+  
+}
+/* //this is the input area */
+
+.input-container {
+  position: relative;
+  margin-top: 1.5rem;
+}
+
+.input-container textarea,
+.input-container input {
+  width: 100%;
+  padding: 1rem;
+  border: 2px solid #835c59;
+  border-radius: 10px;
+  background-color: #fef9f8;
+  font-size: 1rem;
+  outline: none;
+}
+
+.input-container label {
+  position: absolute;
+  top: -0.7rem;
+  left: 1rem;
+  background-color: #fef9f8;
+  padding: 0 0.3rem;
+  font-size: 0.9rem;
+  color: #835c59;
+  font-family: 'Montserrat', sans-serif;
+}
+
+.input-with-icon {
+  position: relative;
+  display: inline-block;
+  width: 100%;
+  
+}
+
+.input-with-icon input {
+  width: 100%;
+  padding-right: 40px; /* space for clipboard button */
+  box-sizing: border-box;
+  
+}
+
+.copy-btn {
+  position: absolute;
+  top: 30px;
+  right: 10px;
+  transform: translateY(-50%);
+  background: #835c59;
+  border: none;
+  cursor: pointer;
+  font-size: 1rem;
+  margin-top:-8px;
+  
+  
+}
+
+.guestbook-buttons {
+  display: flex;
+  justify-content: space-evenly;
+  margin-top: 1.5rem;
+  -webkit-appearance: none;
+    appearance: none;
+    color: black;
+}
+
+.guestbook-buttons button {
+  padding: 0.8rem 1.5rem;
+  font-weight: bold;
+  border: 2px solid black;
+  border-radius: 30px;
+  background: transparent;
+  cursor: pointer;
+  -webkit-appearance: none;
+    appearance: none;
+    color: black;
+}
+
+.guestbook-next {
+  background: none;
+  border: none;
+  font-size: 2rem;
+  cursor: pointer;
+  color: #000;
+  margin-top: 1rem;
+  transition: transform 0.2s ease;
+}
+
+.guestbook-next:hover {
+  transform: scale(1.2);
+}
+
+body.lock-scroll {
+  overflow: hidden;
+  height: 100vh;
+}
+
+  
+    }
+	@keyframes fadeIn {
+  0% {
+    opacity: 0;
+    transform: translateY(30px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes ampFlight {
+  0% {
+    transform: translate(0, 0) ;
+    opacity: 0;
+  }
+  50% {
+    transform: translate(0, -100px) ;
+    opacity: 1;
+  }
+  100% {
+    transform: translate(0, -180px) ;
+    opacity: 1;
+  }
+}
+
+.amp-move.animate {
+  animation: ampFlight 2.2s ease-out forwards;
+}
+
+
+
+.open-button {
+  font-family: 'TeXGyreTermes', serif;
+  font-weight:400px;
+  font-style:italic;
+  font-size: 34px;
+  color: #2f2f2f;
+  width:184px;
+  height:40px;
+  top:145px;
+  left:-5px;
+  text-align: center;
+  display: block;
+  position: relative;
+  z-index:9999;
+  
+  
+}
+
+.Undangan {
+  font-family: 'TeXGyreTermes', serif;
+  font-weight:400px;
+  font-style:italic;
+  font-size: 20px;
+  color: #2f2f2f;
+  width:84px;
+  height:27px;
+  top:206px;
+  left:153pxpx;
+  text-align: center;
+  display: block;
+  position: relative;
+  z-index:9999;
+  
+  
+}.Wali {
+  font-family: 'TeXGyreTermes', serif;
+  font-weight:400px;
+  font-style:italic;
+  font-size: 25px;
+  color: #2f2f2f;
+  width:148px;
+  height:34px;
+  top:203px;
+  left:121pxpx;
+  text-align: center;
+  display: block;
+  position: relative;
+  z-index:9999;
+  
+  
+}
+.MayaxAsyraaf{
+  width: 211px;
+    height: auto;
+    margin-top: 110px;
+}
+
+.Maya {
+  font-family: Parisienne;
+  font-weight:400px;
+  font-style:Regular;
+  font-size: 60px;
+  color: #2f2f2f;
+  width:163px;
+  height:82.18px;
+  top:242px;
+  left:-45px;
+  text-align: center;
+  display: block;
+  position: relative;
+  z-index:9999;
+  
+  
+}
+.asyraff {
+  font-family: Alex Brush;
+  font-weight:400px;
+  font-style:Regular;
+  font-size: 60px;
+  color: #2f2f2f;
+  width:163px;
+  height:82.18px;
+  top:172px;
+  left:5px;
+  text-align: center;
+  display: block;
+  position: relative;
+  z-index:9999;
+  
+  
+}
+.ampersands {
+  font-family: Alex Brush;
+  font-weight:400px;
+  font-style:Regular;
+  font-size: 55px;
+  color: #2f2f2f;
+  width:163px;
+  height:82.18px;
+  top:182px;
+  left:70px;
+  text-align: center;
+  display: block;
+  position: relative;
+  z-index:9999;
+  
+  
+}
+
+.sigil {
+  display: block;
+  margin: 0 auto;
+  width: 100px; /* or your size */
+  width: 160px; 
+  height:160px; 
+  top:371px; 
+  left:118px; 
+  margin-top: 
+  -100px; 
+  cursor: pointer; 
+  z-index: 4;
+}
+
+.head-img{
+width: 572px; 
+margin-top:-463px; 
+left:-91px;
+}
+
+body-img{
+width: 100%; 
+max-width: 900px; 
+margin-top: -50px; 
+z-index: 2;
+}
+/* INITIAL STYLES (optional - if needed to reset) */
+.Undangan,
+.Wali,
+img[alt="Mayaxasyraff"],
+.head-img,
+.sigil,
+.body-img,
+.open-button {
+  transition: transform 1s ease-in-out;
+}
+
+/* ANIMATION CLASSES */
+.envelope-open .Undangan,
+.envelope-open .Wali,
+.envelope-open img[alt="Mayaxasyraff"],
+.envelope-open .head-img,
+.envelope-open .sigil {
+  transform: translateY(-600px);
+}
+
+.envelope-open .body-img,
+.envelope-open .open-button {
+  transform: translateY(600px);
+}
+.envelope-open {
+   animation: fadeOut 1s ease-in-out 1s forwards;
+  pointer-events: none;
+}
+
+.move-up,
+.move-down {
+  transition: transform 1s ease, opacity 1s ease;
+}
+
+/* Animate upward */
+.move-up {
+  transform: translateY(-60vh);
+  opacity: 0;
+}
+
+/* Animate downward */
+.move-down {
+  transform: translateY(60vh);
+  opacity: 0;
+}
+
+/* Fade out envelope overlay */
+.fade-out {
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.3s ease;
+}
+
+@keyframes fadeOut {
+  0% {
+    opacity: 0;
+  }
+  100% {
+    opacity: 0;
+    visibility: hidden;
+  }
+}
+
+.floral-border-overlay {
+  position: fixed;
+  top: 0;
+  left: -9vw;
+  width: 116vw;
+  height: 102vh;
+  background-image: url('Border Flower/7.png'); /* Transparent center PNG */
+  background-size: contain;
+  background-repeat: no-repeat;
+  background-position: center;
+  pointer-events: none;
+  z-index: 0;
+  transition: transform 1s ease-in-out, opacity 1.2s ease-in-out;
+  opacity: 1;
+  
+}
+
+.floral-border-overlay.fade-out {
+  opacity: 0;
+  transition: opacity 0.8s ease; /* only fades when entering guestbook */
+}
+
+/* Don't let it cover the footer */
+.footer-container {
+  z-index: 20;
+  position: sticky;
+}
+
+.paper-overlay {
+  position: fixed;
+  bottom: -100%; /* start off screen */
+  left: 50%;
+  transform: translateX(-50%) translateY(0);
+  transition: transform 1s ease-in-out, opacity 1.2s ease-in-out;
+  z-index: -2;
+  width: 90vw;
+  max-width: 1000px;
+  pointer-events: none;
+  opacity: 0;
+ 
+}
+
+.paper-overlay.active {
+  bottom: 0;
+  transform: translateX(-50%) translateY(0%);
+  opacity: 1;
+}
+
+.paper-overlay.exit-left {
+  transform: translateX(-200%) scale(1.2974, 1.3964);
+  opacity: 0;
+}
+
+.paper-overlay.scaled {
+  transform: translateX(-50%) translateY(0%) scale(1.2, 9.3964);
+}
+
+.paper-overlay.scaled img.paper-bg {
+  transform: scale(1.2974, 1.3964);
+  transition: transform 1.2s ease-in-out;
+}
+
+.footer-guestbook,
+.moneygift-toggle,
+.footer-info,
+.contact-toggle {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-decoration: none;
+}
+
+.footer-label {
+  font-size: 0.65rem;
+  color: white;
+  margin-top: 4px;
+}
+
+#music-btn {
+  position: fixed;
+  bottom: 54.5rem;
+  right: 1.5rem;
+  padding: 0.7rem 1.2rem;
+  background-color: #000;
+  color: #fff;
+  font-family: 'Poppins', sans-serif;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  z-index: 999;
+  box-shadow: 0 4px 10px rgba(0,0,0,0.2);
+}
+
+@font-face {
+  font-family: 'TeXGyreTermes';
+  src: url('fonts/texgyretermes-regular.otf') format('opentype');
+  font-weight: normal;
+  font-style: normal;
+}
+
+@font-face {
+  font-family: 'TeXGyreTermes';
+  src: url('fonts/texgyretermes-bold.otf') format('opentype');
+  font-weight: bold;
+  font-style: normal;
+}
+
+@media (max-height: 844px), (max-width: 375px) {
+  .countdown-wrapper {
+    display: flex !important;
+    flex-direction: row !important;
+    justify-content: center;
+    align-items: flex-start;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+    transform: scale(0.9);
+    margin-top: 1rem;
+  }
+
+  .countdown-segment {
+    flex: 1 1 auto;
+    max-width: 80px;
+  }
+
+  .footer-buttons {
+    padding-bottom: 6vh; /* Creates more space at bottom if buttons overflow */
+  }
+
+  
+
+  .guestbook-wrapper {
+    margin-bottom: 10vh; /* Lift content to avoid bottom cut-off */
+  }
+
+  .guestbook-modal{
+    background: white;
+    padding: 3.86rem;
+    border-radius: 20px;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.2);
+    width: 132vw;
+    max-width: 132vw;
+    max-height: 400vh;
+    height: 71vh;
+    text-align: center;
+    margin-top: -17.5vh;
+  }
+
+  .guestbook-pagination {
+    position: relative;
+    bottom: 0;
+    margin-top: 1rem;
+    display: flex;
+    justify-content: center;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+  }
+
+  .guestbook-wrapper input,
+  .guestbook-wrapper textarea {
+    margin-bottom: 10px;
+    font-size: 0.85rem;
+  }
+
+  .guestbook-message,
+  .guestbook-sender {
+    font-size: 0.9rem;
+  }
+
+  .bismillah{
+  text-align: center;
+    margin-top: -51px;
+    margin-left: 83px;
+    width: 140px;
+    margin-bottom: -7px;
+  }
+  .MayaxAsyraaf{
+  width: 200px;
+    height: 100px;
+    margin-top: 87px;
+    margin-bottom: 25px;
+}
+.highlight {
+        font-weight: 400;
+        font-size: 3vw;
+        color: #A9925C;
+        margin-bottom: -37px;
+        margin-top: -245px;
+        font-family: 'TeXGyreTermes', serif;
+        font-style: italic;
+    }
+
+    .day {
+        font-size: 6vw;
+        color: #A9925C;
+        font-family: Dancing Script;
+        z-index: 0;
+        margin-top: -32px;
+    }
+
+    .date {
+        font-size: 4vw;
+        font-family: Dancing Script;
+        margin-bottom: 15px;
+        color: #A9925C;
+        z-index: 0;
+        margin-top: 6px;
+    }
+
+  .floating-star.visible {
+    top: -28%;
+    left: 14%;
+    transform: translate(-50%, -50%) scale(1.2);
+    opacity: 1;
+}
+.head-img{
+  width: 572px;
+    margin-top: -463px;
+    left: -91px;
+}
+.sigil{
+  display: block;
+    margin: 0 auto;
+    width: 100px;
+    width: 160px;
+    height: 160px;
+    top: 371px;
+    left: 118px;
+    margin-top: -100px;
+    cursor: pointer;
+    z-index: 4;
+}
+.Undangan {
+    font-family: 'TeXGyreTermes', serif;
+    font-weight: 400px;
+    font-style: italic;
+    font-size: 20px;
+    color: #2f2f2f;
+    width: 84px;
+    height: 27px;
+    top: 152px;
+    left: 153pxpx;
+    text-align: center;
+    display: block;
+    position: relative;
+    z-index: 9999;
+}
+
+.Wali {
+    font-family: 'TeXGyreTermes', serif;
+    font-weight: 400px;
+    font-style: italic;
+    font-size: 25px;
+    color: #2f2f2f;
+    width: 148px;
+    height: 34px;
+    top: 147px;
+    left: 121pxpx;
+    text-align: center;
+    display: block;
+    position: relative;
+    z-index: 9999;
+}
+
+.envmaya{
+  width: 228px;
+    Height: 144.17752075195312px;
+    Top: 216px;
+    Left: 82px;
+    z-index: 2;
+    margin-top: 173px;
+    margin-bottom: 27px;
+}
+.sigil {
+        display: block;
+        margin: 0 auto;
+        width: 100px;
+        width: 120px;
+        height: 120px;
+        top: 371px;
+        left: 118px;
+        margin-top: -91px;
+        cursor: pointer;
+        z-index: 4;
+    }
+
+    .open-button {
+    font-family: 'TeXGyreTermes', serif;
+    font-weight: 400px;
+    font-style: italic;
+    font-size: 34px;
+    color: #2f2f2f;
+    width: 184px;
+    height: 40px;
+    top: 113px;
+    left: -5px;
+    text-align: center;
+    display: block;
+    position: relative;
+    z-index: 9999;
+}
+
+}
+
+
+
+
+
+/* === GUESTBOOK BUTTON FIX (Make sure it's always visible) === */
+
+
+  </style>
+</head>
+<body>
+    <div class="floral-border-overlay"></div>
+
+   
+    
+
+
+    <div id="envelope-cover" style="position: fixed; margin:-88px; background-color: #f5e8dd; z-index: 9999; display: flex; align-items: center; justify-content: center; flex-direction: column; overflow: hidden;">
+        <span class="Undangan">Undangan</span>
+        <span class="Wali">Walimatulurus</span>
+        <img src="Text-Logo\Maya&Asyraaf_Blk.png" alt="Mayaxasyraff" class="envmaya">
+        <span class="open-button">Press to open</span>
+        <img src="Envelope Intro (2)\Envelope Intro\head.png" alt="Envelope Head" class="head-img">
+        <img src="Envelope Intro (2)\Envelope Intro\seal.png" alt="Seal" class="sigil" onclick="openInvitation(),toggleMusic()" >
+        <img src="Envelope Intro (2)\Envelope Intro\body.png" alt="Envelope Body" class="body-img">
+
+
+    </div>
+    <audio id="bg-music" preload="auto" loop>
+      <source src="Music/Wedding Day - Inspirational and Romantic Background Music For YouTube Videos _Download Mp3_ - AShamalu.mp3" type="audio/mpeg">
+    </audio>
+    
+
+    <div class="invitation-wrapper fade-in-section">
+        <div class="bismillah">
+            <img src="Text-Logo\bismillah.png" alt="Bismillah" style="max-width: 100%; height: auto;">
+        </div>
+        <div style="text-align: center; margin: 20px 0;">
+            <img src="Text-Logo\Maya&Asyraaf_Gold.png" alt="Maya & Asyraaf" class="MayaxAsyraaf">
+        </div>
+
+        <div class="highlight">	What began as a simple connection <br>blossomed into a love full of laughter, faith and dreams</div>
+        <div class="highlights">	you are invinted to the day love finds its forever for,</div>
+
+
+    </div>
+
+    <div class="day">26 October 2025 | Sunday</div>
+    <div class="date">SkyGlass Designer Event Hall</div>
+
+
+    <div style="text-align: center; margin-bottom: 300px; z-index:0; margin-top:-5px;">
+        <img src="Text-Logo\Logo_MayaAsyraaf.png" alt="MA Logo" style="width: 23px; height: auto;">
+    </div>
+
+    <div id="parents" class="parents-wrapper fade-in-section">
+        <div class="parents">
+            <p class="startingword">Assalamualaikum WBT & Salam Sejahtera</p>
+            <p class="parent-top">
+                SHEIKH SHAMSHRUL <br> HEDRA BIN SHEIKH MUSA
+            </p>
+
+            <div class="amp-container">
+                <span>&</span>
+            </div>
+
+            <p class="parent-bottom">
+                NORMARLINA BINTI HJ MOHD DAUD
+            </p>
+        </div>
+    </div>
+
+    <p class="invitation">
+        
+        “Dengan penuh hormat dan takzim,<br> sukacita menjunjung Pengiran berangkat <br> menjemput Pehin / Dato / Datin <br>/ Awang / Dayang / Tuan / Puan / Cik<br>untuk bersama - sama memeriahkan majlis<br> walimatulurus puteri kami dan pasangannya”
+    </p>
+
+    <div class="bridegroom-wrapper fade-in-section">
+        <p class="bride">SITI MAYA NADHIRAH BINTI<br>SHEIKH SHAMSHRUL HEDRA</p>
+        <div style="font-size:35px;font-family:'TeXGyreTermes', serif;">&</div>
+        <p class="groom">MUHAMMAD NUR ASYRAAF <br> BIN AZMAN</p>
+    </div>
+
+    <div class="event-details-wrapper fade-in-section">
+
+        <div class="event-block">
+            <h3 class="event-heading">Date</h3>
+            <p class="event-text">26 October 2025</p>
+        </div>
+
+        <div class="event-block">
+            <h3 class="event-heading">Time</h3>
+            <p class="event-text">9.00 AM – 2.00 PM</p>
+        </div>
+
+        <div class="event-block">
+            <h3 class="event-heading">Venue</h3>
+            <p class="event-text">
+                SkyGlass Designer Event Hall <br>
+                T5-22-01, Tower 5, Sky Park @ Cyberjaya,<br>
+                Jalan Teknokrat 1, Cyber 3,<br>
+                63000 Cyberjaya, Selangor
+            </p>
+        </div>
+
+        <div class="event-block">
+          <h3 class="event-heading">Dress Code</h3>
+          <p class="event-text">
+            Pakaian Tradisional – <br>Baju Kurung, Baju Melayu Lengkap,<br> Batik atau lain-lain pakaian <br>tradisional yang sopan
+          </p>
+      </div>
+
+    </div>
+
+    <div class="itinerary-wrapper fade-in-section">
+        <h3 class="itinerary-heading">Itinerary</h3>
+
+        <div class="itinerary-item"><span class="time">9.00 AM</span> : Ketibaan para jemputan</div>
+        <div class="itinerary-item"><span class="time">9.30 AM</span> : Majlis Akad Nikah </div>
+        <div class="itinerary-item"><span class="time">10.00 AM</span> : Bacaan doa (diikuti dengan jamuan ringan)</div>
+        <div class="itinerary-item"><span class="time">11.30 AM</span> : Majlis bersanding</div>
+        <div class="itinerary-item"><span class="time">12.00 PM</span> : Jamuan makan bermula</div>
+        <div class="itinerary-item"><span class="time">2.00 PM</span> : Majlis bersurai</div>
+
+        <div class="itinerary-item"><span class="time"></span><b>Jemput hadir mengikut masa yang ditetapkan</b> </div>
+    </div>
+
+    <div class="countdown-wrapper fade-in-section">
+        <h3 class="countdown-title">Counting Days</h3>
+
+        <div class="countdown-container">
+            <div class="countdown-box">
+                <span style="font-family:'TeXGyreTermes', serif; font-style:italic;">Day</span>
+                <div id="days">00</div>
+            </div>
+            <div class="countdown-box">
+                <span style="font-family:'TeXGyreTermes', serif; font-style:italic;">Hour</span>
+                <div id="hours">00</div>
+            </div>
+            <div class="countdown-box">
+                <span style="font-family:'TeXGyreTermes', serif; font-style:italic;">Minute</span>
+                <div id="minutes">00</div>
+            </div>
+            <div class="countdown-box">
+                <span style="font-family:'TeXGyreTermes', serif; font-style:italic;">Second</span>
+                <div id="seconds">00</div>
+            </div>
+        </div>
+    </div>
+
+
+    <div class="gallery-wrapper fade-in-section">
+        <h3 class="gallery-title">Gallery</h3>
+
+        <div class="gallery-image">
+            <img src="gallery-photo.jpg" alt="Wedding Photo 1" class="gallery-slide active">
+            <img src="gallery-photo2.jpg" alt="Wedding Photo 2" class="gallery-slide">
+        </div>
+    </div>
+
+
+      <div class="guestbook-wrapper fade-in-section">
+        <img class="paper-overlay" src="Border Flower/PAPER.png" alt="Paper">
+        <h3 class="guestbook-title">Guestbook</h3>
+        <center><p class="guestbook-message" id="guestbook-message"></p></center>
+        <p class="guestbook-sender"  id="guestbook-sender"></p>
+        <div class="flipbook" id="flipbook"></div>
+        <div class="guestbook-pagination">
+          <button id="prevBtn" class="page-number">&#8592;</button>
+          <button id="nextBtn" class="page-number">&#8594;</button>
+        </div>
+      </div>
+      
+
+    <div class="prayer-wrapper fade-in-section">
+        <h3 class="prayer-title">Prayer</h3>
+
+        <p class="prayer-text">
+            Semoga Allah melimpahkan <br>
+            keberkahan kepadamu dan <br>
+            keberkahan atas pernikahanmu,<br>
+            serta mengumpulkan kalian <br>
+            berdua dalam kebaikan
+        </p>
+
+        <p class="wedding-tag">#MayaXAsyraaf</p>
+        <p class="footer-credit">Made for your special day by</p>
+        <a href="https://vi-up.com/"><img src="Logo\Vi-Up Submark.png" class="footer-brand" style="width:31px; height:28px; margin-top:5px;"></img></a>
+    </div>
+
+    <div id="contact-card" style="display: none;" class="contact-card contact-popup">
+        <h3 class="center">Contact</h3>
+        <div class="contact-person">
+            <span style="font-family:Montserrat;">Mr Sheikh Hedra</span>
+            <div class="icons">
+                <a href="tel:+012-3046346"><i class="fas fa-phone"></i></a>
+                <a href="https://wa.me/60123046346" target="_blank"><i class="fab fa-whatsapp"></i></a>
+            </div>
+        </div>
+        <div class="contact-person">
+            <span style="font-family:Montserrat;">Ms Khalila Iman</span>
+            <div class="icons">
+                <a href="tel:+60 16714 4810"><i class="fas fa-phone"></i></a>
+                <a href="https://wa.me/60167144810" target="_blank"><i class="fab fa-whatsapp"></i></a>
+            </div>
+        </div>
+    </div>
+
+    <div id="moneygift-card" style="display: none;" class="moneygift-card">
+        <h3>Money Gift</h3>
+
+        <div class="bank-info">
+            <input type="text"style="text-align:center;" value="Maybank Berhad" readonly />
+        </div>
+
+        <div class="account-wrapper">
+            <div class="input-with-icon">
+                <input type="text" style="text-align:center;" id="account-number" value="154080219940" readonly />
+                <button class="copy-btn" onclick="copyAccount()"><i style="color:#7D5B59;" class="fa fa-clone" aria-hidden="true"></i></button>
+            </div>
+        </div>
+
+
+        <div class="qr-wrapper">
+            <img src="MayaQRimage.png" alt="QR Code" />
+        </div>
+    </div>
+
+    <div id="rsvp-card" class="contact-card rsvp-popup" style="display: none;">
+        <h2 style="text-align:center; font-family:Montserrat; font-size:20px;padding-bottom:20px;">RSVP</h2>
+        <p style="font-family:Montserrat; text-align:center; font-weight:100; font-style:italic;padding-bottom:15px;">Will you attend the event?</p>
+        <div class="rsvp-options" id="rsvpChoiceButtonsz">
+       
+            <button style="font-family:Montserrat; text-align:center; font-weight:700; font-size:16px;" type="button" class="accept" onclick="selectRSVP(true)">Accept</button>
+            <button style="font-family:Montserrat; text-align:center; font-weight:700; font-size:16px;" type="button" class="decline" onclick="selectRSVP(false)">Decline</button>
+        </div>
+
+        <form id="rsvpForm" class="rsvp-form" style="display: none; margin-top: 1rem;" onsubmit="handleRSVPSubmit(event)">
+
+         
+            <input type="hidden" id="rsvp-status" name="status" />
+
+            <div class="form-group">
+                <label for="rsvp-name" style=" padding-bottom: 8px;">Name</label>
+                <input type="text" id="rsvp-name" name="name" required>
+            </div>
+            <div class="form-group">
+                <label for="rsvp-phone" style=" padding-bottom: 8px;">Phone No.</label>
+                <input type="tel" id="rsvp-phone" name="phone" >
+            </div>
+            <div class="form-group" id="pax-group">
+              <select id="pax" name="pax" required class="styled-select">
+                <option value="">-- Select --</option>
+                <option value="1">1</option>
+                <option value="2">2</option>
+                <option value="3">3</option>
+              </select>
+              <label for="pax" id="pax-label" style=" padding-bottom: 8px;">Number of Pax</label>
+
+              
+            </div>
+            
+            <p class="info-line" onclick="handleInfoClick()">
+              <span class="material-symbols-outlined">
+                info
+                </span>
+              If more than 3 pax, please contact the family members.
+            </p>
+
+            <div class="rsvp-submit-buttons" style="display: none;" id="rsvpSubmitButtons">
+                <button type="submit">Submit</button>
+                <button type="button" onclick="resetRSVP()">Cancel</button>
+            </div>
+        </form>
+    </div>
+
+
+    <!-- Info Card -->
+    <div id="info-card" style="display: none;" class="info-popup">
+
+        <div id="info-buttons">
+            <button class="floating-btn" id="show-calendar">
+                <i class="fa-regular fa-calendar-days"></i>
+                <span>Calendar</span>
+            </button>
+            <button class="floating-btn" id="show-location">
+                <i class="fa-solid fa-location-dot"></i>
+                <span>Location</span>
+            </button>
+        </div>
+
+        <!-- Calendar Section -->
+        <div id="calendar-section" class="info-section" style="display: none;">
+          <h2 style="text-align:center; font-family:Montserrat; font-size:20px;padding-bottom:20px;">Calendar</h2>
+            <p style="text-align:center; font-family:Montserrat;font-size:16px;margin-bottom: 10px;width:100%;font-weight:100;font-style:normal;padding-bottom: 5px;"><strong>Sunday, 26 October 2025</strong></p>
+            <!-- calendar image or embed -->
+            <iframe src="https://calendar.google.com/calendar/embed?src=ddefc266bd7c7842321350b3a6d56e76494d5e4cc97846120d26541d4c141c20%40group.calendar.google.com&ctz=Asia%2FKuala_Lumpur" style="border: 0" width="350" height="350" frameborder="0" scrolling="no"></iframe>
+            <div class="calendar-links" style="gap:5px; padding-top: 20px; padding-bottom: 15px;">
+                <a href="http://caldav.icloud.com/published/2/MjAwODM4NTY4MzcyMDA4MwQ7Ek_ucwBqIJPQW8lCNMtqSWyoI9SKSkiO-ELPUnRgjrpcV80pEvO2tA1e1ZXSF8leImPRts9Uyy43rqUtN24" class="apple"><img src="AppleCal_btn.png" style="width:50%; height:80%;"></a>
+                <a target="_blank" href="https://calendar.google.com/calendar/event?action=TEMPLATE&amp;tmeid=NWlvZGY4YWVsczVpbDQyOXB2bDAxMTZwN2YgZGRlZmMyNjZiZDdjNzg0MjMyMTM1MGIzYTZkNTZlNzY0OTRkNWU0Y2M5Nzg0NjEyMGQyNjU0MWQ0YzE0MWMyMEBn&amp;tmsrc=ddefc266bd7c7842321350b3a6d56e76494d5e4cc97846120d26541d4c141c20%40group.calendar.google.com">
+                  <img src="GoogleCal_btn.png" style="width:50%; height:80%;">
+                </a>
+            </div>
+        </div>
+
+        <!-- Location Section -->
+        <div id="location-section" class="info-section" style="display: none;">
+          <h2 style="text-align:center; font-family:Montserrat; font-size:20px;padding-bottom:20px;">Location</h2>
+            <p style="text-align:center; font-family:Montserrat;font-size:16px;margin-bottom: 10px;width:100%;font-weight:100;font-style:normal;padding-bottom: 5px;">
+                SkyGlass Designer Event Hall<br>
+                T5-22-01, Tower 5, Sky Park @ Cyberjaya,<br>
+                Jalan Teknokrat 1, Cyber 3, 63000 Cyberjaya, Selangor
+            </p>
+            <iframe class="location-map"
+                    src="https://www.google.com/maps/embed?pb=!1m18!1m12!1m3!1d1994.1252744238065!2d101.6658229773928!3d2.9250422973187565!2m3!1f0!2f0!3f0!3m2!1i1024!2i768!4f13.1!3m3!1m2!1s0x31cdb6e88e7fd9e1%3A0xd3e9fc5f6fdf5cb4!2sSkyGlass%20Designer%20Event%20Hall!5e0!3m2!1sen!2smy!4v1720962000000!5m2!1sen!2smy"
+                    width="100%"
+                    height="200"
+                    style="border:0;"
+                    allowfullscreen=""
+                    loading="lazy"
+                    referrerpolicy="no-referrer-when-downgrade">
+            </iframe>
+            <div class="map-container" style="display:flex; justify-content:center; align-items: center; flex-wrap: nowrap; text-align: center;margin-right: 15%;margin-bottom: 5%;padding-top: 5%;">
+                <a href="https://maps.app.goo.gl/5KFuWaXCJCTRzxq7A" target="_blank"><img src="googlemap_btn.png" style="width:38%; height:80%;"></a>
+                <a href="https://waze.com/ul?ll=2.925042,101.666122&navigate=yes" target="_blank"><img src="waze_btn.png" style="width:38%; height:80%;"></a>
+
+            </div>
+        </div>
+    </div>
+
+    <div id="guestbookOverlay" class="guestbook-overlay">
+        <div class="guestbook-modal" id="guestbookModal">
+            <h3 style="padding-bottom:30px; font-family: 'Montserrat', sans-serif;">Share Your Wishes</h3>
+            <div class="form-group">
+                <textarea id="wish" style="padding-bottom:85px;" required></textarea>
+                <label for="wish" style="font-family: 'Montserrat', sans-serif;color: #7D5B59;">Wish</label>
+            </div>
+            <div class="form-group">
+                <input type="text" id="name" required />
+                <label for="name" style="font-family: 'Montserrat', sans-serif;color: #7D5B59;">Name</label>
+            </div>
+            <div class="guestbook-buttons">
+                <button type="submit" id="submitGuestbook" style="font-family: 'Montserrat', sans-serif;">Send</button>
+                <button type="button" id="closeGuestbook" style="font-family: 'Montserrat', sans-serif;">Close</button>
+            </div>
+        </div>
+    </div>
+    <!-- Curved Footer with Center RSVP Button -->
+    <!-- Stylish Footer -->
+    <div class="footer-container">
+        <div class="footer-rsvp-wrapper">
+            <div class="footer-rsvp">RSVP</div>
+        </div>
+
+        <div class="footer-rsvp-text">RSVP</div>
+
+        <div class="footer-buttons">
+            <div class="footer-side left">
+                <a href="javascript:void(0);"  class="footer-guestbook">
+                    <img id="guestbook-icon" onclick="openGuestbook()" src="Guestbook.png">
+                    <span class="footer-label">Guestbook</span>
+                </a>
+
+                <a href="#" class="moneygift-toggle">
+                    <img id="moneygift-icon" src="MONEYGIFT.png">
+                    <span class="footer-label">Gift</span>
+                </a>
+            </div>
+
+            <div class="footer-side right">
+                <a href="javascript:void(0);" class="footer-info">
+                    <i class="fa-regular fa-star floating-star"></i>
+                    <span class="footer-label" style="margin-bottom:-29px; margin-left:-2px;">Info</span>
+                </a>
+
+                <button class="contact-toggle" style="background: none; border: none; color: white;">
+                    <img id="contact-icon" src="Contact.png">
+                    <span class="footer-label" style="font-family:Montserrat;">Contact</span>
+                </button>
+            </div>
+
+        </div>
+    </div>
+    </div>
+
+
+    <script>
+
+//Function for get Guestbook List
+    document.addEventListener('DOMContentLoaded', function () {
+      let guestbookEntries = [];
+      let currentIndex = 0;
+
+      fetch('./get_guestbook.php', {
+          headers: {
+            'X-Custom-Guestbook': 'ViteUpSecret123'
+          }
+          })
+            .then(response => {
+              if (!response.ok) {
+                throw new Error('Access denied or guestbook unavailable.');
+              }
+              return response.json();
+            })
+            .then(data => {
+              if (data.error) {
+                console.warn('Guestbook error:', data.error);
+                return;
+              }
+
+              if (Array.isArray(data) && data.length > 0) {
+                guestbookEntries = data;
+                updateGuestbookView(0);
+              } else {
+                document.getElementById('guestbook-message').innerText = "No guestbook entries yet.";
+                document.getElementById('guestbook-sender').innerText = "";
+              }
+            })
+            .catch(error => {
+              console.error('Error fetching guestbook entries:', error);
+            });
+
+      function updateGuestbookView(index) {
+        const entry = guestbookEntries[index];
+        if (entry) {
+          document.getElementById('guestbook-message').innerHTML = entry.message.replace(/\n/g, '<br>');
+          document.getElementById('guestbook-sender').textContent = entry.sender;
+        }
+      }
+
+      document.getElementById('prevBtn').addEventListener('click', () => {
+        if (currentIndex > 0) {
+          currentIndex--;
+          updateGuestbookView(currentIndex);
+        }
+      });
+
+      document.getElementById('nextBtn').addEventListener('click', () => {
+        if (currentIndex < guestbookEntries.length - 1) {
+          currentIndex++;
+          updateGuestbookView(currentIndex);
+        }
+      });
+    });
+
+
+        // GLOBAL VARIABLE: Track whether the user accepts or declines
+        let isRSVPAccepted = true;
+
+        // Handle Accept / Decline selection
+        function selectRSVP(isAttending) {
+    document.getElementById('rsvpForm').style.display = 'block';
+    document.getElementById('rsvpSubmitButtons').style.display = 'flex';
+    document.getElementById('rsvpChoiceButtonsz').style.display = 'none';
+
+    const statusField = document.getElementById('rsvp-status');
+    const paxInput = document.getElementById('pax');
+    const paxGroup = document.getElementById('pax-group');
+    const phoneInput = document.getElementById('rsvp-phone');
+    const paxLabel = document.getElementById('pax-label');
+
+    // Set status value
+    statusField.value = isAttending ? 'Attending' : 'Not Attending';
+
+    // Toggle pax field
+    if (isAttending) {
+        paxGroup.style.display = 'block';
+        paxInput.setAttribute('required', 'required');
+        phoneInput.setAttribute('required', 'required');
+        document.getElementById('rsvpChoiceButtonsz').style.display = 'none';
+    } else {
+        paxGroup.style.display = 'none';
+        paxInput.removeAttribute('required');
+        paxInput.value = '';
+        phoneInput.removeAttribute('required');
+        document.getElementById('rsvpChoiceButtonsz').style.display = 'none';
+        paxLabel.removeAttribute('required');
+    }
+
+    // Hide Accept/Decline buttons
+    document.getElementById('rsvpChoiceButtonsz').style.display = 'none';
+}
+
+function handleRSVPSubmit(event) {
+    event.preventDefault();
+
+    const form = document.getElementById('rsvpForm');
+    const nameField = document.getElementById('rsvp-name');
+    const phoneField = document.getElementById('rsvp-phone');
+    const paxField = document.getElementById('pax');
+    const status = document.getElementById('rsvp-status')?.value;
+
+    const name = nameField?.value.trim();
+    const phone = phoneField?.value.trim();
+    const pax = paxField?.value.trim();
+
+    // Validate based on RSVP choice
+    if (!name) {
+        alert("Please fill in your name.");
+        nameField.focus();
+        return;
+    }
+
+    if (status === "Attending") {
+        if (!phone) {
+            alert("Please fill in your phone number.");
+            phoneField.focus();
+            return;
+        }
+
+        if (!pax) {
+            alert("Please fill in the number of pax.");
+            paxField.focus();
+            return;
+        }
+    }
+
+    // Ready to send the form
+    const formData = new FormData(form);
+
+    fetch("./submit_rsvp.php", {
+        method: "POST",
+        body: formData
+    })
+        .then(async res => {
+    // If PHP still returned a 500 or blank, catch it here
+            if (!res.ok) {
+              const text = await res.text();
+              console.error("Server error", res.status, text);
+              throw new Error("Server returned " + res.status);
+            }
+            return res.json();  // safe now: body is JSON
+          })
+        .then(data => {
+            if (data.success) {
+                alert(data.message || "RSVP submitted successfully!");
+
+                // Reset form and UI
+                form.reset();
+                form.style.display = 'none';
+                document.getElementById('rsvpSubmitButtons').style.display = 'none';
+                document.getElementById('rsvpChoiceButtonsz').style.display = 'flex';
+                document.getElementById('rsvp-card').style.display = 'none';
+            } else {
+                alert(data.message);
+            }
+        })
+        .catch(err => {
+          console.error("Submission failed:", err);
+          alert("Submission failed. See console for details.");
+        });
+
+}
+
+        function resetRSVP() {
+            const form = document.getElementById('rsvpForm');
+            form.reset();
+            form.style.display = 'none';
+            document.getElementById('rsvpSubmitButtons').style.display = 'none';
+            document.getElementById('rsvpChoiceButtonsz').style.display = 'flex';
+        }
+
+        function resetInfoSection() {
+            const infoCard = document.getElementById('info-card');
+            const infoButtons = document.getElementById('info-buttons');
+
+            if (infoCard) {
+                infoCard.classList.remove('active-background', 'active-backgrounds');
+                infoCard.style.display = 'none';
+            }
+
+            if (infoButtons) {
+                infoButtons.style.display = 'flex';
+            }
+        }
+
+        //To submit Guestbook
+
+        document.getElementById("submitGuestbook").addEventListener("click", function (e) {
+            e.preventDefault();
+
+            const name = document.getElementById("name").value.trim();
+            const wish = document.getElementById("wish").value.trim();
+            const form = document.getElementById('rsvpForm');
+
+            if (!name || !wish) {
+                alert("Please fill in both fields.");
+                return;
+            }
+
+            const formData = new FormData();
+            formData.append("name", name);
+            formData.append("wish", wish);
+
+            fetch("./submit_comment.php", {
+                method: "POST",
+                body: formData
+            })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                      alert(data.message || "Wish submitted successfully!");
+                          document.getElementById("name").value = "";
+                          document.getElementById("wish").value = "";
+                          guestbookOverlay.classList.remove("show"); // ✅ correct
+                          document.getElementById("guestbook-icon").src = "Guestbook.png"; 
+                    } else {
+                        alert(data.message || "Something went wrong. Please try again.");
+                    }
+                })
+                .catch(error => {
+                    console.error("Fetch error:", error);
+                    alert("Something went wrong. Please try again.");
+                });
+        });
+
+        document.getElementById("closeGuestbook").addEventListener("click", function () {
+           
+        });
+        function openGuestbook() {
+  
+  const overlay = document.getElementById("guestbookOverlay");
+
+  
+  overlay.classList.remove("hidden");
+}
+
+// end of guestbook function form
+        // Handle Accept / Decline selection
+       
+        function resetInfoSection() {
+            const infoCard = document.getElementById('info-card');
+            const infoButtons = document.getElementById('info-buttons');
+
+            if (infoCard) {
+                infoCard.classList.remove('active-background', 'active-backgrounds');
+                infoCard.style.display = 'none';
+            }
+
+            if (infoButtons) {
+                infoButtons.style.display = 'flex';
+            }
+        }
+
+        function resetInfoCircle() {
+            const rsvpWrapper = document.querySelector('.footer-rsvp-wrapper');
+            const rsvpText = document.querySelector('.footer-rsvp-text');
+            const footer = document.querySelector('.footer-container');
+            const floatingStar = document.querySelector('.floating-star');
+
+            // Only reset if the star is visible
+            if (floatingStar.classList.contains('visible')) {
+                rsvpText.classList.remove('drop');
+                rsvpWrapper.classList.remove('move-right');
+                footer.classList.remove('bump-shift');
+
+                // Clone and animate star flying back
+                const reverseStar = floatingStar.cloneNode(true);
+                reverseStar.classList.remove('visible');
+                reverseStar.classList.add('star-fly-out');
+                document.body.appendChild(reverseStar);
+
+                const starRect = document.querySelector('.footer-info i').getBoundingClientRect();
+                reverseStar.style.left = '50%';
+                reverseStar.style.top = 'calc(100% - 3.5rem)';
+                reverseStar.style.transform = 'translate(-50%, -50%) scale(2)';
+                reverseStar.style.opacity = '1';
+
+                void reverseStar.offsetWidth; // Force reflow to trigger transition
+
+                setTimeout(() => {
+                    reverseStar.style.left = `${starRect.left + starRect.width / 2}px`;
+                    reverseStar.style.top = `${starRect.top + starRect.height / 2}px`;
+                    reverseStar.style.transform = 'translate(-50%, -50%) scale(1)';
+                    reverseStar.style.opacity = '0';
+                }, 20);
+
+                floatingStar.classList.remove('visible');
+                setTimeout(() => {
+                    reverseStar.remove();
+                }, 400); // Slightly longer for smoother exit
+            }
+        }
+
+        function resetAllFooterIcons() {
+            // Reset Guestbook Image
+            const guestbookIcon = document.getElementById('guestbook-icon');
+            if (guestbookIcon) guestbookIcon.src = 'Guestbook.png';
+
+            // Reset Money Gift Image
+            const moneyIcon = document.getElementById('moneygift-icon');
+            if (moneyIcon) moneyIcon.src = 'MONEYGIFT.png';
+
+            // Reset Contact Image
+            const contactIcon = document.getElementById('contact-icon');
+            if (contactIcon) contactIcon.src = 'Contact.png';
+
+            // ✅ Reset Star Icon (INFO button)
+            const starIcon = document.querySelector('.footer-info i');
+            if (starIcon) {
+                starIcon.classList.remove('fa-solid');
+                starIcon.classList.add('fa-regular');
+            }
+        }
+        function resetAllFooterIconss() {
+            // Reset Guestbook Image
+            const guestbookIcon = document.getElementById('guestbook-icon');
+            if (guestbookIcon) guestbookIcon.src = 'Guestbook.png';
+
+            // Reset Money Gift Image
+            const moneyIcon = document.getElementById('moneygift-icon');
+            if (moneyIcon) moneyIcon.src = 'MONEYGIFT.png';
+
+            // Reset Contact Image
+            const contactIcon = document.getElementById('contact-icon');
+            if (contactIcon) contactIcon.src = 'Contact.png';
+
+            // ✅ Reset Star Icon (INFO button)
+
+        }
+
+        function animateCircleToStar() {
+  const rsvpWrapper = document.querySelector('.footer-rsvp-wrapper');
+  const rsvpText = document.querySelector('.footer-rsvp-text');
+  const footer = document.querySelector('.footer-container');
+  const floatingStar = document.querySelector('.floating-star');
+
+  // 1. Drop RSVP text
+  rsvpText.classList.add('drop');
+
+  // 2. Move circle to right
+  rsvpWrapper.classList.add('move-right');
+
+  // 3. Shift the white background bump
+  footer.classList.add('bump-shift');
+
+  // 4. Scale star up
+  floatingStar.classList.add('visible'); // this triggers the scale-up via CSS
+
+  // 5. Scale RSVP circle down
+  rsvpWrapper.style.transition = "transform 600ms ease-in-out";
+  rsvpWrapper.style.transform = "translateX(-50%) scale(1)";
+}
+
+        // MONEY ICON toggle
+        document.querySelector('.moneygift-toggle')?.addEventListener('click', () => {
+            resetAllFooterIcons();
+            document.querySelector('.moneygift-toggle img').src = 'MONEYGIFT ACTIVE.png';
+            resetRSVP?.();
+            resetInfoSection?.();
+        });
+
+        // GUESTBOOK ICON toggle
+        document.querySelector('.footer-guestbook')?.addEventListener('click', () => {
+            resetAllFooterIcons();
+            const icon = document.querySelector('.footer-guestbook i');
+            icon.classList.remove('fa-solid');
+            icon.classList.add('fa-regular');
+            resetRSVP?.();
+            resetInfoSection?.();
+            document.getElementById('guestbookOverlay')?.classList.add('show')
+        });
+
+        // CONTACT ICON toggle
+        document.querySelector('.contact-toggle')?.addEventListener('click', () => {
+            resetAllFooterIcons();
+            const icon = document.querySelector('.contact-toggle i');
+            icon.classList.remove('fa-solid');
+            icon.classList.add('fa-regular');
+            resetRSVP?.();
+            resetInfoSection?.();
+        });
+
+        document.addEventListener('DOMContentLoaded', () => {
+            // CONTACT TOGGLE
+            const contactToggle = document.querySelector('.contact-toggle');
+            const contactCard = document.getElementById('contact-card');
+
+
+            if (contactToggle && contactCard) {
+                contactToggle.addEventListener('click', (e) => {
+                    e.preventDefault();
+                    const isActive = contactCard.style.display === "block";
+
+                    resetAllFooterIcons();
+
+                    if (isActive) {
+                        contactCard.style.display = "none";
+                        document.getElementById('contact-icon').src = 'Contact.png';
+                    } else {
+                        contactCard.style.display = "block";
+                        document.getElementById('contact-icon').src = 'Contact Active.png';
+                    }
+
+                    guestbookOverlay.classList.remove('show');
+                    resetRSVP();
+                    rsvpCard.style.display = 'none';
+                    resetInfoSection();
+                    resetInfoCircle();
+                });
+
+                document.addEventListener('click', (e) => {
+                    if (!contactCard.contains(e.target) && !contactToggle.contains(e.target)) {
+                        contactCard.style.display = 'none';
+
+                    }
+                });
+
+            }
+
+            // MONEY GIFT TOGGLE
+            const moneyGiftToggle = document.querySelector('.moneygift-toggle');
+            const moneyGiftCard = document.getElementById('moneygift-card');
+
+            if (moneyGiftToggle && moneyGiftCard) {
+                moneyGiftToggle.addEventListener('click', (e) => {
+                    e.preventDefault();
+                    const isActive = moneyGiftCard.style.display === "block";
+
+                    resetAllFooterIcons();
+
+                    if (isActive) {
+                        moneyGiftCard.style.display = "none";
+                        document.getElementById('moneygift-icon').src = 'MONEYGIFT.png';
+                    } else {
+                        moneyGiftCard.style.display = "block";
+                        document.getElementById('moneygift-icon').src = 'MONEYGIFT ACTIVE.png';
+                    }
+
+                    guestbookOverlay.classList.remove('show');
+                    resetRSVP();
+                    rsvpCard.style.display = 'none';
+                    resetInfoSection();
+                    resetInfoCircle();
+                });
+
+                document.addEventListener('click', (e) => {
+                    if (!moneyGiftCard.contains(e.target) && !moneyGiftToggle.contains(e.target)) {
+                        moneyGiftCard.style.display = 'none';
+                    }
+                });
+            }
+
+            // RSVP TOGGLE
+            const rsvpToggle = document.querySelector('.footer-rsvp-text');
+            const rsvpCard = document.getElementById('rsvp-card');
+
+            if (rsvpToggle && rsvpCard) {
+                rsvpToggle.addEventListener('click', (e) => {
+                    const isVisible = rsvpCard.style.display === 'block';
+
+                    if (isVisible) {
+                        rsvpCard.style.display = 'none';
+                        
+
+                    } else {
+                        rsvpCard.style.display = 'block';
+                        guestbookOverlay.classList.remove('show');
+                        resetRSVP();
+                        resetInfoSection();
+                        resetInfoCircle();
+                        resetAllFooterIcons();  // 🔥 Reset logic when reopened
+                    }
+                });
+            }
+
+
+
+
+            // INFO TOGGLE
+            const infoToggle = document.querySelector('.footer-info');
+            const infoCard = document.getElementById('info-card');
+            const calendarBtn = document.getElementById('show-calendar');
+            const locationBtn = document.getElementById('show-location');
+            const calendarSection = document.getElementById('calendar-section');
+            const locationSection = document.getElementById('location-section');
+
+            if (infoToggle && infoCard) {
+                infoToggle.addEventListener('click', () => {
+                    const isVisible = infoCard.style.display === "block";
+
+                    if (isVisible) {
+                        infoCard.style.display = "block";
+                    } else {
+                        infoCard.style.display = "block";
+                        animateCircleToStar()
+                        resetRSVP();
+                        rsvpCard.style.display = 'none';
+                    }
+
+                    // Always reset state
+                    infoCard.classList.remove('active-background');
+                    infoCard.classList.remove('active-backgrounds');
+                    calendarSection.style.display = 'none';
+                    locationSection.style.display = 'none';
+                    document.getElementById('info-buttons').style.display = 'flex';
+
+                    guestbookOverlay.classList.remove('show'); // Close guestbook
+                });
+
+            }
+
+            // When you click calendar, show section + white background
+            calendarBtn.addEventListener('click', () => {
+                calendarSection.style.display = 'block';
+                locationSection.style.display = 'none';
+
+                // Hide buttons
+                document.getElementById('info-buttons').style.display = 'none';
+
+                // Add white background
+                infoCard.classList.add('active-background');
+                infoCard.classList.remove('active-backgrounds');
+            });
+
+            // When you click location, show section + white background
+            locationBtn.addEventListener('click', () => {
+                calendarSection.style.display = 'none';
+                locationSection.style.display = 'block';
+
+                // Hide buttons
+                document.getElementById('info-buttons').style.display = 'none';
+
+                // Add white background
+                infoCard.classList.add('active-backgrounds');
+                infoCard.classList.remove('active-background');
+            });
+
+
+            // GUESTBOOK TOGGLE
+            const guestbookBtn = document.querySelector('.footer-guestbook');
+            const guestbookOverlay = document.getElementById('guestbookOverlay');
+            const guestbookModal = document.getElementById('guestbookModal');
+            const closeBtn = document.getElementById('closeGuestbook');
+
+            guestbookBtn.addEventListener('click', () => {
+                const isActive = guestbookOverlay.classList.contains('show');
+
+                resetAllFooterIcons();
+
+                if (isActive) {
+                    // Already open → close it and revert icon
+                    guestbookOverlay.classList.remove('show');
+                    document.getElementById('guestbook-icon').src = 'Guestbook.png';
+                } else {
+                    // Open and set active icon
+                    guestbookOverlay.classList.add('show');
+                    document.getElementById('guestbook-icon').src = 'Guestbook Active.png';
+                }
+
+                resetRSVP();
+                resetInfoSection();
+                resetInfoCircle();
+                rsvpCard.style.display = 'none';
+            });
+
+            closeBtn.addEventListener('click', () => {
+                guestbookOverlay.classList.remove('show');
+
+
+            });
+
+            window.addEventListener('click', function (e) {
+                if (e.target === guestbookOverlay) {
+                    guestbookOverlay.classList.remove('show');
+
+                }
+            });
+
+            // FLOATING LABEL FOR GUESTBOOK INPUTS
+            const formGroups = document.querySelectorAll('.form-group');
+
+            formGroups.forEach(group => {
+                const input = group.querySelector('input, textarea');
+                const label = group.querySelector('label');
+
+                if (!input || !label) return;
+
+                input.addEventListener('focus', () => {
+                    group.classList.add('focused');
+                });
+
+                input.addEventListener('blur', () => {
+                    if (input.value.trim() === '') {
+                        group.classList.remove('focused');
+
+                    }
+                });
+
+                if (input.value.trim() !== '') {
+                    group.classList.add('focused');
+                }
+            });
+
+        });
+
+
+
+
+        const rsvpRadios = document.querySelectorAll('input[name="attendance"]');
+        const rsvpForm = document.getElementById('rsvpForm');
+
+        rsvpRadios.forEach(radio => {
+            radio.addEventListener('change', () => {
+                if (radio.value === 'yes') {
+                    rsvpForm.style.display = 'block';
+                } else {
+                    rsvpForm.style.display = 'none';
+                }
+            });
+
+
+        });
+        const fadeSections = document.querySelectorAll('.fade-in-section');
+
+        const observer = new IntersectionObserver((entries, obs) => {
+            entries.forEach(entry => {
+                if (entry.isIntersecting) {
+                    entry.target.classList.add('is-visible');
+                    obs.unobserve(entry.target); // only trigger once
+                }
+            });
+        }, {
+            threshold: 0.1
+        });
+
+        fadeSections.forEach(section => {
+            observer.observe(section);
+        });
+
+        function copyAccount() {
+            const accountInput = document.getElementById("account-number");
+            navigator.clipboard.writeText(accountInput.value)
+                .then(() => {
+                    alert("Account number copied!");
+                })
+                .catch(err => {
+                    console.error("Failed to copy:", err);
+                });
+        }
+        function showRSVPForm() {
+            document.getElementById('rsvp-buttons').style.display = 'none';
+            document.querySelector('.rsvp-inputs').style.display = 'block';
+        }
+
+        const slides = document.querySelectorAll(".gallery-slide");
+        let current = 0;
+
+        function showNextSlide() {
+            slides[current].classList.remove("active");
+            current = (current + 1) % slides.length;
+            slides[current].classList.add("active");
+        }
+
+        setInterval(showNextSlide, 4000); // change every 4s
+
+
+        const targetDate = new Date("2025-10-26T00:00:00").getTime();
+
+        function updateCountdown() {
+            const now = new Date().getTime();
+            const distance = targetDate - now;
+
+            if (distance < 0) {
+                // If the event has passed
+                document.getElementById("days").textContent = "00";
+                document.getElementById("hours").textContent = "00";
+                document.getElementById("minutes").textContent = "00";
+                document.getElementById("seconds").textContent = "00";
+                return;
+            }
+
+            const days = Math.floor(distance / (1000 * 60 * 60 * 24));
+            const hours = Math.floor((distance % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+            const minutes = Math.floor((distance % (1000 * 60 * 60)) / (1000 * 60));
+            const seconds = Math.floor((distance % (1000 * 60)) / 1000);
+
+            document.getElementById("days").textContent = String(days).padStart(2, '0');
+            document.getElementById("hours").textContent = String(hours).padStart(2, '0');
+            document.getElementById("minutes").textContent = String(minutes).padStart(2, '0');
+            document.getElementById("seconds").textContent = String(seconds).padStart(2, '0');
+        }
+
+        // Update countdown every second
+        updateCountdown();
+        setInterval(updateCountdown, 1000);
+
+        const guestbookEntries = [
+            {
+                title: "Guestbook",
+                message: "Congratulations on becoming <br> husband and wife",
+                sender: "@AMIRUL"
+            },
+            {
+                title: "Guestbook",
+                message: "Wishing you joy and happiness <br> on this new journey",
+                sender: "@NORA"
+            },
+            {
+                title: "Guestbook",
+                message: "May your love continue to grow <br> each and every day",
+                sender: "@UNCLEZUL"
+            }
+        ];
+
+        let currentEntry = 0;
+
+        // Function to update guestbook content
+        function goToEntry(index) {
+            const entry = guestbookEntries[index];
+            if (!entry) return;
+
+            document.getElementById("guestbook-title").innerHTML = entry.title;
+            document.getElementById("guestbook-message").innerHTML = entry.message;
+            document.getElementById("guestbook-sender").innerHTML = entry.sender;
+
+            // Update active class
+            const buttons = document.querySelectorAll('.page-number');
+            buttons.forEach((btn, i) => {
+                btn.classList.toggle('active', i === index);
+            });
+
+            currentEntry = index;
+        }
+
+        // Dynamically create number buttons
+        document.addEventListener("DOMContentLoaded", () => {
+            const navContainer = document.querySelector('.guestbook-navigation');
+            if (!navContainer) return;
+
+            guestbookEntries.forEach((_, index) => {
+                const btn = document.createElement('button');
+                btn.classList.add('page-number');
+                btn.textContent = index + 1;
+
+                btn.addEventListener('click', () => {
+                    goToEntry(index);
+                });
+
+                navContainer.appendChild(btn);
+            });
+
+            // Load the first entry
+            goToEntry(0);
+        });
+
+        function openInvitation() {
+            const envelope = document.getElementById('envelope-cover');
+            const invitation = document.getElementById('main-invitation');
+
+            envelope.style.opacity = '0';
+            envelope.style.transition = 'opacity 1s ease';
+            setTimeout(() => {
+                envelope.style.display = 'none';
+                invitation.style.display = 'block';
+            }, 1000);
+        }
+
+        document.body.classList.add('lock-scroll'); // Initial lock
+
+        function openInvitation() {
+            // Animate upward
+            document.querySelector('.Undangan')?.classList.add('move-up');
+            document.querySelector('.Wali')?.classList.add('move-up');
+            document.querySelector('img[alt="Mayaxasyraff"]')?.classList.add('move-up');
+            document.querySelector('.head-img')?.classList.add('move-up');
+            document.querySelector('.sigil')?.classList.add('move-up');
+
+            // Animate downward
+            document.querySelector('.body-img')?.classList.add('move-down');
+            document.querySelector('.open-button')?.classList.add('move-down');
+
+            // Fade out the cover after animation
+            setTimeout(() => {
+                const cover = document.getElementById('envelope-cover');
+                cover.classList.add('fade-out');
+                tryStartMusic();
+                // Allow scrolling after fade
+                document.body.style.overflow = 'auto';
+            }, 500); // Wait for animation to finish
+        }
+
+        // Optional: Prevent scroll while overlay is open
+        document.body.style.overflow = 'hidden';
+
+        document.addEventListener('DOMContentLoaded', () => {
+            const border = document.querySelector('.floral-border-overlay');
+            const paper = document.querySelector('.paper-overlay');
+            const parentsArea = document.getElementById('parents');
+            const afterArea = document.querySelector('.event-details-wrapper');
+            const itineraryArea = document.querySelector('.itinerary-wrapper');
+            const guestbookArea = document.querySelector('.guestbook-wrapper');
+            const prayerArea = document.querySelector('.prayer-wrapper'); // NEW
+
+            const updateScale = () => {
+                const parentsRect = parentsArea.getBoundingClientRect();
+                const afterRect = afterArea.getBoundingClientRect();
+                const itineraryRect = itineraryArea.getBoundingClientRect();
+                const guestbookRect = guestbookArea.getBoundingClientRect();
+                const prayerRect = prayerArea.getBoundingClientRect();
+
+                paper.classList.remove('active', 'exit-left', 'scaled');
+
+                // --- Floral Border Scaling
+                if (parentsRect.top > window.innerHeight) {
+                    border.style.transform = 'scale(1, 1)';
+                } else if (
+                    parentsRect.top <= window.innerHeight &&
+                    parentsRect.bottom >= 0
+                ) {
+                    border.style.transform = 'scale(1.6974)';
+                } else if (
+                    afterRect.top <= window.innerHeight &&
+                    afterRect.bottom >= 0
+                ) {
+                    border.style.transform = 'scale(1.2974, 1.2964)';
+                } else if (
+                    itineraryRect.top <= window.innerHeight &&
+                    itineraryRect.bottom >= 0
+                ) {
+                    border.style.transform = 'scale(1.2974, 1.3964)';
+                } else if (itineraryRect.bottom < 0) {
+                    border.style.transform = 'scale(1.2974, 1.2964)';
+                } else {
+                    border.style.transform = 'scale(1.2974, 1.3964)';
+                }
+
+                // --- Guestbook Active
+                /*  if (
+                    guestbookRect.top <= window.innerHeight &&
+                    guestbookRect.bottom >= 0
+                  ) {
+                    paper.classList.add('active', 'scaled');
+                    border.style.transition = 'transform 1s ease, opacity 0.8s ease';
+                    border.style.opacity = '0';
+                    paper.style.opacity = '1';
+                  } else if (guestbookRect.bottom < 0) {
+                    paper.classList.add('exit-left');
+                    border.style.transition = 'transform 1s ease, opacity 1.5s ease';
+                    border.style.opacity = '1';
+                    paper.style.opacity = '1';
+                  } else {
+                    border.style.transition = 'transform 1s ease';
+                    border.style.opacity = '1';
+                    paper.style.opacity = '1';
+                  }*/
+
+                // --- Prayer Wrapper Fade In
+                if (
+                    prayerRect.top <= window.innerHeight &&
+                    prayerRect.bottom >= 0
+                ) {
+                    prayerArea.classList.add('visible');
+                } else {
+                    prayerArea.classList.remove('visible');
+                }
+            };
+
+            window.addEventListener('scroll', updateScale);
+            window.addEventListener('resize', updateScale);
+            updateScale();
+
+
+            let currentEntry = 1;
+
+            function goToEntry(entryNumber) {
+                currentEntry = entryNumber;
+
+                // Get all numbered buttons
+                const buttons = document.querySelectorAll('.page-number');
+
+                // Remove active from all
+                buttons.forEach(btn => btn.classList.remove('active'));
+
+                // Set active to the correct button (index is entryNumber - 1)
+                if (buttons[entryNumber - 1]) {
+                    buttons[entryNumber - 1].classList.add('active');
+                }
+
+                // TODO: update guestbook content here based on entryNumber
+                console.log("Switched to entry", entryNumber);
+            }
+
+            function nextGuestbookEntry() {
+                const total = document.querySelectorAll('.page-number').length;
+                currentEntry++;
+                if (currentEntry > total) currentEntry = 1;
+                goToEntry(currentEntry);
+            }
+
+            document.querySelector('.footer-info').addEventListener('click', () => {
+                const rsvpWrapper = document.querySelector('.footer-rsvp-wrapper');
+                const rsvpText = document.querySelector('.footer-rsvp-text');
+                const footer = document.querySelector('.footer-container');
+                const starIcon = document.querySelector('.footer-info i');
+
+                if (starIcon.classList.contains('fa-regular')) {
+                    starIcon.classList.remove('fa-regular');
+                    starIcon.classList.add('fa-solid');
+                    resetAllFooterIconss();
+                }
+
+                // Drop RSVP text
+                rsvpText.classList.add('drop');
+
+                // Clone star to animate
+                const flyingStar = starIcon.cloneNode(true);
+                flyingStar.classList.add('star-fly-in');
+                document.body.appendChild(flyingStar);
+
+                // Start position
+                const rect = starIcon.getBoundingClientRect();
+                flyingStar.style.left = `${rect.left + rect.width / 2}px`;
+                flyingStar.style.top = `${rect.top + rect.height / 2}px`;
+
+                // Animate to circle
+                //setTimeout(() => {
+                    flyingStar.classList.add('animate');
+                    flyingStar.style.left = '50%';
+                    flyingStar.style.top = 'calc(100% - 3.5rem)';
+                //}, 0);
+
+                // Move circle after
+                //setTimeout(() => {
+                    rsvpWrapper.classList.add('move-right');
+                    footer.classList.add('bump-shift');
+                //}, 0);
+
+                // Cleanup
+                //setTimeout(() => {
+                    flyingStar.remove();
+                //}, 0);
+
+                // Show permanent floating star
+                document.querySelector('.floating-star').classList.add('visible');
+            });
+
+            // RSVP TO STAR (when clicking the RSVP text)
+            document.querySelector('.footer-rsvp-text').addEventListener('click', () => {
+                const rsvpWrapper = document.querySelector('.footer-rsvp-wrapper');
+                const rsvpText = document.querySelector('.footer-rsvp-text');
+                const footer = document.querySelector('.footer-container');
+                const floatingStar = document.querySelector('.floating-star');
+
+                // Reverse text
+                rsvpText.classList.remove('drop');
+
+                // Move circle back
+                rsvpWrapper.classList.remove('move-right');
+                footer.classList.remove('bump-shift');
+
+                // Clone the floating star for animation
+                const reverseStar = floatingStar.cloneNode(true);
+                reverseStar.classList.remove('visible');
+                reverseStar.classList.add('star-fly-out');
+                document.body.appendChild(reverseStar);
+                animateStarBackToIcon('.footer-info i');
+
+                // Start at RSVP circle center
+                reverseStar.style.left = '50%';
+                reverseStar.style.top = 'calc(100% - 3.5rem)';
+                reverseStar.style.transform = 'translate(-50%, -50%) scale(2)';
+                reverseStar.style.opacity = '1';
+                void reverseStar.offsetWidth;
+
+                // Animate back to star
+                const starRect = document.querySelector('.footer-info i').getBoundingClientRect();
+                setTimeout(() => {
+                    reverseStar.style.left = `${starRect.left + starRect.width / 2}px`;
+                    reverseStar.style.top = `${starRect.top + starRect.height / 2}px`;
+                    reverseStar.style.transform = 'translate(-50%, -50%) scale(1)';
+                    reverseStar.style.opacity = '0';
+                }, 20);
+
+                // Hide floating star and clean up
+                floatingStar.classList.remove('visible');
+                setTimeout(() => {
+                    reverseStar.remove();
+                }, 20);
+            });
+            function resetAllSections() {
+                // Your full reset logic
+
+            }
+
+            // ✅ 2. THEN define all the buttons and event listeners
+            const calendarBtn = document.getElementById('calendar-button');
+            const locationBtn = document.getElementById('location-button');
+            const infoToggle = document.querySelector('.footer-info');
+            const openBtn = document.querySelector('.open-button');
+
+            // ✅ 3. Add your envelope open logic
+            openBtn.addEventListener('click', () => {
+                const cover = document.getElementById("envelope-cover");
+                if (cover) {
+                    cover.style.opacity = 0;
+                    setTimeout(() => {
+                        cover.style.display = "none";
+                        resetAllSections(); // ✅ Now safe to call
+                    }, 20);
+                }
+                document.body.style.overflow = "auto";
+            });
+
+            // ✅ 4. Use resetAllSections in your other event listeners
+            calendarBtn.addEventListener('click', () => {
+                resetAllSections();
+                // ... open calendar
+            });
+
+            locationBtn.addEventListener('click', () => {
+                resetAllSections();
+                // ... open location
+            });
+
+            infoToggle.addEventListener('click', () => {
+                const infoCard = document.getElementById('info-card');
+                if (infoCard.style.display === 'block') {
+                    infoCard.style.display = 'none';
+                } else {
+                    resetAllSections();
+                    infoCard.style.display = 'block';
+                }
+                document.getElementById('info-buttons').style.display = 'flex';
+            });
+            function animateStarBackToIcon(iconSelector) {
+                const floatingStar = document.querySelector('.floating-star');
+                const reverseStar = floatingStar.cloneNode(true);
+                const footer = document.querySelector('.footer-container');
+
+                reverseStar.classList.remove('visible');
+                reverseStar.classList.add('star-fly-out');
+                document.body.appendChild(reverseStar);
+
+                // Start at center of RSVP circle
+                reverseStar.style.left = '50%';
+                reverseStar.style.top = 'calc(100% - 3.5rem)';
+                reverseStar.style.transform = 'translate(-50%, -50%) scale(2)';
+                reverseStar.style.opacity = '1';
+                void reverseStar.offsetWidth;
+
+                // Animate to selected icon
+                const targetRect = document.querySelector(iconSelector)?.getBoundingClientRect();
+                if (targetRect) {
+                    setTimeout(() => {
+                        reverseStar.style.left = `${targetRect.left + targetRect.width / 2}px`;
+                        reverseStar.style.top = `${targetRect.top + targetRect.height / 2}px`;
+                        reverseStar.style.transform = 'translate(-50%, -50%) scale(1)';
+                        reverseStar.style.opacity = '0';
+                    }, 20);
+                }
+
+                floatingStar.classList.remove('visible');
+
+                setTimeout(() => {
+                    reverseStar.remove();
+                }, 20);
+            }
+
+            let isPlaying = false;
+
+
+        });
+
+        let bgMusicStarted = false;
+
+function tryStartMusic() {
+  if (!bgMusicStarted) {
+    const music = document.getElementById("bg-music");
+    if (music) {
+      music.play()
+        .then(() => {
+          bgMusicStarted = true;
+          console.log("🎵 Music started.");
+        })
+        .catch((err) => {
+          console.warn("Music play failed:", err);
+        });
+    }
+  }
+}
+
+// Automatically try starting music after any user click
+document.addEventListener("DOMContentLoaded", () => {
+  document.body.addEventListener("click", tryStartMusic, { once: true });
+});
+
+const paxSelect = document.getElementById("pax");
+  const paxLabel = document.getElementById("pax-label");
+
+  paxSelect.addEventListener("change", function () {
+    if (this.value === "") {
+      paxLabel.textContent = "Number of Pax";
+    } else {
+      paxLabel.textContent = `${this.value}`;
+      paxLabel.style.fontWeight = "bold";
+    }
+  });
+
+  function handleInfoClick() {
+  alert("Please reach out to any family member directly if more than 3 people are attending.");
+}
+
+
+    </script>
+
+
+
+
+</body>
+</html>
