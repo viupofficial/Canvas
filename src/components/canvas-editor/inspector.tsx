@@ -77,25 +77,7 @@ export default function Inspector(props: {
 
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className={labelCls}>Top</label>
-                <input
-                  className={inputCls}
-                  type="number"
-                  value={Math.round(selected.top ?? 0)}
-                  onChange={(e) => updateSelected({ top: Number(e.target.value) })}
-                />
-              </div>
-              <div>
-                <label className={labelCls}>Bottom</label>
-                <input
-                  className={inputCls}
-                  type="number"
-                  value={Math.round(selected.bottom ?? 0)}
-                  onChange={(e) => updateSelected({ bottom: Number(e.target.value) })}
-                />
-              </div>
-              <div>
-                <label className={labelCls}>Left</label>
+                <label className={labelCls}>X</label>
                 <input
                   className={inputCls}
                   type="number"
@@ -104,12 +86,12 @@ export default function Inspector(props: {
                 />
               </div>
               <div>
-                <label className={labelCls}>Right</label>
+                <label className={labelCls}>Y</label>
                 <input
                   className={inputCls}
                   type="number"
-                  value={Math.round(selected.right ?? 0)}
-                  onChange={(e) => updateSelected({ right: Number(e.target.value) })}
+                  value={Math.round(selected.top ?? 0)}
+                  onChange={(e) => updateSelected({ top: Number(e.target.value) })}
                 />
               </div>
               {/* Width / Height — drive Fabric's scaleX/scaleY so the displayed
@@ -334,23 +316,97 @@ export default function Inspector(props: {
               </div>
             </div>
 
-            {/* Text shadow toggle */}
-            <div className="flex items-center justify-between">
-              <label className={labelCls + " mb-0"}>Text Shadow</label>
-              <button
-                className={`px-3 py-[5px] rounded-[8px] text-[12px] font-[600] border border-[#EDE2DE] ${
-                  selected.shadow ? "bg-[#7D5B59] text-white" : "bg-[#F2E8E6B2] text-[#7D5B59]"
-                }`}
-                onClick={() =>
-                  updateSelected({
-                    shadow: selected.shadow
-                      ? null
-                      : { color: "#00000040", blur: 4, offsetX: 2, offsetY: 2 },
-                  })
-                }
-              >
-                {selected.shadow ? "On" : "Off"}
-              </button>
+            {/* Text shadow toggle + settings */}
+            <div className="flex flex-col gap-2">
+              <div className="flex items-center justify-between">
+                <label className={labelCls + " mb-0"}>Text Shadow</label>
+                <button
+                  className={`relative w-[52px] h-[28px] rounded-full transition-colors ${
+                    selected.shadow ? "bg-[#7D5B59]" : "bg-[#D5C5C3]"
+                  }`}
+                  onClick={() =>
+                    updateSelected({
+                      shadow: selected.shadow
+                        ? null
+                        : { color: "#00000040", blur: 4, offsetX: 2, offsetY: 2 },
+                    })
+                  }
+                >
+                  <span
+                    className={`absolute top-[3px] w-[22px] h-[22px] rounded-full bg-white shadow transition-[left] ${
+                      selected.shadow ? "left-[27px]" : "left-[3px]"
+                    }`}
+                  />
+                </button>
+              </div>
+
+              {selected.shadow && (
+                <div className="flex flex-col gap-2 bg-[#F2E8E6] rounded-[12px] p-3">
+                  <div>
+                    <div className="flex items-center justify-between mb-1">
+                      <label className={labelCls + " mb-0"}>Position X</label>
+                      <span className="text-[12px] text-[#7D5B59] font-[600]">
+                        {selected.shadow.offsetX ?? 2}
+                      </span>
+                    </div>
+                    <input
+                      className="w-full accent-[#7D5B59]"
+                      type="range"
+                      min={-50}
+                      max={50}
+                      step={1}
+                      value={selected.shadow.offsetX ?? 2}
+                      onChange={(e) =>
+                        updateSelected({
+                          shadow: { ...selected.shadow, offsetX: Number(e.target.value) },
+                        })
+                      }
+                    />
+                  </div>
+                  <div>
+                    <div className="flex items-center justify-between mb-1">
+                      <label className={labelCls + " mb-0"}>Position Y</label>
+                      <span className="text-[12px] text-[#7D5B59] font-[600]">
+                        {selected.shadow.offsetY ?? 2}
+                      </span>
+                    </div>
+                    <input
+                      className="w-full accent-[#7D5B59]"
+                      type="range"
+                      min={-50}
+                      max={50}
+                      step={1}
+                      value={selected.shadow.offsetY ?? 2}
+                      onChange={(e) =>
+                        updateSelected({
+                          shadow: { ...selected.shadow, offsetY: Number(e.target.value) },
+                        })
+                      }
+                    />
+                  </div>
+                  <div>
+                    <div className="flex items-center justify-between mb-1">
+                      <label className={labelCls + " mb-0"}>Blur</label>
+                      <span className="text-[12px] text-[#7D5B59] font-[600]">
+                        {selected.shadow.blur ?? 4}
+                      </span>
+                    </div>
+                    <input
+                      className="w-full accent-[#7D5B59]"
+                      type="range"
+                      min={0}
+                      max={50}
+                      step={1}
+                      value={selected.shadow.blur ?? 4}
+                      onChange={(e) =>
+                        updateSelected({
+                          shadow: { ...selected.shadow, blur: Number(e.target.value) },
+                        })
+                      }
+                    />
+                  </div>
+                </div>
+              )}
             </div>
 
             {/* Style buttons: I S U */}
