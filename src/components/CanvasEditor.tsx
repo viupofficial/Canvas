@@ -45,9 +45,14 @@ export type EditorHandle = {
   loadTemplate: (pages: any[]) => void;
   addBorder: (url: string) => void;
   setBackgroundColor: (color: string) => void;
+  previewAnimation: (type: string) => void;
 }
 const MAX_HISTORY = 50;
 const HISTORY_DEBOUNCE_MS = 120;
+// Backstore dimensions of the canvas. The footer is designed against this width,
+// so we scale it by the same factor the canvas is CSS-scaled to fit its wrap.
+const CANVAS_REF_WIDTH = 396;
+const CANVAS_REF_HEIGHT = 704;
 type PageHistory = { undo: string[]; redo: string[] };
 const FABRIC_EXPORT_PROPS = [
   "action",
@@ -100,6 +105,9 @@ const [currentPage, setCurrentPage] = useState(0);
   const countdownIntervalRef = useRef<ReturnType<typeof window.setInterval> | null>(null);
   const globalBordersRef = useRef<{ url: string; id: string }[]>([]);
   const [overlay, setOverlay] = useState<{ left: number; top: number; width: number; height: number } | null>(null);
+  // Rendered canvas box relative to its wrap (position, display size, fit-scale).
+  // Used to anchor the floating event footer to the scaled canvas.
+  const [canvasBox, setCanvasBox] = useState<{ left: number; top: number; width: number; height: number; scale: number } | null>(null);
   const [isDragOver, setIsDragOver] = useState(false);
   const [zoom, setZoom] = useState(1);
   const zoomRef = useRef(1);
@@ -111,6 +119,10 @@ const [currentPage, setCurrentPage] = useState(0);
   const textToolDraggedRef = useRef(false);
   const containerRef = useRef<HTMLDivElement | null>(null);
   const hasHydratedRef = useRef(false);
+  // In-flight animation preview on the editor canvas. previewRestoreRef snaps the
+  // previewed object back to its captured base values when the preview ends/cancels.
+  const previewRafRef = useRef<number | null>(null);
+  const previewRestoreRef = useRef<(() => void) | null>(null);
 
   // Live-preview sync: when eventData changes, find any Fabric objects that
   // opted in via `eventBinding` and update them in place (no full reload).
@@ -428,6 +440,9 @@ const [currentPage, setCurrentPage] = useState(0);
       pushSnapshot();
       saveCurrentPage(currentPageRef.current);
     },
+    previewAnimation: (type: string) => {
+      previewAnimation(type);
+    },
   }));
 
   useEffect(() => {
@@ -544,8 +559,8 @@ const [currentPage, setCurrentPage] = useState(0);
         });
 
         // initial size — use explicit pixel dimensions so Fabric can render correctly
-        const initialWidth = 396;
-        const initialHeight = 704;
+        const initialWidth = CANVAS_REF_WIDTH;
+        const initialHeight = CANVAS_REF_HEIGHT;
         canvas.setDimensions({ width: initialWidth, height: initialHeight });
         fabricRef.current = canvas;
 
@@ -574,10 +589,24 @@ const [currentPage, setCurrentPage] = useState(0);
           if (availW <= 0 || availH <= 0) return;
           const scale = Math.min(availW / initialWidth, availH / initialHeight);
           if (!isFinite(scale) || scale <= 0) return;
+          const displayW = initialWidth * scale;
+          const displayH = initialHeight * scale;
           fabricRef.current.setDimensions(
-            { width: initialWidth * scale, height: initialHeight * scale },
+            { width: displayW, height: displayH },
             { cssOnly: true }
           );
+          // Record where the canvas actually renders inside the wrap so the
+          // floating footer can be pinned to its bottom edge at the same scale.
+          const container = el.parentElement; // fabric's .canvas-container
+          const wrapRect = wrap.getBoundingClientRect();
+          const cRect = (container ?? el).getBoundingClientRect();
+          setCanvasBox({
+            left: cRect.left - wrapRect.left,
+            top: cRect.top - wrapRect.top,
+            width: displayW,
+            height: displayH,
+            scale,
+          });
         };
 
         // run once, on window resize, and whenever the wrap itself changes size
@@ -627,9 +656,16 @@ const [currentPage, setCurrentPage] = useState(0);
           }
         };
 
-        canvas.on('selection:created', () => { onSelectionChange(); updateOverlayFromActive(); });
-        canvas.on('selection:updated', () => { onSelectionChange(); updateOverlayFromActive(); });
-        canvas.on('selection:cleared', () => { onSelectionChange(); setOverlay(null); });
+        // Abort any in-flight animation preview and restore its object — keeps a
+        // looping preview from continuing once the user picks a different element.
+        const stopPreview = () => {
+          if (previewRafRef.current != null) { cancelAnimationFrame(previewRafRef.current); previewRafRef.current = null; }
+          if (previewRestoreRef.current) { previewRestoreRef.current(); previewRestoreRef.current = null; }
+        };
+
+        canvas.on('selection:created', () => { stopPreview(); onSelectionChange(); updateOverlayFromActive(); });
+        canvas.on('selection:updated', () => { stopPreview(); onSelectionChange(); updateOverlayFromActive(); });
+        canvas.on('selection:cleared', () => { stopPreview(); onSelectionChange(); setOverlay(null); });
 
         // Keep the overlay in sync while objects move/transform
         canvas.on('object:moving', () => { onSelectionChange(); updateOverlayFromActive(); });
@@ -813,6 +849,11 @@ const [currentPage, setCurrentPage] = useState(0);
         clearTimeout(pendingPushRef.current);
         pendingPushRef.current = null;
       }
+      if (previewRafRef.current != null) {
+        cancelAnimationFrame(previewRafRef.current);
+        previewRafRef.current = null;
+      }
+      previewRestoreRef.current = null;
       const c = fabricRef.current;
       if (c) {
         c.off();
@@ -1564,6 +1605,102 @@ const startCountdown = (canvas: FabricCanvas) => {
   };
   toggleFullscreenRef.current = toggleFullscreen;
   //fullscreen function end
+
+  // Play a single, bounded preview of an animation on the active object, then
+  // snap it back to its exact base values. One-shots end naturally at base;
+  // loops (float/pulse) run a few cycles then restore. Pure obj.set + render —
+  // it does not fire object:modified, so it never pollutes undo history.
+  const previewAnimation = useCallback((type: string) => {
+    const canvas = fabricRef.current;
+    if (!canvas) return;
+
+    // Stop/restore any preview already running (possibly on another object).
+    if (previewRafRef.current != null) { cancelAnimationFrame(previewRafRef.current); previewRafRef.current = null; }
+    if (previewRestoreRef.current) { previewRestoreRef.current(); previewRestoreRef.current = null; }
+
+    const obj: any = canvas.getActiveObject();
+    if (!obj || !type || type === 'none') return;
+
+    const base = {
+      top: obj.top ?? 0,
+      opacity: obj.opacity ?? 1,
+      scaleX: obj.scaleX ?? 1,
+      scaleY: obj.scaleY ?? 1,
+    };
+    const easeOut = (p: number) => 1 - Math.pow(1 - p, 3);
+    const restore = () => {
+      obj.set({ top: base.top, opacity: base.opacity, scaleX: base.scaleX, scaleY: base.scaleY });
+      obj.setCoords?.();
+      canvas.requestRenderAll();
+    };
+    previewRestoreRef.current = restore;
+
+    // Loop presets preview for a bounded span; one-shots ignore this.
+    const LOOP_MS = type === 'float' ? 6000 : type === 'pulse' ? 5400 : 0;
+    if (type === 'fade-in') obj.set({ opacity: 0 });
+    else if (type === 'slide-up') obj.set({ opacity: 0, top: base.top + 24 });
+    else if (type === 'zoom-in') obj.set({ opacity: 0, scaleX: base.scaleX * 0.85, scaleY: base.scaleY * 0.85 });
+    obj.setCoords?.();
+    canvas.requestRenderAll();
+
+    const start = performance.now();
+    const tick = (now: number) => {
+      const t = now - start;
+      let done = false;
+      switch (type) {
+        case 'fade-in': {
+          const p = Math.min(t / 600, 1);
+          obj.opacity = base.opacity * easeOut(p);
+          done = p >= 1;
+          break;
+        }
+        case 'slide-up': {
+          const p = Math.min(t / 600, 1);
+          const e = easeOut(p);
+          obj.opacity = base.opacity * e;
+          obj.top = base.top + 24 * (1 - e);
+          done = p >= 1;
+          break;
+        }
+        case 'zoom-in': {
+          const p = Math.min(t / 500, 1);
+          const e = easeOut(p);
+          obj.opacity = base.opacity * e;
+          const s = 0.85 + 0.15 * e;
+          obj.scaleX = base.scaleX * s;
+          obj.scaleY = base.scaleY * s;
+          done = p >= 1;
+          break;
+        }
+        case 'float': {
+          const off = -8 * (0.5 - 0.5 * Math.cos((t / 3000) * Math.PI * 2));
+          obj.top = base.top + off;
+          done = t >= LOOP_MS;
+          break;
+        }
+        case 'pulse': {
+          const s = 1 + 0.05 * (0.5 - 0.5 * Math.cos((t / 1800) * Math.PI * 2));
+          obj.scaleX = base.scaleX * s;
+          obj.scaleY = base.scaleY * s;
+          done = t >= LOOP_MS;
+          break;
+        }
+        default:
+          done = true;
+      }
+      obj.setCoords?.();
+      canvas.requestRenderAll();
+      if (done) {
+        restore();
+        previewRafRef.current = null;
+        previewRestoreRef.current = null;
+      } else {
+        previewRafRef.current = requestAnimationFrame(tick);
+      }
+    };
+    previewRafRef.current = requestAnimationFrame(tick);
+  }, []);
+
   return (
     <div className="w-full h-full flex flex-col gap-4 p-6">
 
@@ -1598,12 +1735,34 @@ const startCountdown = (canvas: FabricCanvas) => {
           
 
 <canvas ref={canvasEl} className="shadow block max-w-full h-auto" />
-          {/* Floating footer */}
-          <div className="absolute bottom-0 left-1/2 -translate-x-1/2 z-30 bg-white">
-            <EventFooter contacts={props.contacts} moneyGift={props.moneyGift} calendar={props.calendar} location={props.location} rsvpConfig={props.rsvpConfig}/>
-           
-
-          </div>
+          {/* Floating footer — pinned to the scaled canvas: same width, bottom edge,
+              and fit-scale so it tracks the canvas instead of the whole wrap. */}
+          {canvasBox && (
+            <div
+              className="absolute z-30"
+              style={{
+                left: canvasBox.left,
+                top: canvasBox.top,
+                width: canvasBox.width,
+                height: canvasBox.height,
+                pointerEvents: 'none',
+              }}
+            >
+              <div
+                style={{
+                  position: 'absolute',
+                  bottom: 0,
+                  left: 0,
+                  width: CANVAS_REF_WIDTH,
+                  transformOrigin: 'bottom left',
+                  transform: `scale(${canvasBox.scale})`,
+                  pointerEvents: 'auto',
+                }}
+              >
+                <EventFooter contacts={props.contacts} moneyGift={props.moneyGift} calendar={props.calendar} location={props.location} rsvpConfig={props.rsvpConfig}/>
+              </div>
+            </div>
+          )}
 
           {overlay && (
             <>

@@ -108,7 +108,91 @@ export default function RsvpPlayer({ pages, envelope, musicUrl, borderUrl }: Rsv
     const h = 704;
     const root = rootRef.current;
     const createdCanvases: any[] = [];
+    const cancellers: Array<() => void> = [];
     let cancelled = false;
+
+    // Animate objects on a view-only canvas based on their `animation` property.
+    // Base values are captured once; one-shots ease to those targets, loops
+    // oscillate around them. Mutating here is safe — the player never saves back.
+    const easeOut = (p: number) => 1 - Math.pow(1 - p, 3);
+    const ANIMS = new Set(["fade-in", "slide-up", "zoom-in", "float", "pulse"]);
+    const startAnimations = (rc: any) => {
+      const animated: Array<{ obj: any; type: string; top: number; opacity: number; scaleX: number; scaleY: number }> = [];
+      rc.forEachObject((obj: any) => {
+        const type = obj?.animation;
+        if (!type || !ANIMS.has(type)) return;
+        const base = {
+          obj,
+          type,
+          top: obj.top ?? 0,
+          opacity: obj.opacity ?? 1,
+          scaleX: obj.scaleX ?? 1,
+          scaleY: obj.scaleY ?? 1,
+        };
+        animated.push(base);
+        // Seed the start state for one-shot intros so they don't flash at target.
+        if (type === "fade-in") obj.set({ opacity: 0 });
+        else if (type === "slide-up") obj.set({ opacity: 0, top: base.top + 24 });
+        else if (type === "zoom-in") obj.set({ opacity: 0, scaleX: base.scaleX * 0.85, scaleY: base.scaleY * 0.85 });
+        obj.setCoords?.();
+      });
+      if (!animated.length) return;
+
+      const start = performance.now();
+      let rafId = 0;
+      const tick = (now: number) => {
+        if (cancelled) return;
+        const t = now - start;
+        let active = false;
+        for (const a of animated) {
+          const obj = a.obj;
+          switch (a.type) {
+            case "fade-in": {
+              const p = Math.min(t / 600, 1);
+              obj.opacity = a.opacity * easeOut(p);
+              if (p < 1) active = true;
+              break;
+            }
+            case "slide-up": {
+              const p = Math.min(t / 600, 1);
+              const e = easeOut(p);
+              obj.opacity = a.opacity * e;
+              obj.top = a.top + 24 * (1 - e);
+              if (p < 1) active = true;
+              break;
+            }
+            case "zoom-in": {
+              const p = Math.min(t / 500, 1);
+              const e = easeOut(p);
+              obj.opacity = a.opacity * e;
+              const s = 0.85 + 0.15 * e;
+              obj.scaleX = a.scaleX * s;
+              obj.scaleY = a.scaleY * s;
+              if (p < 1) active = true;
+              break;
+            }
+            case "float": {
+              const off = -8 * (0.5 - 0.5 * Math.cos((t / 3000) * Math.PI * 2));
+              obj.top = a.top + off;
+              active = true;
+              break;
+            }
+            case "pulse": {
+              const s = 1 + 0.05 * (0.5 - 0.5 * Math.cos((t / 1800) * Math.PI * 2));
+              obj.scaleX = a.scaleX * s;
+              obj.scaleY = a.scaleY * s;
+              active = true;
+              break;
+            }
+          }
+          obj.setCoords?.();
+        }
+        rc.requestRenderAll();
+        if (active) rafId = requestAnimationFrame(tick);
+      };
+      rafId = requestAnimationFrame(tick);
+      cancellers.push(() => cancelAnimationFrame(rafId));
+    };
 
     root.innerHTML = "";
 
@@ -155,6 +239,7 @@ export default function RsvpPlayer({ pages, envelope, musicUrl, borderUrl }: Rsv
               obj.setCoords();
             });
             toRemove.forEach((o) => rc.remove(o));
+            startAnimations(rc);
             rc.requestRenderAll();
           });
         }
@@ -163,6 +248,7 @@ export default function RsvpPlayer({ pages, envelope, musicUrl, borderUrl }: Rsv
 
     return () => {
       cancelled = true;
+      cancellers.forEach((c) => { try { c(); } catch {} });
       createdCanvases.forEach((c) => { try { c.dispose(); } catch {} });
       root.innerHTML = "";
     };

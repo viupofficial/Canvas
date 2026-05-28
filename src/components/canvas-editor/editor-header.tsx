@@ -154,7 +154,7 @@ export default function EditorHeader(props: {
 
         <div className="border-l-[0.5px] border-[#7D5B59] h-9 mx-1"></div>
 
-        <div className="flex items-center gap-6">
+        <div className="flex items-center gap-[35px]">
           <button onClick={handleUndoClick}>
             <img src="/Undo.svg" alt="Undo" className="w-8" />
           </button>

@@ -45,6 +45,9 @@ export default function Inspector(props: {
 }) {
   const { selected, updateSelected, editorRef } = props;
   const [showTextStyles, setShowTextStyles] = React.useState(false);
+  // When on, editing width or height scales both axes by the same factor so the
+  // element resizes uniformly (keeps proportions).
+  const [lockUniform, setLockUniform] = React.useState(false);
 
   const TEXT_STYLES = [
     { name: 'Heading', fontSize: 48, fontWeight: 'bold' },
@@ -94,10 +97,13 @@ export default function Inspector(props: {
                   onChange={(e) => updateSelected({ top: Number(e.target.value) })}
                 />
               </div>
-              {/* Width / Height — drive Fabric's scaleX/scaleY so the displayed
-                  size in the canvas matches the input. Mirrors the same pattern
-                  used in the phone-preview compact panel. */}
-              <div>
+            </div>
+
+            {/* Width / Height — drive Fabric's scaleX/scaleY so the displayed
+                size in the canvas matches the input. The lock on the right keeps
+                both axes scaled by the same factor (uniform resize). */}
+            <div className="flex items-end gap-2">
+              <div className="flex-1">
                 <label className={labelCls}>Width</label>
                 <input
                   className={inputCls}
@@ -108,11 +114,12 @@ export default function Inspector(props: {
                     const w = Number(e.target.value);
                     const base = selected.width ?? w;
                     if (!base) return;
-                    updateSelected({ scaleX: w / base });
+                    const s = w / base;
+                    updateSelected(lockUniform ? { scaleX: s, scaleY: s } : { scaleX: s });
                   }}
                 />
               </div>
-              <div>
+              <div className="flex-1">
                 <label className={labelCls}>Height</label>
                 <input
                   className={inputCls}
@@ -123,10 +130,32 @@ export default function Inspector(props: {
                     const h = Number(e.target.value);
                     const base = selected.height ?? h;
                     if (!base) return;
-                    updateSelected({ scaleY: h / base });
+                    const s = h / base;
+                    updateSelected(lockUniform ? { scaleX: s, scaleY: s } : { scaleY: s });
                   }}
                 />
               </div>
+              <button
+                type="button"
+                onClick={() => setLockUniform((v) => !v)}
+                title={lockUniform ? "Unlock width & height" : "Lock width & height (uniform resize)"}
+                aria-label="Lock width and height"
+                aria-pressed={lockUniform}
+                className={`shrink-0 h-[34px] w-[34px] rounded-[10px] border flex items-center justify-center transition-colors ${
+                  lockUniform
+                    ? "bg-[#7D5B59] text-white border-[#7D5B59]"
+                    : "bg-[#F2E8E6B2] text-[#7D5B59] border-[#EDE2DE]"
+                }`}
+              >
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                  <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
+                  {lockUniform ? (
+                    <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+                  ) : (
+                    <path d="M7 11V7a5 5 0 0 1 9.9-1" />
+                  )}
+                </svg>
+              </button>
             </div>
 
             <div>
@@ -717,25 +746,42 @@ export default function Inspector(props: {
               />
             </div>
 
-            <div>
-              <label className={labelCls}>Transition</label>
-              <input
-                className={inputCls}
-                placeholder="e.g. all 0.3s ease"
-                value={selected.transition ?? ""}
-                onChange={(e) => updateSelected({ transition: e.target.value })}
-              />
-            </div>
+          </div>
 
+          {/* ── Animation ──────────────────────────────────────── */}
+          <div className={sectionCls}>
+            <h5 className="font-[600] text-[13px] text-[#7D5B59]">Animation</h5>
             <div>
-              <label className={labelCls}>Transform</label>
-              <input
+              <label className={labelCls}>Preset</label>
+              <select
                 className={inputCls}
-                placeholder="e.g. rotate(45deg)"
-                value={selected.cssTransform ?? ""}
-                onChange={(e) => updateSelected({ cssTransform: e.target.value })}
-              />
+                value={selected.animation ?? "none"}
+                onChange={(e) => {
+                  const v = e.target.value;
+                  updateSelected({ animation: v });
+                  // Show a one-off preview of the choice on the editor canvas.
+                  editorRef?.current?.previewAnimation?.(v);
+                }}
+              >
+                <option value="none">None</option>
+                <option value="fade-in">Fade In</option>
+                <option value="slide-up">Slide Up</option>
+                <option value="zoom-in">Zoom In</option>
+                <option value="float">Float</option>
+                <option value="pulse">Pulse</option>
+              </select>
             </div>
+            <button
+              type="button"
+              disabled={(selected.animation ?? "none") === "none"}
+              onClick={() => editorRef?.current?.previewAnimation?.(selected.animation ?? "none")}
+              className="w-full rounded-[10px] px-3 py-[6px] text-[12px] font-[600] bg-[#F2E8E6B2] text-[#7D5B59] disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              Preview
+            </button>
+            <p className="text-[11px] text-[#7D5B5980] font-[600]">
+              Preview plays once here. Loops continuously in the published invitation.
+            </p>
           </div>
 
           {/* ── Delete ─────────────────────────────────────────── */}

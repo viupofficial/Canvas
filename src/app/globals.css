@@ -25,6 +25,59 @@
   }
 }
 
+/* ── Element animation presets ──────────────────────────────
+   Driven on the published/preview canvas from each element's
+   `animation` property (see RsvpPlayer). Classes/keyframes kept
+   here as the source of truth for timing and any future DOM use. */
+.anim-none {
+  animation: none;
+}
+
+.anim-fade-in {
+  animation: fadeIn 0.6s ease both;
+}
+
+.anim-slide-up {
+  animation: slideUp 0.6s ease both;
+}
+
+.anim-zoom-in {
+  animation: zoomIn 0.5s ease both;
+}
+
+.anim-float {
+  animation: float 3s ease-in-out infinite;
+}
+
+.anim-pulse {
+  animation: pulse 1.8s ease-in-out infinite;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes slideUp {
+  from { opacity: 0; transform: translateY(24px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes zoomIn {
+  from { opacity: 0; transform: scale(0.85); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+@keyframes float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-8px); }
+}
+
+@keyframes pulse {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.05); }
+}
+
 html,
 body {
   padding: 0;
