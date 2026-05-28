@@ -167,19 +167,21 @@ export default function EditorHeader(props: {
         <div className="border-l-[0.5px] border-[#7D5B59] h-9 mx-1"></div>
       </div>
 
-      <input
-        type="text"
-        value={eventName}
-        onChange={(event) => setEventName(event.target.value)}
-        className="font-bold text-[18px] text-center bg-transparent border-none outline-none min-w-[180px]"
-        aria-label="Event name"
-      />
+      <div className="flex items-center justify-center gap-1">
+        <input
+          type="text"
+          value={eventName}
+          onChange={(event) => setEventName(event.target.value)}
+          className="font-bold text-[18px] text-right bg-transparent border-none outline-none w-[140px]"
+          aria-label="Event name"
+        />
 
-      <div className="flex items-center justify-end gap-4 mr-10">
-        <button onClick={handleSaveClick} className=" rounded-full text-white  h-[55px] w-[55px]">
+        <button onClick={handleSaveClick} className="rounded-full text-white flex items-center justify-center">
           <img src="/cloud-save.svg" className="h-[24px] w-[34px]" />
         </button>
+      </div>
 
+      <div className="flex items-center justify-end gap-4 mr-10">
         <button onClick={handlePreviewClick} className=" rounded-full text-white p-2">
           <img src="/preview.svg" alt="Preview" className="h-[51px] w-[51px]" />
         </button>

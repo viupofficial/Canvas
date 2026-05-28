@@ -13,6 +13,36 @@ import { guestbookPage } from "@/src/components/template-list/guestbookTemplate"
 import { galleryPage } from "@/src/components/template-list/galleryTemplate";
 import { envelopePage } from "@/src/components/template-list/EnvelopeTemplate";
 
+// Invert a 6-digit hex color (Adobe-style negative). Falls back gracefully for non-hex input.
+function invertHex(color: string): string {
+  const m = /^#?([0-9a-fA-F]{6})$/.exec((color ?? '').trim());
+  if (!m) return color;
+  const n = parseInt(m[1], 16);
+  const inv = 0xffffff - n;
+  return '#' + inv.toString(16).padStart(6, '0');
+}
+
+const colorIconBtnCls =
+  "h-[34px] w-[34px] shrink-0 rounded-[10px] flex items-center justify-center bg-[#F2E8E6B2] text-[#7D5B59] border border-[#EDE2DE] hover:bg-[#EDE2DE] transition-colors";
+
+function RevertIcon() {
+  return (
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+      <path d="M3 12a9 9 0 1 0 3-6.7L3 8" />
+      <path d="M3 3v5h5" />
+    </svg>
+  );
+}
+
+function InvertIcon() {
+  return (
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+      <circle cx="12" cy="12" r="9" />
+      <path d="M12 3a9 9 0 0 1 0 18Z" fill="currentColor" />
+    </svg>
+  );
+}
+
 type Tab =
   | 'templates'
   | 'elements'
@@ -415,6 +445,35 @@ function RSVPTab() {
     updateEventData('rsvpConfig', { [field]: value } as any);
   };
 
+  // Original colors captured once, so each Revert restores the starting value.
+  const origNavColor = React.useRef(current?.navColor ?? '#000000');
+  const origNavOpacity = React.useRef(current?.navOpacity ?? 100);
+  const origTextColor = React.useRef(current?.textColor ?? '#000000');
+  const origTextOpacity = React.useRef(current?.textOpacity ?? 100);
+
+  const revertNav = () => {
+    setNavColor(origNavColor.current);
+    pushField('navColor', origNavColor.current);
+    setNavOpacity(origNavOpacity.current);
+    pushField('navOpacity', origNavOpacity.current);
+  };
+  const invertNav = () => {
+    const inv = invertHex(navColor);
+    setNavColor(inv);
+    pushField('navColor', inv);
+  };
+  const revertText = () => {
+    setTextColor(origTextColor.current);
+    pushField('textColor', origTextColor.current);
+    setTextOpacity(origTextOpacity.current);
+    pushField('textOpacity', origTextOpacity.current);
+  };
+  const invertText = () => {
+    const inv = invertHex(textColor);
+    setTextColor(inv);
+    pushField('textColor', inv);
+  };
+
   const handleSave = () => {
     if (!maxGuest) {
       alert("Please enter max guest");
@@ -443,98 +502,114 @@ function RSVPTab() {
         </div>
         <div>
           <label className="block text-[11px] text-[#7D5B5980] font-[600] mb-1">Navigation Bar</label>
-          <div className="flex items-center gap-3 bg-[#F2E8E6] rounded-[12px] px-3 py-2">
-            <label
-              className="relative inline-block w-6 h-6 rounded-[5px] border border-[#EDE2DE] cursor-pointer overflow-hidden shrink-0"
-              style={{ backgroundColor: navColor }}
-            >
+          <div className="flex items-center gap-2">
+            <div className="flex items-center gap-3 bg-[#F2E8E6] rounded-[12px] px-3 py-2 flex-1 min-w-0">
+              <label
+                className="relative inline-block w-6 h-6 rounded-[5px] border border-[#EDE2DE] cursor-pointer overflow-hidden shrink-0"
+                style={{ backgroundColor: navColor }}
+              >
+                <input
+                  type="color"
+                  className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                  value={navColor}
+                  onChange={(e) => {
+                    setNavColor(e.target.value);
+                    pushField('navColor', e.target.value);
+                  }}
+                />
+              </label>
               <input
-                type="color"
-                className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
-                value={navColor}
+                className="flex-1 min-w-0 bg-transparent outline-none uppercase tracking-tight font-[600] text-[13px] leading-none text-[#7D5B59]"
+                value={navColor.replace('#', '').toUpperCase()}
                 onChange={(e) => {
-                  setNavColor(e.target.value);
-                  pushField('navColor', e.target.value);
+                  const hex = e.target.value.replace('#', '');
+                  if (/^[0-9a-fA-F]{6}$/.test(hex)) {
+                    const next = '#' + hex;
+                    setNavColor(next);
+                    pushField('navColor', next);
+                  }
                 }}
+                maxLength={6}
               />
-            </label>
-            <input
-              className="flex-1 min-w-0 bg-transparent outline-none uppercase tracking-tight font-[600] text-[13px] leading-none text-[#7D5B59]"
-              value={navColor.replace('#', '').toUpperCase()}
-              onChange={(e) => {
-                const hex = e.target.value.replace('#', '');
-                if (/^[0-9a-fA-F]{6}$/.test(hex)) {
-                  const next = '#' + hex;
-                  setNavColor(next);
-                  pushField('navColor', next);
-                }
-              }}
-              maxLength={6}
-            />
-            <div className="w-[2px] self-stretch -my-2 bg-white shrink-0 ml-auto" />
-            <div className="flex items-baseline gap-0.5 shrink-0 pl-1">
-              <input
-                className="w-[32px] bg-transparent outline-none text-right font-[600] text-[16px] leading-none text-[#7D5B59] [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
-                type="number"
-                min={0}
-                max={100}
-                value={navOpacity}
-                onChange={(e) => {
-                  const v = Number(e.target.value);
-                  setNavOpacity(v);
-                  pushField('navOpacity', v);
-                }}
-              />
-              <span className="font-[600] text-[16px] leading-none text-[#B98587]">%</span>
+              <div className="w-[2px] self-stretch -my-2 bg-white shrink-0 ml-auto" />
+              <div className="flex items-baseline gap-0.5 shrink-0 pl-1">
+                <input
+                  className="w-[32px] bg-transparent outline-none text-right font-[600] text-[16px] leading-none text-[#7D5B59] [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                  type="number"
+                  min={0}
+                  max={100}
+                  value={navOpacity}
+                  onChange={(e) => {
+                    const v = Number(e.target.value);
+                    setNavOpacity(v);
+                    pushField('navOpacity', v);
+                  }}
+                />
+                <span className="font-[600] text-[16px] leading-none text-[#B98587]">%</span>
+              </div>
             </div>
+            <button type="button" title="Revert Navigation Bar" aria-label="Revert Navigation Bar" onClick={revertNav} className={colorIconBtnCls}>
+              <RevertIcon />
+            </button>
+            <button type="button" title="Invert Navigation Bar" aria-label="Invert Navigation Bar" onClick={invertNav} className={colorIconBtnCls}>
+              <InvertIcon />
+            </button>
           </div>
         </div>
         <div>
           <label className="block text-[11px] text-[#7D5B5980] font-[600] mb-1">Text and Icon</label>
-          <div className="flex items-center gap-3 bg-[#F2E8E6] rounded-[12px] px-3 py-2">
-            <label
-              className="relative inline-block w-6 h-6 rounded-[5px] border border-[#EDE2DE] cursor-pointer overflow-hidden shrink-0"
-              style={{ backgroundColor: textColor }}
-            >
+          <div className="flex items-center gap-2">
+            <div className="flex items-center gap-3 bg-[#F2E8E6] rounded-[12px] px-3 py-2 flex-1 min-w-0">
+              <label
+                className="relative inline-block w-6 h-6 rounded-[5px] border border-[#EDE2DE] cursor-pointer overflow-hidden shrink-0"
+                style={{ backgroundColor: textColor }}
+              >
+                <input
+                  type="color"
+                  className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                  value={textColor}
+                  onChange={(e) => {
+                    setTextColor(e.target.value);
+                    pushField('textColor', e.target.value);
+                  }}
+                />
+              </label>
               <input
-                type="color"
-                className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
-                value={textColor}
+                className="flex-1 min-w-0 bg-transparent outline-none uppercase tracking-tight font-[600] text-[13px] leading-none text-[#7D5B59]"
+                value={textColor.replace('#', '').toUpperCase()}
                 onChange={(e) => {
-                  setTextColor(e.target.value);
-                  pushField('textColor', e.target.value);
+                  const hex = e.target.value.replace('#', '');
+                  if (/^[0-9a-fA-F]{6}$/.test(hex)) {
+                    const next = '#' + hex;
+                    setTextColor(next);
+                    pushField('textColor', next);
+                  }
                 }}
+                maxLength={6}
               />
-            </label>
-            <input
-              className="flex-1 min-w-0 bg-transparent outline-none uppercase tracking-tight font-[600] text-[13px] leading-none text-[#7D5B59]"
-              value={textColor.replace('#', '').toUpperCase()}
-              onChange={(e) => {
-                const hex = e.target.value.replace('#', '');
-                if (/^[0-9a-fA-F]{6}$/.test(hex)) {
-                  const next = '#' + hex;
-                  setTextColor(next);
-                  pushField('textColor', next);
-                }
-              }}
-              maxLength={6}
-            />
-            <div className="w-[2px] self-stretch -my-2 bg-white shrink-0 ml-auto" />
-            <div className="flex items-baseline gap-0.5 shrink-0 pl-1">
-              <input
-                className="w-[32px] bg-transparent outline-none text-right font-[600] text-[16px] leading-none text-[#7D5B59] [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
-                type="number"
-                min={0}
-                max={100}
-                value={textOpacity}
-                onChange={(e) => {
-                  const v = Number(e.target.value);
-                  setTextOpacity(v);
-                  pushField('textOpacity', v);
-                }}
-              />
-              <span className="font-[600] text-[16px] leading-none text-[#B98587]">%</span>
+              <div className="w-[2px] self-stretch -my-2 bg-white shrink-0 ml-auto" />
+              <div className="flex items-baseline gap-0.5 shrink-0 pl-1">
+                <input
+                  className="w-[32px] bg-transparent outline-none text-right font-[600] text-[16px] leading-none text-[#7D5B59] [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                  type="number"
+                  min={0}
+                  max={100}
+                  value={textOpacity}
+                  onChange={(e) => {
+                    const v = Number(e.target.value);
+                    setTextOpacity(v);
+                    pushField('textOpacity', v);
+                  }}
+                />
+                <span className="font-[600] text-[16px] leading-none text-[#B98587]">%</span>
+              </div>
             </div>
+            <button type="button" title="Revert Text and Icon" aria-label="Revert Text and Icon" onClick={revertText} className={colorIconBtnCls}>
+              <RevertIcon />
+            </button>
+            <button type="button" title="Invert Text and Icon" aria-label="Invert Text and Icon" onClick={invertText} className={colorIconBtnCls}>
+              <InvertIcon />
+            </button>
           </div>
         </div>
         <button

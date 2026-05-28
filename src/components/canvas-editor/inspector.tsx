@@ -32,6 +32,111 @@ function buildRgba(hex: string, opacity: number): string {
   return a >= 1 ? hex : `rgba(${r}, ${g}, ${b}, ${a})`;
 }
 
+// Invert a 6-digit hex color (Adobe-style negative).
+function invertHex(hex: string): string {
+  const r = 255 - parseInt(hex.slice(1, 3), 16);
+  const g = 255 - parseInt(hex.slice(3, 5), 16);
+  const b = 255 - parseInt(hex.slice(5, 7), 16);
+  return '#' + [r, g, b].map((v) => v.toString(16).padStart(2, '0')).join('');
+}
+
+// Revert (undo) icon.
+function RevertIcon() {
+  return (
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+      <path d="M3 12a9 9 0 1 0 3-6.7L3 8" />
+      <path d="M3 3v5h5" />
+    </svg>
+  );
+}
+
+// Invert (negative) icon — half-filled circle.
+function InvertIcon() {
+  return (
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+      <circle cx="12" cy="12" r="9" />
+      <path d="M12 3a9 9 0 0 1 0 18Z" fill="currentColor" />
+    </svg>
+  );
+}
+
+const colorIconBtn =
+  "h-[34px] w-[34px] shrink-0 rounded-[10px] flex items-center justify-center bg-[#F2E8E6B2] text-[#7D5B59] border border-[#EDE2DE] hover:bg-[#EDE2DE] transition-colors";
+
+/**
+ * A single color row: swatch + color picker, hex input, opacity %, and
+ * per-row Revert / Invert buttons. Stateless w.r.t. the element — it derives
+ * everything from `value` and reports edits via `onChange` (a full color string).
+ * Defined at module scope so React keeps the inputs mounted (no focus loss).
+ */
+function ColorRow(props: {
+  label: string;
+  value: string | undefined | null;
+  displayDefault: string;
+  onChange: (color: string) => void;
+  onRevert: () => void;
+  onInvert: () => void;
+}) {
+  const { hex, opacity } = parseColor(props.value, props.displayDefault);
+  const display = hex.replace("#", "").toUpperCase();
+
+  // Local text state lets the user type a partial hex without it being
+  // overwritten on every keystroke; we only commit when it's a valid 6-digit hex.
+  const [text, setText] = React.useState(display);
+  React.useEffect(() => {
+    setText(display);
+  }, [display]);
+
+  return (
+    <div>
+      <label className="block text-[11px] text-[#7D5B5980] font-[600] mb-1">{props.label}</label>
+      <div className="flex items-center gap-2">
+        <div className="flex items-center gap-3 bg-[#F2E8E6] rounded-[12px] px-3 py-2 flex-1 min-w-0">
+          <label
+            className="relative inline-block w-6 h-6 rounded-[5px] border border-[#EDE2DE] cursor-pointer overflow-hidden shrink-0"
+            style={{ backgroundColor: hex }}
+          >
+            <input
+              type="color"
+              className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+              value={hex}
+              onChange={(e) => props.onChange(buildRgba(e.target.value, opacity))}
+            />
+          </label>
+          <input
+            className="flex-1 min-w-0 bg-transparent outline-none uppercase tracking-tight font-[600] text-[13px] leading-none text-[#7D5B59]"
+            value={text}
+            maxLength={6}
+            onChange={(e) => {
+              const v = e.target.value.replace("#", "");
+              setText(v.toUpperCase());
+              if (/^[0-9a-fA-F]{6}$/.test(v)) props.onChange(buildRgba("#" + v, opacity));
+            }}
+          />
+          <div className="w-[2px] self-stretch -my-2 bg-white shrink-0 ml-auto" />
+          <div className="flex items-baseline gap-0.5 shrink-0 pl-1">
+            <input
+              className="w-[30px] bg-transparent outline-none text-right font-[600] text-[15px] leading-none text-[#7D5B59] [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+              type="number"
+              min={0}
+              max={100}
+              value={opacity}
+              onChange={(e) => props.onChange(buildRgba(hex, Number(e.target.value)))}
+            />
+            <span className="font-[600] text-[15px] leading-none text-[#B98587]">%</span>
+          </div>
+        </div>
+        <button type="button" title={`Revert ${props.label}`} aria-label={`Revert ${props.label}`} onClick={props.onRevert} className={colorIconBtn}>
+          <RevertIcon />
+        </button>
+        <button type="button" title={`Invert ${props.label}`} aria-label={`Invert ${props.label}`} onClick={props.onInvert} className={colorIconBtn}>
+          <InvertIcon />
+        </button>
+      </div>
+    </div>
+  );
+}
+
 /*************  ✨ Windsurf Command 🌟  *************/
 /**
  * Inspector component
@@ -49,6 +154,10 @@ export default function Inspector(props: {
   // element resizes uniformly (keeps proportions).
   const [lockUniform, setLockUniform] = React.useState(false);
 
+  // Snapshot of the element's colors captured the moment it is selected, so each
+  // "Revert" can restore that element's original Fill / Background / Border.
+  const colorSnapRef = React.useRef<{ key: string; fill: any; backgroundColor: any; stroke: any } | null>(null);
+
   const TEXT_STYLES = [
     { name: 'Heading', fontSize: 48, fontWeight: 'bold' },
     { name: 'Subheading', fontSize: 28, fontWeight: '600' },
@@ -63,6 +172,49 @@ export default function Inspector(props: {
 
   const bgParsed = parseColor(selected?.backgroundColor, '#F8F7F6');
   const strokeParsed = parseColor(selected?.stroke, '#F8F7F6');
+  const fillParsed = parseColor(selected?.fill, '#000000');
+
+  // Defaults used when an element had no original color to revert to.
+  const DEFAULT_FILL = '#000000';
+  const DEFAULT_BG = '#F8F7F6';
+  const DEFAULT_STROKE = '#F8F7F6';
+
+  // Images don't use a fill color — hide that row for them.
+  const supportsFill = !!selected && selected.type !== 'image';
+
+  // Capture the element's colors once per selection (keyed by a signature that
+  // doesn't change when only colors are edited) so Revert restores the original.
+  if (selected) {
+    const key = `${selected.id ?? ''}|${selected.type ?? ''}|${selected.name ?? ''}|${selected.width ?? ''}|${selected.height ?? ''}`;
+    if (!colorSnapRef.current || colorSnapRef.current.key !== key) {
+      colorSnapRef.current = {
+        key,
+        fill: selected.fill,
+        backgroundColor: selected.backgroundColor,
+        stroke: selected.stroke,
+      };
+    }
+  }
+  const orig = colorSnapRef.current;
+
+  // Quick actions (commented out for now — re-enable with the buttons below).
+  // const revertAll = () => {
+  //   const patch: Record<string, any> = {
+  //     backgroundColor: orig?.backgroundColor ?? DEFAULT_BG,
+  //     stroke: orig?.stroke ?? DEFAULT_STROKE,
+  //   };
+  //   if (supportsFill) patch.fill = orig?.fill ?? DEFAULT_FILL;
+  //   updateSelected(patch);
+  // };
+
+  // const invertAll = () => {
+  //   const patch: Record<string, any> = {
+  //     backgroundColor: buildRgba(invertHex(bgParsed.hex), bgParsed.opacity),
+  //     stroke: buildRgba(invertHex(strokeParsed.hex), strokeParsed.opacity),
+  //   };
+  //   if (supportsFill) patch.fill = buildRgba(invertHex(fillParsed.hex), fillParsed.opacity);
+  //   updateSelected(patch);
+  // };
 
   return (
     <aside className="w-80 bg-brand-cream border-[#EDE2DE] border-[1px] overflow-y-auto h-full">
@@ -476,87 +628,6 @@ export default function Inspector(props: {
               </button>
             </div>
 
-            {/* Fill color */}
-            <div>
-              <label className={labelCls}>Fill</label>
-              <div className="flex items-center gap-3 bg-[#F2E8E6] rounded-[12px] px-3 py-2">
-                <label
-                  className="relative inline-block w-6 h-6 rounded-[5px] border border-[#EDE2DE] cursor-pointer overflow-hidden shrink-0"
-                  style={{ backgroundColor: selected.fill ?? "#000000" }}
-                >
-                  <input
-                    type="color"
-                    className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
-                    value={selected.fill ?? "#000000"}
-                    onChange={(e) => updateSelected({ fill: e.target.value })}
-                  />
-                </label>
-                <input
-                  className="flex-1 min-w-0 bg-transparent outline-none uppercase tracking-tight font-[600] text-[13px] leading-none text-[#7D5B59]"
-                  value={(selected.fill ?? "#000000").replace("#", "").toUpperCase()}
-                  onChange={(e) => updateSelected({ fill: "#" + e.target.value.replace("#", "") })}
-                  maxLength={6}
-                />
-                <div className="w-[2px] self-stretch -my-2 bg-white shrink-0 ml-auto" />
-                <div className="flex items-baseline gap-0.5 shrink-0 pl-1">
-                  <input
-                    className="w-[32px] bg-transparent outline-none text-right font-[600] text-[16px] leading-none text-[#7D5B59] [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
-                    type="number"
-                    min={0}
-                    max={100}
-                    value={Math.round((selected.opacity ?? 1) * 100)}
-                    onChange={(e) =>
-                      updateSelected({ opacity: Number(e.target.value) / 100 })
-                    }
-                  />
-                  <span className="font-[600] text-[16px] leading-none text-[#B98587]">%</span>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* ── Element Style ──────────────────────────────────── */}
-          <div className={sectionCls}>
-            <h5 className="font-[600] text-[13px] text-[#7D5B59]">Element Style</h5>
-
-            <div>
-              <label className={labelCls}>Background Color</label>
-              <div className="flex items-center gap-3 bg-[#F2E8E6] rounded-[12px] px-3 py-2">
-                <label
-                  className="relative inline-block w-6 h-6 rounded-[5px] border border-[#EDE2DE] cursor-pointer overflow-hidden shrink-0"
-                  style={{ backgroundColor: bgParsed.hex }}
-                >
-                  <input
-                    type="color"
-                    className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
-                    value={bgParsed.hex}
-                    onChange={(e) => updateSelected({ backgroundColor: buildRgba(e.target.value, bgParsed.opacity) })}
-                  />
-                </label>
-                <input
-                  className="flex-1 min-w-0 bg-transparent outline-none uppercase tracking-tight font-[600] text-[13px] leading-none text-[#7D5B59]"
-                  value={bgParsed.hex.replace("#", "").toUpperCase()}
-                  onChange={(e) => {
-                    const hex = e.target.value.replace("#", "");
-                    if (/^[0-9a-fA-F]{6}$/.test(hex))
-                      updateSelected({ backgroundColor: buildRgba("#" + hex, bgParsed.opacity) });
-                  }}
-                  maxLength={6}
-                />
-                <div className="w-[2px] self-stretch -my-2 bg-white shrink-0 ml-auto" />
-                <div className="flex items-baseline gap-0.5 shrink-0 pl-1">
-                  <input
-                    className="w-[32px] bg-transparent outline-none text-right font-[600] text-[16px] leading-none text-[#7D5B59] [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
-                    type="number"
-                    min={0}
-                    max={100}
-                    value={bgParsed.opacity}
-                    onChange={(e) => updateSelected({ backgroundColor: buildRgba(bgParsed.hex, Number(e.target.value)) })}
-                  />
-                  <span className="font-[600] text-[16px] leading-none text-[#B98587]">%</span>
-                </div>
-              </div>
-            </div>
           </div>
 
           {/* ── Corner Radius ──────────────────────────────────── */}
@@ -665,45 +736,6 @@ export default function Inspector(props: {
             </div>
 
             <div>
-              <label className={labelCls}>Color</label>
-              <div className="flex items-center gap-3 bg-[#F2E8E6] rounded-[12px] px-3 py-2">
-                <label
-                  className="relative inline-block w-6 h-6 rounded-[5px] border border-[#EDE2DE] cursor-pointer overflow-hidden shrink-0"
-                  style={{ backgroundColor: strokeParsed.hex }}
-                >
-                  <input
-                    type="color"
-                    className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
-                    value={strokeParsed.hex}
-                    onChange={(e) => updateSelected({ stroke: buildRgba(e.target.value, strokeParsed.opacity) })}
-                  />
-                </label>
-                <input
-                  className="flex-1 min-w-0 bg-transparent outline-none uppercase tracking-tight font-[600] text-[13px] leading-none text-[#7D5B59]"
-                  value={strokeParsed.hex.replace("#", "").toUpperCase()}
-                  onChange={(e) => {
-                    const hex = e.target.value.replace("#", "");
-                    if (/^[0-9a-fA-F]{6}$/.test(hex))
-                      updateSelected({ stroke: buildRgba("#" + hex, strokeParsed.opacity) });
-                  }}
-                  maxLength={6}
-                />
-                <div className="w-[2px] self-stretch -my-2 bg-white shrink-0 ml-auto" />
-                <div className="flex items-baseline gap-0.5 shrink-0 pl-1">
-                  <input
-                    className="w-[32px] bg-transparent outline-none text-right font-[600] text-[16px] leading-none text-[#7D5B59] [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
-                    type="number"
-                    min={0}
-                    max={100}
-                    value={strokeParsed.opacity}
-                    onChange={(e) => updateSelected({ stroke: buildRgba(strokeParsed.hex, Number(e.target.value)) })}
-                  />
-                  <span className="font-[600] text-[16px] leading-none text-[#B98587]">%</span>
-                </div>
-              </div>
-            </div>
-
-            <div>
               <label className={labelCls}>Box Shadow</label>
               <input
                 className={inputCls}
@@ -722,6 +754,63 @@ export default function Inspector(props: {
                 onChange={(e) => updateSelected({ backgroundGradient: e.target.value })}
               />
             </div>
+          </div>
+
+          {/* ── Color Options ──────────────────────────────────── */}
+          <div className={sectionCls}>
+            <h5 className="font-[600] text-[13px] text-[#7D5B59]">Color Options</h5>
+
+            {/* Quick actions — affect all colors at once */}
+            {/* <div>
+              <label className={labelCls}>Quick Actions</label>
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  title="Revert All Colors"
+                  onClick={revertAll}
+                  className="flex-1 flex items-center justify-center gap-1.5 rounded-[10px] px-3 py-[7px] text-[12px] font-[600] bg-[#F2E8E6B2] text-[#7D5B59] border border-[#EDE2DE] hover:bg-[#EDE2DE] transition-colors"
+                >
+                  <RevertIcon /> Revert All
+                </button>
+                <button
+                  type="button"
+                  title="Invert All Colors"
+                  onClick={invertAll}
+                  className="flex-1 flex items-center justify-center gap-1.5 rounded-[10px] px-3 py-[7px] text-[12px] font-[600] bg-[#F2E8E6B2] text-[#7D5B59] border border-[#EDE2DE] hover:bg-[#EDE2DE] transition-colors"
+                >
+                  <InvertIcon /> Invert All
+                </button>
+              </div>
+            </div> */}
+
+            {supportsFill && (
+              <ColorRow
+                label="Fill"
+                value={selected.fill}
+                displayDefault={DEFAULT_FILL}
+                onChange={(c) => updateSelected({ fill: c })}
+                onRevert={() => updateSelected({ fill: orig?.fill ?? DEFAULT_FILL })}
+                onInvert={() => updateSelected({ fill: buildRgba(invertHex(fillParsed.hex), fillParsed.opacity) })}
+              />
+            )}
+
+            <ColorRow
+              label="Background"
+              value={selected.backgroundColor}
+              displayDefault={DEFAULT_BG}
+              onChange={(c) => updateSelected({ backgroundColor: c })}
+              onRevert={() => updateSelected({ backgroundColor: orig?.backgroundColor ?? DEFAULT_BG })}
+              onInvert={() => updateSelected({ backgroundColor: buildRgba(invertHex(bgParsed.hex), bgParsed.opacity) })}
+            />
+
+            <ColorRow
+              label="Border"
+              value={selected.stroke}
+              displayDefault={DEFAULT_STROKE}
+              onChange={(c) => updateSelected({ stroke: c })}
+              onRevert={() => updateSelected({ stroke: orig?.stroke ?? DEFAULT_STROKE })}
+              onInvert={() => updateSelected({ stroke: buildRgba(invertHex(strokeParsed.hex), strokeParsed.opacity) })}
+            />
           </div>
 
           {/* ── Appearance ─────────────────────────────────────── */}
