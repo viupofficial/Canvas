@@ -1,5 +1,6 @@
 // updated
 import React from "react";
+import { FONT_GROUPS } from "@/src/lib/fonts";
 
 // Parse any CSS color (hex3/6/8, rgb, rgba) into { hex, opacity 0-100 }.
 function parseColor(color: string | undefined | null, defaultHex = '#000000'): { hex: string; opacity: number } {
@@ -389,24 +390,14 @@ export default function Inspector(props: {
                   value={selected.fontFamily ?? "Arial"}
                   onChange={(e) => updateSelected({ fontFamily: e.target.value })}
                 >
-                  {[
-                    "Arial",
-                    "Times New Roman",
-                    "Georgia",
-                    "Poppins",
-                    "Montserrat",
-                    "Roboto",
-                    "Inter",
-                    "Open Sans",
-                    "Playfair Display",
-                    "Pacifico",
-                    "Alex Brush",
-                    "Lato",
-                    "Oswald",
-                  ].map((f) => (
-                    <option key={f} value={f}>
-                      {f}
-                    </option>
+                  {FONT_GROUPS.map((group) => (
+                    <optgroup key={group.label} label={group.label}>
+                      {group.fonts.map((f) => (
+                        <option key={f} value={f} style={{ fontFamily: f }}>
+                          {f}
+                        </option>
+                      ))}
+                    </optgroup>
                   ))}
                 </select>
               </div>

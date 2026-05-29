@@ -9,13 +9,14 @@ import React, {
   useState,
 } from "react";
 import type { Canvas as FabricCanvas } from "fabric";
-import { Copy, Trash, Trash2, ClipboardPaste, ArrowUpToLine, ArrowDownToLine, Eye, EyeOff, X } from "lucide-react";
+import { Copy, Trash, Trash2, ClipboardPaste, ArrowUpToLine, ArrowDownToLine, Eye, EyeOff, X, Pencil, Crop, ImageUp, ArrowUp, ArrowDown, Type } from "lucide-react";
 import EventFooter from "../components/EventFooter";
 import '../app/globals.css'
 import TemplateList from "@/src/components/template-list";
 import { envelopePage } from "@/src/components/template-list/EnvelopeTemplate";
 import { useEventDataOptional } from "@/src/store/EventDataContext";
 import { useFabricEventSync } from "@/src/hooks/useFabricEventSync";
+import { FONT_GROUPS, loadGoogleFont, collectFontFamilies, preloadFonts } from "@/src/lib/fonts";
 export type EditorHandle = {
   undo: () => void;
   redo: () => void;
@@ -46,6 +47,11 @@ export type EditorHandle = {
   addBorder: (url: string) => void;
   setBackgroundColor: (color: string) => void;
   previewAnimation: (type: string) => void;
+  getActiveImageSrc: () => string | null;
+  replaceActiveImage: (dataUrl: string) => void;
+  isActiveObjectImage: () => boolean;
+  getProjectData: () => { pages: any[]; currentPage: number; musicUrl: string | null };
+  getThumbnail: () => string;
 }
 const MAX_HISTORY = 50;
 const HISTORY_DEBOUNCE_MS = 120;
@@ -72,8 +78,12 @@ const FABRIC_EXPORT_PROPS = [
 
 const CanvasEditor = forwardRef<
   EditorHandle, 
-  { 
+  {
     onSelectionChange?: (obj: any | null) => void;
+    onEditImage?: (src: string, opts?: { crop?: boolean }) => void;
+    onCanvasChange?: () => void;
+    initialPages?: any[] | null;
+    initialMusicUrl?: string | null;
     contacts: any[];
     moneyGift: any;
     calendar: any;
@@ -88,13 +98,15 @@ const CanvasEditor = forwardRef<
 >((props, ref) => {
   const canvasEl = useRef<HTMLCanvasElement | null>(null);
   const fabricRef = useRef<FabricCanvas | null>(null);
-  const [pages, setPages] = useState<any[]>([envelopePage]);
+  const [pages, setPages] = useState<any[]>(
+    props.initialPages && props.initialPages.length ? props.initialPages : [envelopePage]
+  );
 const [currentPage, setCurrentPage] = useState(0);
   const currentPageRef = useRef(0);
   const fabricModuleRef = useRef<any>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [isLoaded, setIsLoaded] = useState(false);
-  const [musicUrl, setMusicUrl] = useState<string | null>(null);
+  const [musicUrl, setMusicUrl] = useState<string | null>(props.initialMusicUrl ?? null);
   // Per-page history. Map<pageIndex, {undo, redo}>. Top of `undo` is always the CURRENT state.
   const historiesRef = useRef<Map<number, PageHistory>>(new Map());
   // True while we're programmatically loading canvas content — blocks event-driven snapshots.
@@ -104,15 +116,26 @@ const [currentPage, setCurrentPage] = useState(0);
   const musicInputRef = useRef<HTMLInputElement | null>(null);
   const countdownIntervalRef = useRef<ReturnType<typeof window.setInterval> | null>(null);
   const globalBordersRef = useRef<{ url: string; id: string }[]>([]);
-  const [overlay, setOverlay] = useState<{ left: number; top: number; width: number; height: number } | null>(null);
+  const [overlay, setOverlay] = useState<{ left: number; top: number; width: number; height: number; isImage: boolean; isText: boolean; fontFamily: string } | null>(null);
+  const [fontMenuOpen, setFontMenuOpen] = useState(false);
   // Rendered canvas box relative to its wrap (position, display size, fit-scale).
   // Used to anchor the floating event footer to the scaled canvas.
   const [canvasBox, setCanvasBox] = useState<{ left: number; top: number; width: number; height: number; scale: number } | null>(null);
   const [isDragOver, setIsDragOver] = useState(false);
   const [zoom, setZoom] = useState(1);
   const zoomRef = useRef(1);
-  const [contextMenu, setContextMenu] = useState<{ x: number; y: number; hidden: boolean } | null>(null);
+  const [contextMenu, setContextMenu] = useState<{ x: number; y: number; hidden: boolean; isImage: boolean } | null>(null);
   const clipboardRef = useRef<any>(null);
+  // The image object currently being edited/replaced. Held in a ref so the edit
+  // survives selection changes while the editor modal is open.
+  const editingImageRef = useRef<any>(null);
+  const replaceInputRef = useRef<HTMLInputElement | null>(null);
+  // Keep the latest onEditImage callback reachable from stable ([]) handlers.
+  const onEditImageRef = useRef(props.onEditImage);
+  onEditImageRef.current = props.onEditImage;
+  // Same pattern for the autosave change notifier.
+  const onCanvasChangeRef = useRef(props.onCanvasChange);
+  onCanvasChangeRef.current = props.onCanvasChange;
   const toggleFullscreenRef = useRef<() => void>(() => {});
   const textToolRef = useRef(false);
   const textToolStartRef = useRef<{ x: number; y: number } | null>(null);
@@ -154,7 +177,17 @@ const [currentPage, setCurrentPage] = useState(0);
 
     try {
       const rect = active.getBoundingRect();
-      setOverlay({ left: rect.left, top: rect.top, width: rect.width, height: rect.height });
+      const type = (active as any).type;
+      const isText = type === 'textbox' || type === 'text' || type === 'i-text';
+      setOverlay({
+        left: rect.left,
+        top: rect.top,
+        width: rect.width,
+        height: rect.height,
+        isImage: type === 'image',
+        isText,
+        fontFamily: (active as any).fontFamily ?? 'Arial',
+      });
     } catch (e) {
       setOverlay(null);
     }
@@ -217,6 +250,14 @@ const [currentPage, setCurrentPage] = useState(0);
       canvas.renderAll();
       isRestoringRef.current = false;
       onDone?.();
+      // Webfonts referenced by the loaded design may not be ready yet; once they
+      // are, repaint so text is measured/rendered against the real face.
+      const families = collectFontFamilies(json);
+      if (families.length) {
+        preloadFonts(families).then(() => {
+          fabricRef.current?.requestRenderAll();
+        });
+      }
     };
 
     try {
@@ -361,6 +402,18 @@ const [currentPage, setCurrentPage] = useState(0);
       if (!active) return;
       active.set(props);
       canvas.requestRenderAll();
+      // A font-family change needs the webfont loaded, then a re-measure so the
+      // text box reflows against the real glyphs (Inspector path).
+      if (props.fontFamily) {
+        loadGoogleFont(props.fontFamily).then(() => {
+          const obj = canvas.getActiveObject();
+          if (obj && (obj as any).fontFamily === props.fontFamily) {
+            (obj as any).initDimensions?.();
+            obj.setCoords?.();
+            canvas.requestRenderAll();
+          }
+        });
+      }
       pushSnapshot();
     },
     deleteActiveObject: () => {
@@ -442,6 +495,42 @@ const [currentPage, setCurrentPage] = useState(0);
     },
     previewAnimation: (type: string) => {
       previewAnimation(type);
+    },
+    getActiveImageSrc: () => {
+      const canvas = fabricRef.current;
+      if (!canvas) return null;
+      const obj = canvas.getActiveObject();
+      if (!obj || (obj as any).type !== 'image') return null;
+      editingImageRef.current = obj;
+      return (obj as any).getSrc?.() ?? (obj as any)._element?.src ?? null;
+    },
+    isActiveObjectImage: () => {
+      const canvas = fabricRef.current;
+      const obj = canvas?.getActiveObject();
+      return !!obj && (obj as any).type === 'image';
+    },
+    replaceActiveImage: (dataUrl: string) => {
+      const obj = editingImageRef.current ?? fabricRef.current?.getActiveObject();
+      replaceObjectImage(obj, dataUrl);
+    },
+    getProjectData: () => {
+      const canvas = fabricRef.current;
+      const currentJson = canvas ? serializeCanvas(canvas) : null;
+      const exportedPages = pages.map((page, index) =>
+        index === currentPage ? (currentJson ?? page ?? null) : (page ?? null)
+      );
+      return { pages: exportedPages, currentPage, musicUrl };
+    },
+    getThumbnail: () => {
+      const canvas = fabricRef.current;
+      if (!canvas) return "";
+      try {
+        // Lightweight: small multiplier + JPEG keeps the dataURL to a few KB.
+        return canvas.toDataURL({ format: "jpeg", quality: 0.6, multiplier: 0.25 });
+      } catch (e) {
+        console.error("[CanvasEditor] thumbnail export failed", e);
+        return "";
+      }
     },
   }));
 
@@ -555,6 +644,7 @@ const [currentPage, setCurrentPage] = useState(0);
             x: opt.e.clientX,
             y: opt.e.clientY,
             hidden: target.visible === false,
+            isImage: target.type === 'image',
           });
         });
 
@@ -626,6 +716,7 @@ const [currentPage, setCurrentPage] = useState(0);
           if (isRestoringRef.current) return;
           schedulePush();
           saveCurrentPage(currentPageRef.current);
+          onCanvasChangeRef.current?.();
         };
 
         canvas.on("object:added", onChange);
@@ -1076,6 +1167,67 @@ const [currentPage, setCurrentPage] = useState(0);
     });
   }, []);
 
+  const bringToFrontFromOverlay = useCallback(() => {
+    const c = fabricRef.current;
+    if (!c) return;
+    const a = c.getActiveObject();
+    if (!a) return;
+    const objs = c.getObjects();
+    (c as any).moveObjectTo(a, objs.length - 1);
+    c.requestRenderAll();
+    pushSnapshot();
+    saveCurrentPage(currentPageRef.current);
+    updateOverlayFromActive();
+  }, [updateOverlayFromActive]);
+
+  const sendToBackFromOverlay = useCallback(() => {
+    const c = fabricRef.current;
+    if (!c) return;
+    const a = c.getActiveObject();
+    if (!a) return;
+    (c as any).moveObjectTo(a, 0);
+    c.requestRenderAll();
+    pushSnapshot();
+    saveCurrentPage(currentPageRef.current);
+    updateOverlayFromActive();
+  }, [updateOverlayFromActive]);
+
+  const setActiveFont = useCallback((font: string) => {
+    const c = fabricRef.current;
+    if (!c) return;
+    const a = c.getActiveObject();
+    if (!a) return;
+    a.set({ fontFamily: font });
+    c.requestRenderAll();
+    setOverlay((prev) => (prev ? { ...prev, fontFamily: font } : prev));
+    // Re-measure/repaint once the webfont is actually ready (Fabric otherwise
+    // lays the text out against the fallback face).
+    loadGoogleFont(font).then(() => {
+      const obj = c.getActiveObject();
+      if (obj && (obj as any).fontFamily === font) {
+        (obj as any).initDimensions?.();
+        obj.setCoords?.();
+        c.requestRenderAll();
+        updateOverlayFromActive();
+      }
+    });
+    pushSnapshot();
+    saveCurrentPage(currentPageRef.current);
+  }, [updateOverlayFromActive]);
+
+  // Close the inline font menu whenever the selection is gone or non-text.
+  useEffect(() => {
+    if (!overlay || !overlay.isText) setFontMenuOpen(false);
+  }, [overlay]);
+
+  // Dismiss the font menu on any outside click (its own clicks stopPropagation).
+  useEffect(() => {
+    if (!fontMenuOpen) return;
+    const onDown = () => setFontMenuOpen(false);
+    window.addEventListener('mousedown', onDown);
+    return () => window.removeEventListener('mousedown', onDown);
+  }, [fontMenuOpen]);
+
   const closeContextMenu = useCallback(() => setContextMenu(null), []);
 
   const ctxCopy = useCallback(() => {
@@ -1140,6 +1292,85 @@ const [currentPage, setCurrentPage] = useState(0);
     pushSnapshot();
     setContextMenu(null);
   }, []);
+
+  // Replace `obj`'s pixels with a new image built from `dataUrl`, preserving its
+  // position, footprint (displayed width/height), rotation, flips, z-index, and
+  // exported metadata. Used by both the editor's Apply and "Replace image".
+  const replaceObjectImage = useCallback((obj: any, dataUrl: string) => {
+    const canvas = fabricRef.current;
+    const fabric = fabricModuleRef.current;
+    if (!canvas || !fabric || !obj || !dataUrl) return;
+
+    const idx = canvas.getObjects().indexOf(obj);
+    const oldW = typeof obj.getScaledWidth === 'function' ? obj.getScaledWidth() : (obj.width ?? 0) * (obj.scaleX ?? 1);
+    const oldH = typeof obj.getScaledHeight === 'function' ? obj.getScaledHeight() : (obj.height ?? 0) * (obj.scaleY ?? 1);
+
+    fabric.Image.fromURL(dataUrl).then((img: any) => {
+      const nW = img.width || 1;
+      const nH = img.height || 1;
+      img.set({
+        left: obj.left,
+        top: obj.top,
+        angle: obj.angle ?? 0,
+        originX: obj.originX ?? 'left',
+        originY: obj.originY ?? 'top',
+        flipX: obj.flipX ?? false,
+        flipY: obj.flipY ?? false,
+        skewX: obj.skewX ?? 0,
+        skewY: obj.skewY ?? 0,
+        scaleX: oldW > 0 ? oldW / nW : (obj.scaleX ?? 1),
+        scaleY: oldH > 0 ? oldH / nH : (obj.scaleY ?? 1),
+      });
+      // Preserve exported metadata (action, animation, id, name, etc.).
+      FABRIC_EXPORT_PROPS.forEach((p) => {
+        if ((obj as any)[p] !== undefined) (img as any)[p] = (obj as any)[p];
+      });
+      canvas.remove(obj);
+      canvas.add(img);
+      if (idx >= 0) (canvas as any).moveObjectTo?.(img, idx);
+      canvas.setActiveObject(img);
+      canvas.requestRenderAll();
+      pushSnapshot();
+      saveCurrentPage(currentPageRef.current);
+      editingImageRef.current = null;
+    }).catch((err: any) => console.error('Failed to replace image', err));
+  }, []);
+
+  // Open the external editor modal for the active image (or a right-clicked one).
+  const requestEditActiveImage = useCallback((crop = false) => {
+    const canvas = fabricRef.current;
+    if (!canvas) return;
+    const obj = canvas.getActiveObject();
+    if (!obj || (obj as any).type !== 'image') return;
+    editingImageRef.current = obj;
+    const src = (obj as any).getSrc?.() ?? (obj as any)._element?.src;
+    if (!src) return;
+    setContextMenu(null);
+    onEditImageRef.current?.(src, { crop });
+  }, []);
+
+  const ctxReplaceImage = useCallback(() => {
+    const canvas = fabricRef.current;
+    const obj = canvas?.getActiveObject();
+    if (!obj || (obj as any).type !== 'image') return;
+    editingImageRef.current = obj;
+    setContextMenu(null);
+    replaceInputRef.current?.click();
+  }, []);
+
+  const handleReplaceFile = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    const input = e.currentTarget;
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      const dataUrl = reader.result as string;
+      const obj = editingImageRef.current ?? fabricRef.current?.getActiveObject();
+      replaceObjectImage(obj, dataUrl);
+      input.value = '';
+    };
+    reader.readAsDataURL(file);
+  }, [replaceObjectImage]);
 
   useEffect(() => {
     if (!contextMenu) return;
@@ -1718,6 +1949,13 @@ const startCountdown = (canvas: FabricCanvas) => {
         onChange={handleMusic}
         style={{ display: "none" }}
       />
+      <input
+        ref={replaceInputRef}
+        type="file"
+        accept="image/*"
+        onChange={handleReplaceFile}
+        style={{ display: "none" }}
+      />
 
       <div ref={containerRef} className="flex-grow border border-dashed border-neutral-300 rounded overflow-hidden flex flex-col min-h-0 min-w-0">
         <div className="flex justify-center items-center p-4 bg-neutral-50">
@@ -1781,6 +2019,65 @@ const startCountdown = (canvas: FabricCanvas) => {
                 transform: 'translate(-50%, -50%)',
               }}
             >
+              {overlay.isImage && (
+                <button
+                  onClick={(e) => { e.stopPropagation(); requestEditActiveImage(false); }}
+                  aria-label="Edit selected image"
+                  className="bg-white text-black rounded-full p-1 border border-neutral-300 hover:bg-neutral-100 cursor-pointer shadow"
+                >
+                  <Pencil size={14} />
+                </button>
+              )}
+              {overlay.isText && (
+                <div className="relative" onMouseDown={(e) => e.stopPropagation()}>
+                  <button
+                    onClick={(e) => { e.stopPropagation(); setFontMenuOpen((o) => !o); }}
+                    aria-label="Change font"
+                    title="Change font"
+                    className="bg-white text-black rounded-full p-1 border border-neutral-300 hover:bg-neutral-100 cursor-pointer shadow"
+                  >
+                    <Type size={14} />
+                  </button>
+                  {fontMenuOpen && (
+                    <div className="absolute top-full right-0 mt-1 max-h-64 w-[180px] overflow-auto bg-white border border-neutral-200 rounded-lg shadow-xl py-1 z-30 text-sm">
+                      {FONT_GROUPS.map((group) => (
+                        <div key={group.label}>
+                          <div className="px-3 pt-2 pb-0.5 text-[10px] font-semibold uppercase tracking-wide text-neutral-400 sticky top-0 bg-white">
+                            {group.label}
+                          </div>
+                          {group.fonts.map((f) => (
+                            <button
+                              key={f}
+                              onClick={(e) => { e.stopPropagation(); setActiveFont(f); setFontMenuOpen(false); }}
+                              className={`w-full text-left px-3 py-1.5 hover:bg-neutral-100 cursor-pointer truncate ${overlay.fontFamily === f ? 'bg-neutral-100 font-semibold' : ''}`}
+                              style={{ fontFamily: f }}
+                              onMouseEnter={() => loadGoogleFont(f)}
+                            >
+                              {f}
+                            </button>
+                          ))}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+              <button
+                onClick={(e) => { e.stopPropagation(); bringToFrontFromOverlay(); }}
+                aria-label="Send to front"
+                title="Send to front"
+                className="bg-white text-black rounded-full p-1 border border-neutral-300 hover:bg-neutral-100 cursor-pointer shadow"
+              >
+                <ArrowUpToLine size={14} />
+              </button>
+              <button
+                onClick={(e) => { e.stopPropagation(); sendToBackFromOverlay(); }}
+                aria-label="Send to back"
+                title="Send to back"
+                className="bg-white text-black rounded-full p-1 border border-neutral-300 hover:bg-neutral-100 cursor-pointer shadow"
+              >
+                <ArrowDownToLine size={14} />
+              </button>
               <button
                 onClick={(e) => { e.stopPropagation(); cloneFromOverlay(); }}
                 aria-label="Clone selected object"
@@ -1804,6 +2101,69 @@ const startCountdown = (canvas: FabricCanvas) => {
               onMouseDown={(e) => e.stopPropagation()}
               onContextMenu={(e) => e.preventDefault()}
             >
+              {contextMenu.isImage && (
+                <>
+                  <button
+                    onClick={() => requestEditActiveImage(false)}
+                    className="w-full flex items-center gap-2.5 px-3 py-1.5 hover:bg-neutral-100 cursor-pointer"
+                  >
+                    <Pencil size={14} className="text-neutral-500" />
+                    Edit image
+                  </button>
+                  <button
+                    onClick={() => requestEditActiveImage(true)}
+                    className="w-full flex items-center gap-2.5 px-3 py-1.5 hover:bg-neutral-100 cursor-pointer"
+                  >
+                    <Crop size={14} className="text-neutral-500" />
+                    Crop
+                  </button>
+                  <button
+                    onClick={ctxReplaceImage}
+                    className="w-full flex items-center gap-2.5 px-3 py-1.5 hover:bg-neutral-100 cursor-pointer"
+                  >
+                    <ImageUp size={14} className="text-neutral-500" />
+                    Replace image
+                  </button>
+                  <button
+                    onClick={() => { cloneFromOverlay(); setContextMenu(null); }}
+                    className="w-full flex items-center gap-2.5 px-3 py-1.5 hover:bg-neutral-100 cursor-pointer"
+                  >
+                    <Copy size={14} className="text-neutral-500" />
+                    Duplicate
+                  </button>
+                  <div className="my-1 border-t border-neutral-100" />
+                  <button
+                    onClick={() => {
+                      const c = fabricRef.current; const a = c?.getActiveObject();
+                      if (c && a) { const objs = c.getObjects(); const i = objs.indexOf(a); if (i < objs.length - 1) { (c as any).moveObjectTo(a, i + 1); c.requestRenderAll(); pushSnapshot(); } }
+                      setContextMenu(null);
+                    }}
+                    className="w-full flex items-center gap-2.5 px-3 py-1.5 hover:bg-neutral-100 cursor-pointer"
+                  >
+                    <ArrowUp size={14} className="text-neutral-500" />
+                    Bring forward
+                  </button>
+                  <button
+                    onClick={() => {
+                      const c = fabricRef.current; const a = c?.getActiveObject();
+                      if (c && a) { const objs = c.getObjects(); const i = objs.indexOf(a); if (i > 0) { (c as any).moveObjectTo(a, i - 1); c.requestRenderAll(); pushSnapshot(); } }
+                      setContextMenu(null);
+                    }}
+                    className="w-full flex items-center gap-2.5 px-3 py-1.5 hover:bg-neutral-100 cursor-pointer"
+                  >
+                    <ArrowDown size={14} className="text-neutral-500" />
+                    Send backward
+                  </button>
+                  <button
+                    onClick={ctxDelete}
+                    className="w-full flex items-center gap-2.5 px-3 py-1.5 hover:bg-red-50 text-red-600 cursor-pointer"
+                  >
+                    <Trash2 size={14} />
+                    Delete
+                  </button>
+                  <div className="my-1 border-t border-neutral-100" />
+                </>
+              )}
               <button
                 onClick={ctxCopy}
                 className="w-full flex items-center justify-between gap-6 px-3 py-1.5 hover:bg-neutral-100 cursor-pointer"

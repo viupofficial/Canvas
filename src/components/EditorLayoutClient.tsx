@@ -16,6 +16,10 @@ export default function EditorLayoutClient({
   previewMode: previewModeProp,
   setPreviewMode: setPreviewModeProp,
   eventName,
+  onEditImage,
+  onCanvasChange,
+  initialPages,
+  initialMusicUrl,
 }: {
   editorRef?: React.RefObject<EditorHandle | null>,
   contacts: any[];
@@ -25,6 +29,10 @@ export default function EditorLayoutClient({
   previewMode?: "desktop" | "phone";
   setPreviewMode?: (mode: "desktop" | "phone") => void;
   eventName?: string;
+  onEditImage?: (src: string, opts?: { crop?: boolean }) => void;
+  onCanvasChange?: () => void;
+  initialPages?: any[] | null;
+  initialMusicUrl?: string | null;
 }) {
   const internalRef = useRef<EditorHandle | null>(null);
   const editorRef = editorRefProp ?? internalRef;
@@ -48,6 +56,10 @@ export default function EditorLayoutClient({
     <CanvasEditor
       ref={editorRef}
       onSelectionChange={onSelectionChange}
+      onEditImage={onEditImage}
+      onCanvasChange={onCanvasChange}
+      initialPages={initialPages}
+      initialMusicUrl={initialMusicUrl}
       contacts={contacts}
       moneyGift={moneyGift}
       calendar={calendar}

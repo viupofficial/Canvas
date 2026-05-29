@@ -108,9 +108,29 @@ const DEFAULT_PHOTOS: string[] = [
  
 ];
 
-function PhotoTab({ editorRef }: { editorRef?: React.RefObject<EditorHandle | null> }) {
-  const [images, setImages] = useState<string[]>([]);
+function PhotoTab({
+  editorRef,
+  onEditImage,
+}: {
+  editorRef?: React.RefObject<EditorHandle | null>;
+  onEditImage?: (src: string, onReplace: (dataUrl: string) => void) => void;
+}) {
+  // Single source of truth for the gallery — seeded with the default photos so
+  // edit / duplicate / delete can all operate in place by index.
+  const [photos, setPhotos] = useState<string[]>([...DEFAULT_PHOTOS]);
+  const [menu, setMenu] = useState<{ x: number; y: number; index: number } | null>(null);
   const fileInputRef = React.useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (!menu) return;
+    const close = () => setMenu(null);
+    window.addEventListener('mousedown', close);
+    window.addEventListener('scroll', close, true);
+    return () => {
+      window.removeEventListener('mousedown', close);
+      window.removeEventListener('scroll', close, true);
+    };
+  }, [menu]);
 
   const handleFiles = (files: FileList | null) => {
     if (!files) return;
@@ -118,16 +138,30 @@ function PhotoTab({ editorRef }: { editorRef?: React.RefObject<EditorHandle | nu
       if (!file.type.startsWith('image/')) return;
       const reader = new FileReader();
       reader.onload = () => {
-        setImages((prev) => [...prev, reader.result as string]);
+        setPhotos((prev) => [...prev, reader.result as string]);
       };
       reader.readAsDataURL(file);
     });
   };
 
   const addToCanvas = (src: string) => {
-    if (editorRef?.current?.addImageFromUrl) {
-      editorRef.current.addImageFromUrl(src);
-    }
+    editorRef?.current?.addImageFromUrl?.(src);
+  };
+
+  const replaceAt = (index: number, dataUrl: string) => {
+    setPhotos((prev) => prev.map((s, i) => (i === index ? dataUrl : s)));
+  };
+
+  const duplicateAt = (index: number) => {
+    setPhotos((prev) => {
+      const next = [...prev];
+      next.splice(index + 1, 0, prev[index]);
+      return next;
+    });
+  };
+
+  const deleteAt = (index: number) => {
+    setPhotos((prev) => prev.filter((_, i) => i !== index));
   };
 
   return (
@@ -148,25 +182,67 @@ function PhotoTab({ editorRef }: { editorRef?: React.RefObject<EditorHandle | nu
         + Upload Images
       </button>
       <div className="text-[11px] text-gray-400 text-center mb-2">
-        Double-click a photo to add it to the canvas.
+        Double-click to add to canvas. Right-click for more options.
       </div>
       <div className="grid grid-cols-2 gap-2">
-        {[...DEFAULT_PHOTOS, ...images].map((src, i) => (
+        {photos.map((src, i) => (
           <img
-            key={`${src}-${i}`}
+            key={`${src.slice(0, 32)}-${i}`}
             src={src}
             alt={`photo-${i}`}
             draggable
             onDoubleClick={() => addToCanvas(src)}
+            onContextMenu={(e) => {
+              e.preventDefault();
+              setMenu({ x: e.clientX, y: e.clientY, index: i });
+            }}
             onDragStart={(e) => {
               const payload = JSON.stringify({ type: 'image-url', url: src });
               try { e.dataTransfer.setData('application/json', payload); e.dataTransfer.effectAllowed = 'copy'; } catch (err) { }
             }}
             className="w-full h-24 object-cover rounded border cursor-pointer hover:opacity-80 transition bg-gray-50"
-            title="Double-click to add to canvas"
+            title="Double-click to add to canvas · Right-click for options"
           />
         ))}
       </div>
+
+      {menu && (
+        <div
+          className="fixed z-[60] min-w-[170px] bg-white border border-neutral-200 rounded-lg shadow-xl py-1.5 text-sm text-neutral-800 select-none"
+          style={{ left: menu.x, top: menu.y }}
+          onMouseDown={(e) => e.stopPropagation()}
+          onContextMenu={(e) => e.preventDefault()}
+        >
+          <button
+            onClick={() => { addToCanvas(photos[menu.index]); setMenu(null); }}
+            className="w-full text-left px-3 py-1.5 hover:bg-neutral-100 cursor-pointer"
+          >
+            Add to canvas
+          </button>
+          <button
+            onClick={() => {
+              const idx = menu.index;
+              setMenu(null);
+              onEditImage?.(photos[idx], (dataUrl) => replaceAt(idx, dataUrl));
+            }}
+            className="w-full text-left px-3 py-1.5 hover:bg-neutral-100 cursor-pointer"
+          >
+            Edit image
+          </button>
+          <button
+            onClick={() => { duplicateAt(menu.index); setMenu(null); }}
+            className="w-full text-left px-3 py-1.5 hover:bg-neutral-100 cursor-pointer"
+          >
+            Duplicate
+          </button>
+          <button
+            onClick={() => { deleteAt(menu.index); setMenu(null); }}
+            className="w-full text-left px-3 py-1.5 hover:bg-red-50 text-red-600 cursor-pointer"
+          >
+            Delete
+          </button>
+        </div>
+      )}
     </div>
   );
 }
@@ -815,10 +891,12 @@ export default function Sidebar({
   editorRef,
   isPremium = false,
   isPhonePreview = false,
+  onEditImage,
 }: {
   editorRef?: React.RefObject<EditorHandle | null>;
   isPremium?: boolean;
   isPhonePreview?: boolean;
+  onEditImage?: (src: string, onReplace: (dataUrl: string) => void) => void;
 }) {
   const [active, setActive] = useState<Tab | null>(null);
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
@@ -1067,7 +1145,7 @@ export default function Sidebar({
           </div>
         </div>
       ) : active === 'photo' ? (
-        <PhotoTab editorRef={editorRef} />
+        <PhotoTab editorRef={editorRef} onEditImage={onEditImage} />
       ) : active === 'music' ? (
         <MusicTab editorRef={editorRef} />
       ) : active === 'contact' ? (

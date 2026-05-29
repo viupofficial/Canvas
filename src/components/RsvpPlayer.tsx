@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { collectFontFamilies, preloadFonts } from "@/src/lib/fonts";
 
 export type EnvPos = {
   left: number;
@@ -241,6 +242,14 @@ export default function RsvpPlayer({ pages, envelope, musicUrl, borderUrl }: Rsv
             toRemove.forEach((o) => rc.remove(o));
             startAnimations(rc);
             rc.requestRenderAll();
+            // Webfonts used by this page may not be ready at first paint; load
+            // them, then repaint so text renders with the correct family.
+            const families = collectFontFamilies(pageData);
+            if (families.length) {
+              preloadFonts(families).then(() => {
+                if (!cancelled) rc.requestRenderAll();
+              });
+            }
           });
         }
       });
