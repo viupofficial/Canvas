@@ -9,7 +9,7 @@ import React, {
   useState,
 } from "react";
 import type { Canvas as FabricCanvas } from "fabric";
-import { Copy, Trash, Trash2, ClipboardPaste, ArrowUpToLine, ArrowDownToLine, Eye, EyeOff, X, Pencil, Crop, ImageUp, ArrowUp, ArrowDown, Type } from "lucide-react";
+import { Copy, Trash, Trash2, ClipboardPaste, ArrowUpToLine, ArrowDownToLine, Eye, EyeOff, X, Pencil, Crop, ImageUp, ArrowUp, ArrowDown, Type, Layers, ChevronDown } from "lucide-react";
 import EventFooter from "../components/EventFooter";
 import '../app/globals.css'
 import TemplateList from "@/src/components/template-list";
@@ -52,6 +52,17 @@ export type EditorHandle = {
   isActiveObjectImage: () => boolean;
   getProjectData: () => { pages: any[]; currentPage: number; musicUrl: string | null };
   getThumbnail: () => string;
+  // ── Layer tab ──────────────────────────────────────────────────────────────
+  // All scoped to the active page (the canvas only ever holds its objects).
+  getLayers: () => LayerInfo[];
+  selectLayer: (id: string) => void;
+  moveLayerUp: (id: string) => void;
+  moveLayerDown: (id: string) => void;
+  moveLayerToFront: (id: string) => void;
+  moveLayerToBack: (id: string) => void;
+  toggleLayerVisibility: (id: string) => void;
+  toggleLayerLock: (id: string) => void;
+  deleteLayer: (id: string) => void;
 }
 const MAX_HISTORY = 50;
 const HISTORY_DEBOUNCE_MS = 120;
@@ -73,7 +84,83 @@ const FABRIC_EXPORT_PROPS = [
   "id",
   "isBorder",
   "borderId",
+  "locked",
 ] as const;
+
+// Properties serialized for the lightweight `selected` snapshot handed to the Inspector.
+const SELECTION_PROPS = [
+  "type",
+  "left",
+  "top",
+  "scaleX",
+  "scaleY",
+  "angle",
+  "fill",
+  "fontSize",
+  "text",
+  "width",
+  "height",
+  ...FABRIC_EXPORT_PROPS,
+] as const;
+
+// One layer row as consumed by the Inspector's Layer tab. Derived from a Fabric
+// object on the *active page only* (the canvas never holds other pages' objects).
+export type LayerInfo = {
+  id: string;
+  type: string;
+  label: string;
+  visible: boolean;
+  locked: boolean;
+  isImage: boolean;
+};
+
+// Stable, collision-resistant id for Fabric objects that don't already have one.
+// Persisted via FABRIC_EXPORT_PROPS ("id"), so it survives page save/reload.
+let layerIdSeq = 0;
+const genLayerId = () => `layer_${Date.now().toString(36)}_${(layerIdSeq++).toString(36)}`;
+
+// Friendly fallback name from a Fabric object type.
+const friendlyType = (type?: string): string => {
+  switch ((type ?? "").toLowerCase()) {
+    case "textbox":
+    case "text":
+    case "i-text":
+      return "Text";
+    case "image":
+      return "Image";
+    case "rect":
+      return "Rectangle";
+    case "circle":
+      return "Circle";
+    case "ellipse":
+      return "Ellipse";
+    case "triangle":
+      return "Triangle";
+    case "line":
+      return "Line";
+    case "polygon":
+      return "Polygon";
+    case "polyline":
+      return "Polyline";
+    case "path":
+      return "Shape";
+    case "group":
+      return "Group";
+    default:
+      return "Layer";
+  }
+};
+
+// Base (un-numbered) label for a layer: explicit name → text snippet → type.
+const baseLayerLabel = (o: any): string => {
+  if (o?.name && o.name !== "__border__") return String(o.name);
+  const t = (o?.type ?? "").toLowerCase();
+  if ((t === "textbox" || t === "text" || t === "i-text") && o?.text) {
+    const s = String(o.text).replace(/\s+/g, " ").trim();
+    if (s) return s.length > 18 ? s.slice(0, 18) + "…" : s;
+  }
+  return friendlyType(o?.type);
+};
 
 
 const CanvasEditor = forwardRef<
@@ -82,6 +169,7 @@ const CanvasEditor = forwardRef<
     onSelectionChange?: (obj: any | null) => void;
     onEditImage?: (src: string, opts?: { crop?: boolean }) => void;
     onCanvasChange?: () => void;
+    onLayersChange?: () => void;
     initialPages?: any[] | null;
     initialMusicUrl?: string | null;
     contacts: any[];
@@ -114,10 +202,15 @@ const [currentPage, setCurrentPage] = useState(0);
   // Pending debounce timer for coalesced snapshots during rapid edits (drag, resize, etc.).
   const pendingPushRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const musicInputRef = useRef<HTMLInputElement | null>(null);
-  const countdownIntervalRef = useRef<ReturnType<typeof window.setInterval> | null>(null);
+  const countdownIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  // The date the countdown is ticking towards. Refreshed from the saved
+  // calendar date each time the countdown is (re)started.
+  const countdownTargetRef = useRef<Date | null>(null);
   const globalBordersRef = useRef<{ url: string; id: string }[]>([]);
   const [overlay, setOverlay] = useState<{ left: number; top: number; width: number; height: number; isImage: boolean; isText: boolean; fontFamily: string } | null>(null);
   const [fontMenuOpen, setFontMenuOpen] = useState(false);
+  // Selection-toolbar "Arrange" dropdown (stacking order).
+  const [arrangeMenuOpen, setArrangeMenuOpen] = useState(false);
   // Rendered canvas box relative to its wrap (position, display size, fit-scale).
   // Used to anchor the floating event footer to the scaled canvas.
   const [canvasBox, setCanvasBox] = useState<{ left: number; top: number; width: number; height: number; scale: number } | null>(null);
@@ -136,6 +229,10 @@ const [currentPage, setCurrentPage] = useState(0);
   // Same pattern for the autosave change notifier.
   const onCanvasChangeRef = useRef(props.onCanvasChange);
   onCanvasChangeRef.current = props.onCanvasChange;
+  // Fires whenever the active page's object list, order, visibility/lock, or
+  // selection changes — so the Inspector's Layer tab can refresh.
+  const onLayersChangeRef = useRef(props.onLayersChange);
+  onLayersChangeRef.current = props.onLayersChange;
   const toggleFullscreenRef = useRef<() => void>(() => {});
   const textToolRef = useRef(false);
   const textToolStartRef = useRef<{ x: number; y: number } | null>(null);
@@ -162,6 +259,15 @@ const [currentPage, setCurrentPage] = useState(0);
     },
     !!eventCtx && isLoaded,
   );
+
+  // Date the "Counting Days" countdown ticks towards. Prefer the live value
+  // edited in the Calendar sidebar (debounced); fall back to the date saved on
+  // the project. Saving a new date in the sidebar updates this and restarts
+  // the countdown via the effect below.
+  const calendarDate: string | null =
+    eventCtx?.debouncedEventData?.calendar?.date ??
+    (props.calendar?.date as string | undefined) ??
+    null;
 
   const updateOverlayFromActive = useCallback(() => {
     const canvas = fabricRef.current;
@@ -249,6 +355,9 @@ const [currentPage, setCurrentPage] = useState(0);
     const finish = () => {
       canvas.renderAll();
       isRestoringRef.current = false;
+      // The active page's object list just changed (page switch, undo/redo,
+      // template load) — refresh the Layer tab.
+      onLayersChangeRef.current?.();
       onDone?.();
       // Webfonts referenced by the loaded design may not be ready yet; once they
       // are, repaint so text is measured/rendered against the real face.
@@ -532,6 +641,154 @@ const [currentPage, setCurrentPage] = useState(0);
         return "";
       }
     },
+
+    // ── Layer tab ───────────────────────────────────────────────────────────
+    getLayers: () => {
+      const canvas = fabricRef.current;
+      if (!canvas) return [];
+      // Borders are managed separately (single, non-interactive, pinned to back).
+      const objs = canvas.getObjects().filter((o: any) => !o.isBorder);
+      objs.forEach((o: any) => { if (!o.id) o.id = genLayerId(); });
+      // Number duplicate labels (e.g. two "Rectangle" → "Rectangle 1/2").
+      const totals: Record<string, number> = {};
+      objs.forEach((o: any) => { const b = baseLayerLabel(o); totals[b] = (totals[b] ?? 0) + 1; });
+      const seen: Record<string, number> = {};
+      return objs.map((o: any) => {
+        const base = baseLayerLabel(o);
+        let label = base;
+        if (totals[base] > 1) { seen[base] = (seen[base] ?? 0) + 1; label = `${base} ${seen[base]}`; }
+        return {
+          id: o.id as string,
+          type: String(o.type ?? ""),
+          label,
+          visible: o.visible !== false,
+          locked: !!o.locked,
+          isImage: o.type === "image",
+        };
+      });
+    },
+    selectLayer: (id: string) => {
+      const canvas = fabricRef.current;
+      if (!canvas) return;
+      const obj = canvas.getObjects().find((o: any) => o.id === id) as any;
+      if (!obj || obj.selectable === false) return;
+      canvas.setActiveObject(obj);
+      canvas.requestRenderAll();
+      updateOverlayFromActive();
+      // setActiveObject doesn't fire selection events, so push the snapshot manually.
+      props.onSelectionChange?.(obj.toObject([...SELECTION_PROPS]));
+      onLayersChangeRef.current?.();
+    },
+    moveLayerUp: (id: string) => {
+      const canvas = fabricRef.current;
+      if (!canvas) return;
+      const objs = canvas.getObjects();
+      const obj = objs.find((o: any) => o.id === id);
+      if (!obj) return;
+      const idx = objs.indexOf(obj);
+      if (idx >= objs.length - 1) return; // already top-most
+      (canvas as any).moveObjectTo(obj, idx + 1);
+      canvas.requestRenderAll();
+      pushSnapshot();
+      saveCurrentPage(currentPageRef.current);
+      onLayersChangeRef.current?.();
+    },
+    moveLayerDown: (id: string) => {
+      const canvas = fabricRef.current;
+      if (!canvas) return;
+      const objs = canvas.getObjects();
+      const obj = objs.find((o: any) => o.id === id);
+      if (!obj) return;
+      const idx = objs.indexOf(obj);
+      // Don't drop behind a pinned border (lowest non-border slot is the floor).
+      const floor = Math.max(0, objs.findIndex((o: any) => !(o as any).isBorder));
+      if (idx <= floor) return;
+      (canvas as any).moveObjectTo(obj, idx - 1);
+      canvas.requestRenderAll();
+      pushSnapshot();
+      saveCurrentPage(currentPageRef.current);
+      onLayersChangeRef.current?.();
+    },
+    moveLayerToFront: (id: string) => {
+      const canvas = fabricRef.current;
+      if (!canvas) return;
+      const objs = canvas.getObjects();
+      const obj = objs.find((o: any) => o.id === id);
+      if (!obj) return;
+      (canvas as any).moveObjectTo(obj, objs.length - 1);
+      canvas.requestRenderAll();
+      pushSnapshot();
+      saveCurrentPage(currentPageRef.current);
+      onLayersChangeRef.current?.();
+    },
+    moveLayerToBack: (id: string) => {
+      const canvas = fabricRef.current;
+      if (!canvas) return;
+      const objs = canvas.getObjects();
+      const obj = objs.find((o: any) => o.id === id);
+      if (!obj) return;
+      const floor = Math.max(0, objs.findIndex((o: any) => !(o as any).isBorder));
+      (canvas as any).moveObjectTo(obj, floor);
+      canvas.requestRenderAll();
+      pushSnapshot();
+      saveCurrentPage(currentPageRef.current);
+      onLayersChangeRef.current?.();
+    },
+    toggleLayerVisibility: (id: string) => {
+      const canvas = fabricRef.current;
+      if (!canvas) return;
+      const obj = canvas.getObjects().find((o: any) => o.id === id) as any;
+      if (!obj) return;
+      obj.visible = obj.visible === false;
+      if (!obj.visible && canvas.getActiveObject() === obj) {
+        canvas.discardActiveObject();
+        props.onSelectionChange?.(null);
+      }
+      canvas.requestRenderAll();
+      pushSnapshot();
+      saveCurrentPage(currentPageRef.current);
+      onLayersChangeRef.current?.();
+    },
+    toggleLayerLock: (id: string) => {
+      const canvas = fabricRef.current;
+      if (!canvas) return;
+      const obj = canvas.getObjects().find((o: any) => o.id === id) as any;
+      if (!obj) return;
+      const locked = !obj.locked;
+      obj.locked = locked;
+      obj.selectable = !locked;
+      obj.evented = !locked;
+      obj.lockMovementX = locked;
+      obj.lockMovementY = locked;
+      obj.lockScalingX = locked;
+      obj.lockScalingY = locked;
+      obj.lockRotation = locked;
+      obj.hasControls = !locked;
+      if (locked && canvas.getActiveObject() === obj) {
+        canvas.discardActiveObject();
+        props.onSelectionChange?.(null);
+      }
+      canvas.requestRenderAll();
+      pushSnapshot();
+      saveCurrentPage(currentPageRef.current);
+      onLayersChangeRef.current?.();
+    },
+    deleteLayer: (id: string) => {
+      const canvas = fabricRef.current;
+      if (!canvas) return;
+      const obj = canvas.getObjects().find((o: any) => o.id === id) as any;
+      if (!obj) return;
+      if (canvas.getActiveObject() === obj) {
+        canvas.discardActiveObject();
+        props.onSelectionChange?.(null);
+      }
+      canvas.remove(obj);
+      canvas.requestRenderAll();
+      pushSnapshot();
+      saveCurrentPage(currentPageRef.current);
+      setOverlay(null);
+      onLayersChangeRef.current?.();
+    },
   }));
 
   useEffect(() => {
@@ -627,8 +884,13 @@ const [currentPage, setCurrentPage] = useState(0);
         const canvas = new fabric.Canvas(elAtMount, {
           preserveObjectStacking: true,
           backgroundColor: "#ffffff",
-          fireRightClick: true,
-          stopContextMenu: true,
+          // NOTE: stopContextMenu must stay false. When true, Fabric calls
+          // e.stopPropagation() on the native contextmenu event, which prevents
+          // it from ever bubbling to React's delegated listener — so our
+          // onContextMenu handler (which opens the menu) never fires. We
+          // preventDefault ourselves in handleCanvasContextMenu instead.
+          fireRightClick: false,
+          stopContextMenu: false,
         });
 
         canvas.on('mouse:down', (opt: any) => {
@@ -717,7 +979,15 @@ const [currentPage, setCurrentPage] = useState(0);
           schedulePush();
           saveCurrentPage(currentPageRef.current);
           onCanvasChangeRef.current?.();
+          onLayersChangeRef.current?.();
         };
+
+        // Stamp a stable id on every object as it enters the canvas (including
+        // during page/template restore) so the Layer tab has a reliable React key.
+        canvas.on("object:added", (e: any) => {
+          const o = e?.target;
+          if (o && !o.id) o.id = genLayerId();
+        });
 
         canvas.on("object:added", onChange);
         canvas.on("object:modified", onChange);
@@ -754,9 +1024,9 @@ const [currentPage, setCurrentPage] = useState(0);
           if (previewRestoreRef.current) { previewRestoreRef.current(); previewRestoreRef.current = null; }
         };
 
-        canvas.on('selection:created', () => { stopPreview(); onSelectionChange(); updateOverlayFromActive(); });
-        canvas.on('selection:updated', () => { stopPreview(); onSelectionChange(); updateOverlayFromActive(); });
-        canvas.on('selection:cleared', () => { stopPreview(); onSelectionChange(); setOverlay(null); });
+        canvas.on('selection:created', () => { stopPreview(); onSelectionChange(); updateOverlayFromActive(); onLayersChangeRef.current?.(); });
+        canvas.on('selection:updated', () => { stopPreview(); onSelectionChange(); updateOverlayFromActive(); onLayersChangeRef.current?.(); });
+        canvas.on('selection:cleared', () => { stopPreview(); onSelectionChange(); setOverlay(null); onLayersChangeRef.current?.(); });
 
         // Keep the overlay in sync while objects move/transform
         canvas.on('object:moving', () => { onSelectionChange(); updateOverlayFromActive(); });
@@ -933,7 +1203,7 @@ const [currentPage, setCurrentPage] = useState(0);
     return () => {
       mounted = false;
       if (countdownIntervalRef.current !== null) {
-        window.clearInterval(countdownIntervalRef.current);
+        clearInterval(countdownIntervalRef.current);
         countdownIntervalRef.current = null;
       }
       if (pendingPushRef.current != null) {
@@ -1192,6 +1462,39 @@ const [currentPage, setCurrentPage] = useState(0);
     updateOverlayFromActive();
   }, [updateOverlayFromActive]);
 
+  // One-step stacking moves for the selection toolbar.
+  const bringForwardFromOverlay = useCallback(() => {
+    const c = fabricRef.current;
+    if (!c) return;
+    const a = c.getActiveObject();
+    if (!a) return;
+    const objs = c.getObjects();
+    const idx = objs.indexOf(a);
+    if (idx >= objs.length - 1) return; // already top-most
+    (c as any).moveObjectTo(a, idx + 1);
+    c.requestRenderAll();
+    pushSnapshot();
+    saveCurrentPage(currentPageRef.current);
+    updateOverlayFromActive();
+  }, [updateOverlayFromActive]);
+
+  const sendBackwardFromOverlay = useCallback(() => {
+    const c = fabricRef.current;
+    if (!c) return;
+    const a = c.getActiveObject();
+    if (!a) return;
+    const objs = c.getObjects();
+    const idx = objs.indexOf(a);
+    // Don't drop behind a pinned border (lowest non-border slot is the floor).
+    const floor = Math.max(0, objs.findIndex((o: any) => !(o as any).isBorder));
+    if (idx <= floor) return;
+    (c as any).moveObjectTo(a, idx - 1);
+    c.requestRenderAll();
+    pushSnapshot();
+    saveCurrentPage(currentPageRef.current);
+    updateOverlayFromActive();
+  }, [updateOverlayFromActive]);
+
   const setActiveFont = useCallback((font: string) => {
     const c = fabricRef.current;
     if (!c) return;
@@ -1220,6 +1523,11 @@ const [currentPage, setCurrentPage] = useState(0);
     if (!overlay || !overlay.isText) setFontMenuOpen(false);
   }, [overlay]);
 
+  // Close the Arrange menu whenever the selection is cleared.
+  useEffect(() => {
+    if (!overlay) setArrangeMenuOpen(false);
+  }, [overlay]);
+
   // Dismiss the font menu on any outside click (its own clicks stopPropagation).
   useEffect(() => {
     if (!fontMenuOpen) return;
@@ -1228,7 +1536,61 @@ const [currentPage, setCurrentPage] = useState(0);
     return () => window.removeEventListener('mousedown', onDown);
   }, [fontMenuOpen]);
 
+  // Dismiss the Arrange menu on any outside click.
+  useEffect(() => {
+    if (!arrangeMenuOpen) return;
+    const onDown = () => setArrangeMenuOpen(false);
+    window.addEventListener('mousedown', onDown);
+    return () => window.removeEventListener('mousedown', onDown);
+  }, [arrangeMenuOpen]);
+
   const closeContextMenu = useCallback(() => setContextMenu(null), []);
+
+  // Native right-click handler on the canvas wrap. Fabric 7's `fireRightClick`
+  // mouse:down event is unreliable, so we resolve the target ourselves via
+  // findTarget (falling back to the current selection) and open our menu.
+  const handleCanvasContextMenu = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
+    const canvas = fabricRef.current;
+    if (!canvas) return;
+    e.preventDefault();
+
+    const objects = canvas.getObjects();
+    // Resolve what was right-clicked. findTarget can return non-object values
+    // across Fabric versions, so only accept something that's actually on the
+    // canvas. Fall back to the current selection (the user usually clicks first).
+    let target: any = null;
+    try {
+      const found = (canvas as any).findTarget?.(e.nativeEvent);
+      if (found && objects.includes(found)) target = found;
+    } catch {
+      target = null;
+    }
+    if (!target) {
+      const active = canvas.getActiveObject() as any;
+      if (active && objects.includes(active)) target = active;
+    }
+    if (!target) {
+      setContextMenu(null);
+      return;
+    }
+
+    // Make it the active object (guard the call — only real, on-canvas objects).
+    if (canvas.getActiveObject() !== target && typeof target.onSelect === "function") {
+      try {
+        canvas.setActiveObject(target);
+        canvas.requestRenderAll();
+      } catch {
+        /* ignore — still show the menu for the resolved target */
+      }
+    }
+
+    setContextMenu({
+      x: e.clientX,
+      y: e.clientY,
+      hidden: target.visible === false,
+      isImage: target.type === 'image',
+    });
+  }, []);
 
   const ctxCopy = useCallback(() => {
     const c = fabricRef.current;
@@ -1737,51 +2099,69 @@ const saveCurrentPage = (index: number = currentPageRef.current) => {
   };
 
   // Countdown updater
-const startCountdown = (canvas: FabricCanvas) => {
-  const targetDate = new Date("2026-04-26T00:00:00");
+  // Parse the saved calendar date ("YYYY-MM-DD" from the date input, or any
+  // ISO string) into a Date. Bare dates are treated as local midnight.
+  const resolveCountdownTarget = (raw: string | null): Date | null => {
+    if (!raw) return null;
+    const d = /^\d{4}-\d{2}-\d{2}$/.test(raw)
+      ? new Date(`${raw}T00:00:00`)
+      : new Date(raw);
+    return isNaN(d.getTime()) ? null : d;
+  };
 
-  setInterval(() => {
-    const now = new Date();
-    const diff = targetDate.getTime() - now.getTime();
-
-    if (diff <= 0) return;
-
-    const days = Math.floor(diff / (1000 * 60 * 60 * 24));
-    const hours = Math.floor((diff / (1000 * 60 * 60)) % 24);
-    const minutes = Math.floor((diff / (1000 * 60)) % 60);
-    const seconds = Math.floor((diff / 1000) % 60);
-
-    const values = [days, hours, minutes, seconds];
-
-    let index = 0;
-
-    canvas.getObjects().forEach((obj: any) => {
-  if (obj.type === "textbox") {
-    const textbox = obj as any & { countdownUnit?: string };
-
-    switch (textbox.countdownUnit) {
-      case "day":
-        textbox.set("text", String(days).padStart(2, "0"));
-        break;
-
-      case "hour":
-        textbox.set("text", String(hours).padStart(2, "0"));
-        break;
-
-      case "minute":
-        textbox.set("text", String(minutes).padStart(2, "0"));
-        break;
-
-      case "second":
-        textbox.set("text", String(seconds).padStart(2, "0"));
-        break;
+  const startCountdown = (canvas: FabricCanvas) => {
+    // Refresh the target from the current calendar date and clear any prior
+    // interval so we never stack multiple tickers.
+    countdownTargetRef.current = resolveCountdownTarget(calendarDate);
+    if (countdownIntervalRef.current !== null) {
+      clearInterval(countdownIntervalRef.current);
+      countdownIntervalRef.current = null;
     }
-  }
-});
 
-    canvas.renderAll();
-  }, 20);
-};
+    const tick = () => {
+      const target = countdownTargetRef.current;
+      let days = 0, hours = 0, minutes = 0, seconds = 0;
+
+      if (target) {
+        const diff = target.getTime() - Date.now();
+        if (diff > 0) {
+          days = Math.floor(diff / (1000 * 60 * 60 * 24));
+          hours = Math.floor((diff / (1000 * 60 * 60)) % 24);
+          minutes = Math.floor((diff / (1000 * 60)) % 60);
+          seconds = Math.floor((diff / 1000) % 60);
+        }
+      }
+
+      const byUnit: Record<string, number> = { day: days, hour: hours, minute: minutes, second: seconds };
+
+      let touched = false;
+      canvas.getObjects().forEach((obj: any) => {
+        if (obj.type !== "textbox") return;
+        const unit: string | undefined = obj.countdownUnit;
+        if (!unit || !(unit in byUnit)) return;
+        const next = String(byUnit[unit]).padStart(2, "0");
+        if (obj.text !== next) {
+          obj.set("text", next);
+          touched = true;
+        }
+      });
+
+      if (touched) canvas.requestRenderAll();
+    };
+
+    tick(); // paint immediately instead of waiting one second
+    countdownIntervalRef.current = setInterval(tick, 1000);
+  };
+
+  // Restart the countdown whenever the canvas is ready or the saved calendar
+  // date changes — so saving a new date in the sidebar immediately retargets
+  // the day / hour / minute / second boxes.
+  useEffect(() => {
+    const canvas = fabricRef.current;
+    if (!canvas || !isLoaded) return;
+    startCountdown(canvas);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isLoaded, calendarDate]);
   //template function end
 
   //zoom function start
@@ -1969,8 +2349,9 @@ const startCountdown = (canvas: FabricCanvas) => {
   onDragOver={onDragOver}
   onDrop={onDropHandler}
   onDragLeave={onDragLeave}
+  onContextMenu={handleCanvasContextMenu}
 >
-          
+
 
 <canvas ref={canvasEl} className="shadow block max-w-full h-auto" />
           {/* Floating footer — pinned to the scaled canvas: same width, bottom edge,
@@ -2002,98 +2383,6 @@ const startCountdown = (canvas: FabricCanvas) => {
             </div>
           )}
 
-          {overlay && (
-            <>
-              {/* overlay buttons */}
-            </>
-          )}
-
-
-          {/* Overlay toolbar — anchored to top-right corner of selection */}
-          {overlay && (
-            <div
-              className="absolute z-20 flex gap-1"
-              style={{
-                left: overlay.left + overlay.width,
-                top: overlay.top - 16,
-                transform: 'translate(-50%, -50%)',
-              }}
-            >
-              {overlay.isImage && (
-                <button
-                  onClick={(e) => { e.stopPropagation(); requestEditActiveImage(false); }}
-                  aria-label="Edit selected image"
-                  className="bg-white text-black rounded-full p-1 border border-neutral-300 hover:bg-neutral-100 cursor-pointer shadow"
-                >
-                  <Pencil size={14} />
-                </button>
-              )}
-              {overlay.isText && (
-                <div className="relative" onMouseDown={(e) => e.stopPropagation()}>
-                  <button
-                    onClick={(e) => { e.stopPropagation(); setFontMenuOpen((o) => !o); }}
-                    aria-label="Change font"
-                    title="Change font"
-                    className="bg-white text-black rounded-full p-1 border border-neutral-300 hover:bg-neutral-100 cursor-pointer shadow"
-                  >
-                    <Type size={14} />
-                  </button>
-                  {fontMenuOpen && (
-                    <div className="absolute top-full right-0 mt-1 max-h-64 w-[180px] overflow-auto bg-white border border-neutral-200 rounded-lg shadow-xl py-1 z-30 text-sm">
-                      {FONT_GROUPS.map((group) => (
-                        <div key={group.label}>
-                          <div className="px-3 pt-2 pb-0.5 text-[10px] font-semibold uppercase tracking-wide text-neutral-400 sticky top-0 bg-white">
-                            {group.label}
-                          </div>
-                          {group.fonts.map((f) => (
-                            <button
-                              key={f}
-                              onClick={(e) => { e.stopPropagation(); setActiveFont(f); setFontMenuOpen(false); }}
-                              className={`w-full text-left px-3 py-1.5 hover:bg-neutral-100 cursor-pointer truncate ${overlay.fontFamily === f ? 'bg-neutral-100 font-semibold' : ''}`}
-                              style={{ fontFamily: f }}
-                              onMouseEnter={() => loadGoogleFont(f)}
-                            >
-                              {f}
-                            </button>
-                          ))}
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              )}
-              <button
-                onClick={(e) => { e.stopPropagation(); bringToFrontFromOverlay(); }}
-                aria-label="Send to front"
-                title="Send to front"
-                className="bg-white text-black rounded-full p-1 border border-neutral-300 hover:bg-neutral-100 cursor-pointer shadow"
-              >
-                <ArrowUpToLine size={14} />
-              </button>
-              <button
-                onClick={(e) => { e.stopPropagation(); sendToBackFromOverlay(); }}
-                aria-label="Send to back"
-                title="Send to back"
-                className="bg-white text-black rounded-full p-1 border border-neutral-300 hover:bg-neutral-100 cursor-pointer shadow"
-              >
-                <ArrowDownToLine size={14} />
-              </button>
-              <button
-                onClick={(e) => { e.stopPropagation(); cloneFromOverlay(); }}
-                aria-label="Clone selected object"
-                className="bg-white text-black rounded-full p-1 border border-neutral-300 hover:bg-neutral-100 cursor-pointer shadow"
-              >
-                <Copy size={14} />
-              </button>
-              <button
-                onClick={(e) => { e.stopPropagation(); deleteFromOverlay(); }}
-                aria-label="Delete selected object"
-                className="bg-red-600 text-white rounded-full p-1 border border-red-600 hover:bg-red-700 cursor-pointer shadow"
-              >
-                <Trash2 size={14} />
-              </button>
-            </div>
-          )}
           {contextMenu && (
             <div
               className="fixed z-50 min-w-[200px] bg-white border border-neutral-200 rounded-lg shadow-xl py-1.5 text-sm text-neutral-800 select-none animate-in fade-in zoom-in-95 duration-100"
@@ -2132,28 +2421,6 @@ const startCountdown = (canvas: FabricCanvas) => {
                     Duplicate
                   </button>
                   <div className="my-1 border-t border-neutral-100" />
-                  <button
-                    onClick={() => {
-                      const c = fabricRef.current; const a = c?.getActiveObject();
-                      if (c && a) { const objs = c.getObjects(); const i = objs.indexOf(a); if (i < objs.length - 1) { (c as any).moveObjectTo(a, i + 1); c.requestRenderAll(); pushSnapshot(); } }
-                      setContextMenu(null);
-                    }}
-                    className="w-full flex items-center gap-2.5 px-3 py-1.5 hover:bg-neutral-100 cursor-pointer"
-                  >
-                    <ArrowUp size={14} className="text-neutral-500" />
-                    Bring forward
-                  </button>
-                  <button
-                    onClick={() => {
-                      const c = fabricRef.current; const a = c?.getActiveObject();
-                      if (c && a) { const objs = c.getObjects(); const i = objs.indexOf(a); if (i > 0) { (c as any).moveObjectTo(a, i - 1); c.requestRenderAll(); pushSnapshot(); } }
-                      setContextMenu(null);
-                    }}
-                    className="w-full flex items-center gap-2.5 px-3 py-1.5 hover:bg-neutral-100 cursor-pointer"
-                  >
-                    <ArrowDown size={14} className="text-neutral-500" />
-                    Send backward
-                  </button>
                   <button
                     onClick={ctxDelete}
                     className="w-full flex items-center gap-2.5 px-3 py-1.5 hover:bg-red-50 text-red-600 cursor-pointer"
@@ -2204,6 +2471,20 @@ const startCountdown = (canvas: FabricCanvas) => {
               >
                 <ArrowUpToLine size={14} className="text-neutral-500" />
                 Bring to Front
+              </button>
+              <button
+                onClick={() => { bringForwardFromOverlay(); setContextMenu(null); }}
+                className="w-full flex items-center gap-2.5 px-3 py-1.5 hover:bg-neutral-100 cursor-pointer"
+              >
+                <ArrowUp size={14} className="text-neutral-500" />
+                Bring forward
+              </button>
+              <button
+                onClick={() => { sendBackwardFromOverlay(); setContextMenu(null); }}
+                className="w-full flex items-center gap-2.5 px-3 py-1.5 hover:bg-neutral-100 cursor-pointer"
+              >
+                <ArrowDown size={14} className="text-neutral-500" />
+                Send backward
               </button>
               <button
                 onClick={ctxSendBack}

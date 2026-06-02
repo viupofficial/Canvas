@@ -1,6 +1,8 @@
 // updated
 import React from "react";
 import { FONT_GROUPS } from "@/src/lib/fonts";
+import LayersPanel from "@/src/components/canvas-editor/LayersPanel";
+import type { LayerInfo } from "@/src/components/CanvasEditor";
 
 // Parse any CSS color (hex3/6/8, rgb, rgba) into { hex, opacity 0-100 }.
 function parseColor(color: string | undefined | null, defaultHex = '#000000'): { hex: string; opacity: number } {
@@ -127,12 +129,14 @@ function ColorRow(props: {
             <span className="font-[600] text-[15px] leading-none text-[#B98587]">%</span>
           </div>
         </div>
+        {/* Revert / Invert buttons disabled per request — no longer needed.
         <button type="button" title={`Revert ${props.label}`} aria-label={`Revert ${props.label}`} onClick={props.onRevert} className={colorIconBtn}>
           <RevertIcon />
         </button>
         <button type="button" title={`Invert ${props.label}`} aria-label={`Invert ${props.label}`} onClick={props.onInvert} className={colorIconBtn}>
           <InvertIcon />
         </button>
+        */}
       </div>
     </div>
   );
@@ -148,8 +152,10 @@ export default function Inspector(props: {
   selected: any | null;
   updateSelected: (patch: Record<string, any>) => void;
   editorRef?: React.RefObject<any>;
+  layers?: LayerInfo[];
 }) {
-  const { selected, updateSelected, editorRef } = props;
+  const { selected, updateSelected, editorRef, layers = [] } = props;
+  const [tab, setTab] = React.useState<"design" | "layers">("design");
   const [showTextStyles, setShowTextStyles] = React.useState(false);
   // When on, editing width or height scales both axes by the same factor so the
   // element resizes uniformly (keeps proportions).
@@ -220,10 +226,34 @@ export default function Inspector(props: {
   return (
     <aside className="w-80 bg-brand-cream border-[#EDE2DE] border-[1px] overflow-y-auto h-full">
       <div className="border-b-[1px] border-[#EDE2DE] pb-3 p-4">
-        <h3 className="font-[600] text-[20px] capitalize">{selected?.type ?? "Inspector"}</h3>
+        <h3 className="font-[600] text-[20px] capitalize">
+          {tab === "layers" ? "Layers" : selected?.type ?? "Inspector"}
+        </h3>
       </div>
 
-      {!selected ? (
+      {/* Tab switcher: element properties vs. the active page's layer stack. */}
+      <div className="flex gap-1 p-2 border-b-[1px] border-[#EDE2DE]">
+        {(["design", "layers"] as const).map((t) => (
+          <button
+            key={t}
+            type="button"
+            onClick={() => setTab(t)}
+            className={`flex-1 py-[6px] rounded-[8px] text-[13px] font-[700] capitalize transition-colors ${
+              tab === t ? "bg-[#7D5B59] text-white" : "bg-[#F2E8E6B2] text-[#7D5B59]"
+            }`}
+          >
+            {t === "design" ? "Design" : "Layers"}
+          </button>
+        ))}
+      </div>
+
+      {tab === "layers" ? (
+        <LayersPanel
+          layers={layers}
+          activeLayerId={selected?.id ?? null}
+          editorRef={editorRef}
+        />
+      ) : !selected ? (
         <div className="p-4 text-sm text-neutral-500">Select an element to customize it</div>
       ) : (
         <div className="flex flex-col">
@@ -786,21 +816,21 @@ export default function Inspector(props: {
             )}
 
             <ColorRow
+              label="Stroke"
+              value={selected.stroke}
+              displayDefault={DEFAULT_STROKE}
+              onChange={(c) => updateSelected({ stroke: c })}
+              onRevert={() => updateSelected({ stroke: orig?.stroke ?? DEFAULT_STROKE })}
+              onInvert={() => updateSelected({ stroke: buildRgba(invertHex(strokeParsed.hex), strokeParsed.opacity) })}
+            />
+
+            <ColorRow
               label="Background"
               value={selected.backgroundColor}
               displayDefault={DEFAULT_BG}
               onChange={(c) => updateSelected({ backgroundColor: c })}
               onRevert={() => updateSelected({ backgroundColor: orig?.backgroundColor ?? DEFAULT_BG })}
               onInvert={() => updateSelected({ backgroundColor: buildRgba(invertHex(bgParsed.hex), bgParsed.opacity) })}
-            />
-
-            <ColorRow
-              label="Border"
-              value={selected.stroke}
-              displayDefault={DEFAULT_STROKE}
-              onChange={(c) => updateSelected({ stroke: c })}
-              onRevert={() => updateSelected({ stroke: orig?.stroke ?? DEFAULT_STROKE })}
-              onInvert={() => updateSelected({ stroke: buildRgba(invertHex(strokeParsed.hex), strokeParsed.opacity) })}
             />
           </div>
 

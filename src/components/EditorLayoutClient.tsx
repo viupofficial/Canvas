@@ -1,7 +1,7 @@
 "use client";
 //ni betul betul atas canva
-import React, { useRef, useState } from "react";
-import CanvasEditor, { EditorHandle } from "./CanvasEditor";
+import React, { useCallback, useRef, useState } from "react";
+import CanvasEditor, { EditorHandle, LayerInfo } from "./CanvasEditor";
 import Inspector from "./canvas-editor/inspector";
 import PhonePreviewWrapper from "./canvas-editor/PhonePreviewWrapper";
 import { Monitor, Smartphone } from "lucide-react";
@@ -37,10 +37,17 @@ export default function EditorLayoutClient({
   const internalRef = useRef<EditorHandle | null>(null);
   const editorRef = editorRefProp ?? internalRef;
   const [selected, setSelected] = useState<any | null>(null);
+  const [layers, setLayers] = useState<LayerInfo[]>([]);
   const [internalPreviewMode, setInternalPreviewMode] = useState<"desktop" | "phone">("desktop");
 
   const previewMode = previewModeProp ?? internalPreviewMode;
   const setPreviewMode = setPreviewModeProp ?? setInternalPreviewMode;
+
+  // Pull the active page's layer list off the editor handle. Fired by CanvasEditor
+  // whenever objects are added/removed/reordered, selection changes, or a page loads.
+  const refreshLayers = useCallback(() => {
+    setLayers(editorRef.current?.getLayers?.() ?? []);
+  }, [editorRef]);
 
   const onSelectionChange = (obj: any | null) => {
     setSelected(obj);
@@ -58,6 +65,7 @@ export default function EditorLayoutClient({
       onSelectionChange={onSelectionChange}
       onEditImage={onEditImage}
       onCanvasChange={onCanvasChange}
+      onLayersChange={refreshLayers}
       initialPages={initialPages}
       initialMusicUrl={initialMusicUrl}
       contacts={contacts}
@@ -167,7 +175,7 @@ export default function EditorLayoutClient({
           )}
         </div>
       ) : (
-        <Inspector selected={selected} updateSelected={updateSelected} editorRef={editorRef} />
+        <Inspector selected={selected} updateSelected={updateSelected} editorRef={editorRef} layers={layers} />
       )}
     </div>
   );

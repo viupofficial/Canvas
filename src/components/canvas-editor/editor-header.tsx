@@ -146,28 +146,28 @@ export default function EditorHeader(props: {
   };
 
   return (
-    <header className="grid grid-cols-[1fr_auto_1fr] h-[115px] w-full items-center gap-4 bg-[#EDE2DE]">
-      <div className="flex items-center justify-start">
-        <a href="/" className="flex items-center justify-center gap-4 m-10 ">
-          <img src="/vi-up-header-logo.svg" alt="Vi-Up" className="h-[40px] w-[40px]" />
+    <header className="grid grid-cols-[1fr_auto_1fr] h-[111px] w-full items-center gap-4 bg-[#EDE2DE]">
+      <div className="flex items-center justify-start pl-[106px]">
+        <a href="/" className="flex items-center justify-center gap-4 my-9 mr-[20px] ">
+          <img src="/Vi-Up Submark.png" alt="Vi-Up" className="h-[40px] w-[40px]" />
         </a>
 
-        <div className="border-l-[0.5px] border-[#7D5B59] h-9 mx-1"></div>
+        
 
         <div className="flex items-center gap-[35px]">
           <button onClick={handleUndoClick}>
-            <img src="/Undo.svg" alt="Undo" className="w-8" />
+            <img src="/Undo.svg" alt="Undo" className="w-[23px] h-[23px]" />
           </button>
 
           <button onClick={handleRedoClick}>
-            <img src="/Redo.svg" alt="Redo" className="w-8" />
+            <img src="/Redo.svg" alt="Redo" className="w-[23px] h-[23px]" />
           </button>
         </div>
 
-        <div className="border-l-[0.5px] border-[#7D5B59] h-9 mx-1"></div>
+       
       </div>
 
-      <div className="flex items-center justify-center gap-1">
+      <div className="flex items-center justify-center gap-2 -translate-x-[105px]">
         <input
           type="text"
           value={eventName}
@@ -177,13 +177,13 @@ export default function EditorHeader(props: {
         />
 
         <button onClick={handleSaveClick} className="rounded-full text-white flex items-center justify-center">
-          <img src="/cloud-save.svg" className="h-[24px] w-[34px]" />
+          <img src="/cloud-save.svg" className="h-[23px] w-[33px]" />
         </button>
       </div>
 
-      <div className="flex items-center justify-end gap-4 mr-10">
+      <div className="flex items-center justify-end gap-4 mr-[130px]">
         <button onClick={handlePreviewClick} className=" rounded-full text-white p-2">
-          <img src="/preview.svg" alt="Preview" className="h-[51px] w-[51px]" />
+          <img src="/preview.svg" alt="Preview" className="h-[45px] w-[45px]" />
         </button>
 
         {/* <button
@@ -194,13 +194,13 @@ export default function EditorHeader(props: {
           Local
         </button> */}
 
-        <button onClick={handleUpgradeClick} className="border-3 rounded-[100px] px-[22px] py-[12px] flex items-center gap-2 h-[51px] text-[18px] font-bold">
+        <button onClick={handleUpgradeClick} className="border-3 rounded-[100px] px-[22px] py-[12px] flex items-center gap-2 h-[45px] text-[18px] font-bold">
           <Gift /> Upgrade Package
         </button>
 
         
 
-        <button onClick={handleShareClick} className="bg-[#5a2d2d] text-white px-[22px] py-[12px] rounded-[100px] flex items-center gap-2 h-[51px] text-[18px] font-bold">
+        <button onClick={handleShareClick} className="bg-[#5a2d2d] text-white px-[22px] py-[12px] rounded-[100px] flex items-center gap-2 h-[45px] text-[18px] font-bold">
           <Upload className="w-5" />
           Share
         </button>
