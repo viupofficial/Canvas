@@ -11,6 +11,7 @@ import {
   renameProject,
   type ProjectMeta,
 } from "@/src/lib/projectStorage";
+import UserMenu from "@/src/components/UserMenu";
 
 function formatEdited(iso: string): string {
   if (!iso) return "";
@@ -99,12 +100,15 @@ export default function HomePage() {
 
        
       </div>
-        <button
-          onClick={handleCreate}
-          className="flex items-center gap-2 bg-[#5a2d2d] text-white px-5 py-2.5 rounded-full text-[15px] font-bold hover:opacity-90 transition mr-[90px]"
-        >
-          <Plus size={18} /> Create New Project
-        </button>
+        <div className="flex items-center gap-5 mr-[90px]">
+          <button
+            onClick={handleCreate}
+            className="flex items-center gap-2 bg-[#5a2d2d] text-white px-5 py-2.5 rounded-full text-[15px] font-bold hover:opacity-90 transition"
+          >
+            <Plus size={18} /> Create New Project
+          </button>
+          <UserMenu />
+        </div>
       </header>
 
       <main className="max-w-6xl mx-auto px-8 py-10">
