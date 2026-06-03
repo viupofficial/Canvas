@@ -14,6 +14,7 @@ import EventFooter from "../components/EventFooter";
 import '../app/globals.css'
 import TemplateList from "@/src/components/template-list";
 import { envelopePage } from "@/src/components/template-list/EnvelopeTemplate";
+import { galleryPage } from "@/src/components/template-list/galleryTemplate";
 import { useEventDataOptional } from "@/src/store/EventDataContext";
 import { useFabricEventSync } from "@/src/hooks/useFabricEventSync";
 import { FONT_GROUPS, loadGoogleFont, collectFontFamilies, preloadFonts } from "@/src/lib/fonts";
@@ -44,6 +45,10 @@ export type EditorHandle = {
   addMusicFromUrl: (url: string) => void;
   uploadMusic: () => void;
   loadTemplate: (pages: any[]) => void;
+  addGalleryPage: () => void;
+  removeGalleryPage: () => void;
+  hasGalleryPage: () => boolean;
+  addPhotoToGallery: (url: string) => void;
   addBorder: (url: string) => void;
   setBackgroundColor: (color: string) => void;
   previewAnimation: (type: string) => void;
@@ -62,6 +67,7 @@ export type EditorHandle = {
   moveLayerToBack: (id: string) => void;
   toggleLayerVisibility: (id: string) => void;
   toggleLayerLock: (id: string) => void;
+  renameLayer: (id: string, name: string) => void;
   deleteLayer: (id: string) => void;
 }
 const MAX_HISTORY = 50;
@@ -301,7 +307,10 @@ const [currentPage, setCurrentPage] = useState(0);
 
   const serializeCanvas = useCallback((canvas: FabricCanvas) => {
     // Borders are persisted with the page they were placed on (no cross-page propagation).
-    return (canvas as any).toJSON([...FABRIC_EXPORT_PROPS]);
+    // NOTE: in Fabric v7 `Canvas.toJSON()` ignores any argument and serializes with NO
+    // custom props — so we must use `toObject([...props])` (as the object-level calls do)
+    // for FABRIC_EXPORT_PROPS like `name`, `linkUrl`, `locked` to actually round-trip.
+    return (canvas as any).toObject([...FABRIC_EXPORT_PROPS]);
   }, []);
 
   // ---------- History core ----------
@@ -504,6 +513,10 @@ const [currentPage, setCurrentPage] = useState(0);
     resetZoom,
     toggleFullscreen,
     loadTemplate, // ✅ ADD THIS
+    addGalleryPage,
+    removeGalleryPage,
+    hasGalleryPage,
+    addPhotoToGallery,
     updateActiveObject: (props: Record<string, any>) => {
       const canvas = fabricRef.current;
       if (!canvas) return;
@@ -768,6 +781,19 @@ const [currentPage, setCurrentPage] = useState(0);
         canvas.discardActiveObject();
         props.onSelectionChange?.(null);
       }
+      canvas.requestRenderAll();
+      pushSnapshot();
+      saveCurrentPage(currentPageRef.current);
+      onLayersChangeRef.current?.();
+    },
+    renameLayer: (id: string, name: string) => {
+      const canvas = fabricRef.current;
+      if (!canvas) return;
+      const obj = canvas.getObjects().find((o: any) => o.id === id) as any;
+      if (!obj) return;
+      const next = name.trim();
+      // Empty name clears the custom label so it falls back to text/type.
+      obj.name = next || undefined;
       canvas.requestRenderAll();
       pushSnapshot();
       saveCurrentPage(currentPageRef.current);
@@ -2053,6 +2079,172 @@ const saveCurrentPage = (index: number = currentPageRef.current) => {
         fabricRef.current?.requestRenderAll();
       });
     }, 0);
+  };
+
+  // ── Gallery page (toggle from the Photos sidebar) ──────────────────────────
+  // A "gallery page" is identified structurally: the gallery template's image
+  // placeholders carry names like "galleryImage1", and `name` is serialized
+  // (FABRIC_EXPORT_PROPS), so detection survives edits and re-serialization.
+  const isGalleryObj = (o: any): boolean =>
+    typeof o?.name === 'string' && o.name.startsWith('galleryImage');
+
+  const isGalleryPageData = (data: any): boolean => {
+    const objs = Array.isArray(data?.objects) ? data.objects : null;
+    if (!objs) return false;
+    return objs.some(isGalleryObj);
+  };
+
+  // Standardized gallery slot: 292×443, centered at x=190, stacked vertically.
+  // All gallery images (template defaults + uploads) share this frame so a new
+  // photo can be placed directly below the lowest existing one.
+  const GALLERY_SLOT = { centerX: 190, width: 292, height: 443, gap: 24, firstTop: 310 };
+
+  // Center-Y for the next stacked slot, given the gallery images already present.
+  // Images use center origin, so an image's `top` is its center and its bottom
+  // edge is `top + height/2` (height is the standardized 443).
+  const nextGalleryTop = (galleryObjs: any[]): number => {
+    if (!galleryObjs.length) return GALLERY_SLOT.firstTop;
+    const maxBottom = Math.max(
+      ...galleryObjs.map((o) => (o.top ?? GALLERY_SLOT.firstTop) + GALLERY_SLOT.height / 2),
+    );
+    return maxBottom + GALLERY_SLOT.gap + GALLERY_SLOT.height / 2;
+  };
+
+  // Index of the gallery page, scanning live content for the current page so an
+  // unsaved just-added gallery page is still found. Returns -1 if none.
+  const findGalleryPageIndex = (): number => {
+    const canvas = fabricRef.current;
+    const cur = currentPageRef.current;
+    return pages.findIndex((p, i) =>
+      isGalleryPageData(i === cur && canvas ? serializeCanvas(canvas) : p),
+    );
+  };
+
+  const hasGalleryPage = () => findGalleryPageIndex() >= 0;
+
+  // Append the gallery template as a new page and switch to it. No-op if a
+  // gallery page already exists (we never add a second one). The template
+  // already carries the default photos in its image slots.
+  const addGalleryPage = () => {
+    const canvas = fabricRef.current;
+    if (!canvas) return;
+    if (hasGalleryPage()) return;
+    flushPending();
+    const prevIndex = currentPage;
+    const currentJSON = serializeCanvas(canvas);
+    const newIndex = pages.length;
+    currentPageRef.current = newIndex;
+    setPages(prev => {
+      const updated = [...prev];
+      updated[prevIndex] = currentJSON;
+      updated.push(galleryPage);
+      return updated;
+    });
+    replaceCanvasContent(galleryPage, () => {
+      const h = getPageHistory(newIndex);
+      if (h.undo.length === 0) commitSnapshot();
+    });
+    setCurrentPage(newIndex);
+  };
+
+  // Remove the gallery page if one exists; otherwise do nothing. Keeps at least
+  // one page and re-keys per-page histories around the removed index.
+  const removeGalleryPage = () => {
+    const canvas = fabricRef.current;
+    if (!canvas) return;
+    if (pages.length <= 1) return;
+    flushPending();
+    const removedIndex = findGalleryPageIndex();
+    if (removedIndex < 0) return;
+
+    const cur = currentPageRef.current;
+    let nextIndex: number;
+    if (cur === removedIndex) nextIndex = removedIndex === 0 ? 0 : removedIndex - 1;
+    else if (cur > removedIndex) nextIndex = cur - 1;
+    else nextIndex = cur;
+
+    const oldHistories = historiesRef.current;
+    const newHistories = new Map<number, PageHistory>();
+    oldHistories.forEach((h, idx) => {
+      if (idx === removedIndex) return;
+      newHistories.set(idx > removedIndex ? idx - 1 : idx, h);
+    });
+    historiesRef.current = newHistories;
+
+    currentPageRef.current = nextIndex;
+    const newPages = pages.filter((_, i) => i !== removedIndex);
+    setPages(newPages);
+    setCurrentPage(nextIndex);
+    const nextPageData = newPages[nextIndex] ?? null;
+    setTimeout(() => {
+      replaceCanvasContent(nextPageData, () => {
+        const h = getPageHistory(nextIndex);
+        if (h.undo.length === 0) commitSnapshot();
+        fabricRef.current?.requestRenderAll();
+      });
+    }, 0);
+  };
+
+  // Append a photo to the gallery page as a new standardized 292×443 slot,
+  // stacked below the lowest existing gallery image (FIFO: oldest on top,
+  // newest at the bottom). No-op if there is no gallery page. Works whether the
+  // gallery is the visible page (added live) or another page (appended to its
+  // stored JSON so it shows when navigated to).
+  const addPhotoToGallery = (url: string) => {
+    if (!url) return;
+    const galleryIndex = findGalleryPageIndex();
+    if (galleryIndex < 0) return;
+
+    const buildSlot = (natW: number, natH: number, centerY: number, index: number) => ({
+      left: GALLERY_SLOT.centerX,
+      top: centerY,
+      originX: 'center',
+      originY: 'center',
+      scaleX: GALLERY_SLOT.width / (natW || 1),
+      scaleY: GALLERY_SLOT.height / (natH || 1),
+      name: `galleryImage${index}`,
+    });
+
+    const canvas = fabricRef.current;
+    const fabric = fabricModuleRef.current;
+
+    if (galleryIndex === currentPageRef.current && canvas && fabric) {
+      // Gallery is on screen — add the image to the live canvas.
+      const imgOpts = url.startsWith('data:') ? undefined : { crossOrigin: 'anonymous' };
+      fabric.Image.fromURL(url, imgOpts)
+        .then((img: any) => {
+          const el = img.getElement?.() as HTMLImageElement | null;
+          const natW = (el?.naturalWidth ?? 0) > 0 ? el!.naturalWidth : img.width || 1;
+          const natH = (el?.naturalHeight ?? 0) > 0 ? el!.naturalHeight : img.height || 1;
+          const existing = canvas.getObjects().filter(isGalleryObj);
+          const slot = buildSlot(natW, natH, nextGalleryTop(existing), existing.length + 1);
+          img.set(slot);
+          canvas.add(img);
+          canvas.requestRenderAll();
+          pushSnapshot();
+        })
+        .catch((err: any) => console.error('Failed to add photo to gallery', err));
+      return;
+    }
+
+    // Gallery is a different page — append to its stored JSON via a plain image
+    // object. Load the image only to read its natural size for the scale.
+    const probe = new window.Image();
+    probe.onload = () => {
+      const natW = probe.naturalWidth || 1;
+      const natH = probe.naturalHeight || 1;
+      setPages((prev) => {
+        const page = prev[galleryIndex];
+        const objects = Array.isArray(page?.objects) ? page.objects : [];
+        const existing = objects.filter(isGalleryObj);
+        const slot = buildSlot(natW, natH, nextGalleryTop(existing), existing.length + 1);
+        const updated = [...prev];
+        updated[galleryIndex] = { ...page, objects: [...objects, { type: 'image', src: url, ...slot }] };
+        return updated;
+      });
+    };
+    probe.onerror = () => console.error('Failed to load photo for gallery', url);
+    probe.src = url;
   };
 
   //pages function end

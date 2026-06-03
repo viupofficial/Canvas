@@ -1,0 +1,1 @@
+- [Fabric v7 toJSON ignores args](fabric-v7-tojson-ignores-args.md) — use canvas.toObject([...props]) to persist custom props; toJSON drops them

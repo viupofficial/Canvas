@@ -91,14 +91,17 @@ export default function HomePage() {
   return (
     <div className="min-h-screen bg-brand-cream text-brand-dark">
       {/* Header */}
-      <header className="flex items-center justify-between px-8 py-5 bg-[#EDE2DE]">
-        <div className="flex items-center gap-3">
-          <img src="/vi-up-header-logo.svg" alt="Vi-Up" className="h-9 w-9" />
-          <span className="text-[22px] font-bold text-[#7D5B59]">Vi-Up Studio</span>
-        </div>
+      <header className="flex items-center justify-between px-8 py-5 bg-[#EDE2DE] h-[111px]">
+       <div className="flex items-center justify-start pl-[106px]">
+        <a href="/" className="flex items-center justify-center gap-4 my-9 mr-[20px] ">
+          <img src="/Vi-Up Submark.png" alt="Vi-Up" className="h-[40px] w-[40px]" />
+        </a>
+
+       
+      </div>
         <button
           onClick={handleCreate}
-          className="flex items-center gap-2 bg-[#5a2d2d] text-white px-5 py-2.5 rounded-full text-[15px] font-bold hover:opacity-90 transition"
+          className="flex items-center gap-2 bg-[#5a2d2d] text-white px-5 py-2.5 rounded-full text-[15px] font-bold hover:opacity-90 transition mr-[90px]"
         >
           <Plus size={18} /> Create New Project
         </button>
@@ -119,7 +122,7 @@ export default function HomePage() {
             </p>
             <button
               onClick={handleCreate}
-              className="flex items-center gap-2 bg-[#5a2d2d] text-white px-5 py-2.5 rounded-full text-[15px] font-bold hover:opacity-90 transition"
+              className="flex items-center  gap-2 bg-[#5a2d2d] text-white px-5 py-2.5 rounded-full text-[15px] font-bold hover:opacity-90 transition "
             >
               <Plus size={18} /> Create New Project
             </button>

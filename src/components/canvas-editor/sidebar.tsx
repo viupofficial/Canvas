@@ -121,6 +121,19 @@ function PhotoTab({
   const [menu, setMenu] = useState<{ x: number; y: number; index: number } | null>(null);
   const fileInputRef = React.useRef<HTMLInputElement>(null);
 
+  // Gallery toggle — ON ⇒ a gallery page exists in the canvas, OFF ⇒ none.
+  // Seed from the editor so the switch reflects the actual canvas state.
+  const [galleryOn, setGalleryOn] = useState(
+    () => editorRef?.current?.hasGalleryPage?.() ?? false,
+  );
+
+  const toggleGallery = () => {
+    const next = !galleryOn;
+    setGalleryOn(next);
+    if (next) editorRef?.current?.addGalleryPage?.();
+    else editorRef?.current?.removeGalleryPage?.();
+  };
+
   useEffect(() => {
     if (!menu) return;
     const close = () => setMenu(null);
@@ -138,7 +151,11 @@ function PhotoTab({
       if (!file.type.startsWith('image/')) return;
       const reader = new FileReader();
       reader.onload = () => {
-        setPhotos((prev) => [...prev, reader.result as string]);
+        const dataUrl = reader.result as string;
+        setPhotos((prev) => [...prev, dataUrl]);
+        // Grow the gallery page with each newly uploaded photo (FIFO order).
+        // No-op if no gallery page exists.
+        editorRef?.current?.addPhotoToGallery?.(dataUrl);
       };
       reader.readAsDataURL(file);
     });
@@ -166,7 +183,26 @@ function PhotoTab({
 
   return (
     <div>
-      <div className="text-[#191212] text-[17px] font-bold mb-3">Photos</div>
+      <div className="flex items-center justify-between mb-3">
+        <div className="text-[#191212] text-[17px] font-bold">Photos</div>
+        <button
+          type="button"
+          role="switch"
+          aria-checked={galleryOn}
+          aria-label="Toggle gallery page"
+          title={galleryOn ? 'Remove gallery page' : 'Add gallery page'}
+          onClick={toggleGallery}
+          className={`relative inline-flex h-5 w-9 shrink-0 items-center rounded-full transition-colors ${
+            galleryOn ? 'bg-[#8C6B6B]' : 'bg-gray-300'
+          }`}
+        >
+          <span
+            className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${
+              galleryOn ? 'translate-x-[18px]' : 'translate-x-[2px]'
+            }`}
+          />
+        </button>
+      </div>
       <input
         ref={fileInputRef}
         type="file"

@@ -12,6 +12,7 @@ import {
   Lock,
   Unlock,
   Trash2,
+  Pencil,
   Type,
   Image as ImageIcon,
   Square,
@@ -47,6 +48,21 @@ export default function LayersPanel(props: {
 }) {
   const { layers, activeLayerId, editorRef } = props;
   const handle = () => editorRef?.current ?? null;
+
+  // Inline layer-title editing: `editingId` is the layer whose name is being
+  // edited, `draft` holds the in-progress text.
+  const [editingId, setEditingId] = React.useState<string | null>(null);
+  const [draft, setDraft] = React.useState("");
+
+  const startRename = (id: string, current: string) => {
+    setEditingId(id);
+    setDraft(current);
+  };
+  const commitRename = () => {
+    if (editingId) handle()?.renameLayer(editingId, draft);
+    setEditingId(null);
+  };
+  const cancelRename = () => setEditingId(null);
 
   // Canvas order is bottom→top; display top-most first like every design tool.
   const display = [...layers].reverse();
@@ -89,22 +105,56 @@ export default function LayersPanel(props: {
                 {layer.visible ? <Eye size={15} /> : <EyeOff size={15} />}
               </button>
 
-              {/* Select */}
+              {/* Select / rename */}
+              {editingId === layer.id ? (
+                <div className="flex items-center gap-2 min-w-0 flex-1">
+                  <LayerTypeIcon type={layer.type} isImage={layer.isImage} />
+                  <input
+                    autoFocus
+                    value={draft}
+                    onChange={(e) => setDraft(e.target.value)}
+                    onBlur={commitRename}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") {
+                        e.preventDefault();
+                        commitRename();
+                      } else if (e.key === "Escape") {
+                        e.preventDefault();
+                        cancelRename();
+                      }
+                    }}
+                    className="min-w-0 flex-1 rounded-[6px] border border-[#7D5B59] bg-white px-1.5 py-0.5 text-[13px] font-[600] text-[#7D5B59] outline-none"
+                  />
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  className="flex items-center gap-2 min-w-0 flex-1 text-left disabled:cursor-not-allowed"
+                  disabled={layer.locked}
+                  title={layer.locked ? `${layer.label} (locked)` : layer.label}
+                  onClick={() => handle()?.selectLayer(layer.id)}
+                  onDoubleClick={() => startRename(layer.id, layer.label)}
+                >
+                  <LayerTypeIcon type={layer.type} isImage={layer.isImage} />
+                  <span
+                    className={`truncate text-[13px] font-[600] ${
+                      layer.visible ? "text-[#7D5B59]" : "text-[#7D5B59]/40 line-through"
+                    }`}
+                  >
+                    {layer.label}
+                  </span>
+                </button>
+              )}
+
+              {/* Rename */}
               <button
                 type="button"
-                className="flex items-center gap-2 min-w-0 flex-1 text-left disabled:cursor-not-allowed"
-                disabled={layer.locked}
-                title={layer.locked ? `${layer.label} (locked)` : layer.label}
-                onClick={() => handle()?.selectLayer(layer.id)}
+                className={iconBtn}
+                title="Rename layer"
+                aria-label="Rename layer"
+                onClick={() => startRename(layer.id, layer.label)}
               >
-                <LayerTypeIcon type={layer.type} isImage={layer.isImage} />
-                <span
-                  className={`truncate text-[13px] font-[600] ${
-                    layer.visible ? "text-[#7D5B59]" : "text-[#7D5B59]/40 line-through"
-                  }`}
-                >
-                  {layer.label}
-                </span>
+                <Pencil size={15} />
               </button>
 
               {/* Lock / unlock */}
