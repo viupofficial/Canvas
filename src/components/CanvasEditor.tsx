@@ -2529,13 +2529,13 @@ const saveCurrentPage = (index: number = currentPageRef.current) => {
         style={{ display: "none" }}
       />
 
-      <div ref={containerRef} className="flex-grow border border-dashed border-neutral-300 rounded overflow-hidden flex flex-col min-h-0 min-w-0">
-        <div className="flex justify-center items-center p-4 bg-neutral-50">
-          {!isLoaded && <span>Initializing canvas...</span>}
+      <div ref={containerRef} className="flex-grow border border-dashed border-[#282828] rounded overflow-hidden flex flex-col min-h-0 min-w-0">
+        <div className="flex justify-center items-center p-4 bg-[#282828]">
+          {!isLoaded && <span className="text-neutral-200">Initializing canvas...</span>}
         </div>
 
       <div
-  className={`relative flex justify-center items-center overflow-hidden flex-1 min-h-0 min-w-0 w-full ${
+  className={`relative flex justify-center items-center overflow-hidden flex-1 min-h-0 min-w-0 w-full bg-[#282828] ${
     isDragOver ? 'ring-2 ring-dashed ring-brand-accent' : ''
   }`}
   onDragOver={onDragOver}

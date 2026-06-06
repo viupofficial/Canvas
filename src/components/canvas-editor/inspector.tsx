@@ -340,24 +340,6 @@ export default function Inspector(props: {
                 </svg>
               </button>
             </div>
-
-            <div>
-              <label className={labelCls}>Layer Order</label>
-              <div className="flex gap-2">
-                <button
-                  className="flex-1 rounded-[10px] px-3 py-[6px] text-[12px] font-[600] bg-[#F2E8E6B2] text-[#7D5B59]"
-                  onClick={() => editorRef?.current?.bringForward()}
-                >
-                  Bring Forward
-                </button>
-                <button
-                  className="flex-1 rounded-[10px] px-3 py-[6px] text-[12px] font-[600] bg-[#F2E8E6B2] text-[#7D5B59]"
-                  onClick={() => editorRef?.current?.sendBack()}
-                >
-                  Send Back
-                </button>
-              </div>
-            </div>
           </div>
 
           {/* ── Typography ─────────────────────────────────────── */}

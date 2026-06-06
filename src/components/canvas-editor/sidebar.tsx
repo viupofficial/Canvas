@@ -1090,12 +1090,12 @@ export default function Sidebar({
                 ))}
               </div>
             </div>
-            {['Shapes', 'Graphics', 'Stickers', 'Background'].map((cat) => (
+            {['Shapes', 'Graphics', 'Stickers', 'Color'].map((cat) => (
               <div key={cat} className="mb-3">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
                     <div className="text-[#191212] text-[17px] font-bold">{cat}</div>
-                    {cat === 'Background' && (
+                    {cat === 'Color' && (
                       <label
                         className="relative inline-flex items-center justify-center w-6 h-6 rounded border border-gray-300 cursor-pointer overflow-hidden"
                         title="Pick background color"
@@ -1114,15 +1114,17 @@ export default function Sidebar({
                       </label>
                     )}
                   </div>
-                  <button
-                    onClick={() => setExpanded(prev => ({ ...prev, [cat]: !prev[cat] }))}
-                    className="text-[#BBA8A7] text-[10px] font-bold"
-                    aria-expanded={!!expanded[cat]}
-                  >
-                    {expanded[cat] ? 'Show Less' : 'See All'}
-                  </button>
+                  {cat !== 'Color' && (
+                    <button
+                      onClick={() => setExpanded(prev => ({ ...prev, [cat]: !prev[cat] }))}
+                      className="text-[#BBA8A7] text-[10px] font-bold"
+                      aria-expanded={!!expanded[cat]}
+                    >
+                      {expanded[cat] ? 'Show Less' : 'See All'}
+                    </button>
+                  )}
                 </div>
-                {cat === 'Background' && (
+                {cat === 'Color' && (
                   <div className="mt-2 flex flex-wrap gap-2">
                     {[
                       '#ffffff', '#f5e8dd', '#fde2e4', '#fad2e1',
@@ -1140,6 +1142,7 @@ export default function Sidebar({
                     ))}
                   </div>
                 )}
+                {cat !== 'Color' && (
                 <div className="mt-2">
                   <div className="grid grid-cols-3 gap-2">
                     {getItemsForCategory(cat).slice(0, expanded[cat] ? undefined : 3).map((item, i) => (
@@ -1176,6 +1179,7 @@ export default function Sidebar({
                     ))}
                   </div>
                 </div>
+                )}
               </div>
             ))}
           </div>
