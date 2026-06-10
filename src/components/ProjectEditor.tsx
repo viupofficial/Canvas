@@ -18,16 +18,22 @@ type ApplyTarget =
 
 type SaveStatus = "idle" | "saving" | "saved";
 
-export default function ProjectEditor({ projectId }: { projectId?: string }) {
+export default function ProjectEditor({
+  projectId,
+  teaser,
+}: {
+  projectId?: string;
+  teaser?: boolean;
+}) {
   return (
     <EventDataProvider>
       {/* Keyed by project so switching projects fully remounts the canvas. */}
-      <ProjectEditorInner key={projectId ?? "legacy"} projectId={projectId} />
+      <ProjectEditorInner key={projectId ?? "legacy"} projectId={projectId} teaser={teaser} />
     </EventDataProvider>
   );
 }
 
-function ProjectEditorInner({ projectId }: { projectId?: string }) {
+function ProjectEditorInner({ projectId, teaser }: { projectId?: string; teaser?: boolean }) {
   const editorRef = useRef<EditorHandle | null>(null);
   const [isPremium, setIsPremium] = useState(false);
   const [previewMode, setPreviewMode] = useState<"desktop" | "phone">("desktop");
@@ -159,6 +165,8 @@ function ProjectEditorInner({ projectId }: { projectId?: string }) {
           }}
           onPreviewLocal={() => editorRef.current?.previewLocal(eventName)}
           onUpgrade={() => setIsPremium(true)}
+          teaser={teaser}
+          onLogin={() => { window.location.href = "https://vi-up.com/login"; }}
           eventName={eventName}
           onEventNameChange={setEventName}
         />

@@ -2,7 +2,7 @@
 
 'use client';
 
-import { Gift, Upload } from 'lucide-react';
+import { Gift, Upload, LogIn } from 'lucide-react';
 import { RefObject, useState, useRef, useEffect } from "react";
 import { useRouter } from "next/navigation"; // ✅ ADD THIS
 import { EditorHandle } from "@/src/components/CanvasEditor";
@@ -35,6 +35,14 @@ export default function EditorHeader(props: {
   onUpgrade?: () => void;
   onProfile?: () => void;
   onShare?: () => void;
+  onLogin?: () => void;
+  /**
+   * Teaser mode: a standalone "try the editor" experience.
+   * - The logo does NOT link back to the homepage filing system.
+   * - The user profile dropdown is hidden.
+   * - The Share button becomes a Login button.
+   */
+  teaser?: boolean;
   eventName?: string;
   onEventNameChange?: (name: string) => void;
 }) {
@@ -71,7 +79,15 @@ export default function EditorHeader(props: {
     props.onEventNameChange?.(name);
   };
 
-  const { editorRef, onUndo, onRedo, onSave, onPreview, onUpgrade, onProfile, onShare } = props;
+  const { editorRef, onUndo, onRedo, onSave, onPreview, onUpgrade, onProfile, onShare, onLogin, teaser } = props;
+
+  /**
+   * Handle the click event for the login button (teaser mode).
+   */
+  const handleLoginClick = () => {
+    if (onLogin) return onLogin();
+    window.location.href = "https://vi-up.com/login";
+  };
 
   /**
    * Handle the click event for the undo button
@@ -148,11 +164,18 @@ export default function EditorHeader(props: {
   return (
     <header className="grid grid-cols-[1fr_auto_1fr] h-[111px] w-full items-center gap-4 bg-[#EDE2DE]">
       <div className="flex items-center justify-start pl-[106px]">
-        <a href="/" className="flex items-center justify-center gap-4 my-9 mr-[20px] ">
-          <img src="/Vi-Up Submark.png" alt="Vi-Up" className="h-[40px] w-[40px]" />
-        </a>
+        {teaser ? (
+          // Teaser mode: logo is decorative only — no link to the homepage filing system.
+          <div className="flex items-center justify-center gap-4 my-9 mr-[20px]">
+            <img src="/Vi-Up Submark.png" alt="Vi-Up" className="h-[40px] w-[40px]" />
+          </div>
+        ) : (
+          <a href="/" className="flex items-center justify-center gap-4 my-9 mr-[20px] ">
+            <img src="/Vi-Up Submark.png" alt="Vi-Up" className="h-[40px] w-[40px]" />
+          </a>
+        )}
 
-        
+
 
         <div className="flex items-center gap-[35px]">
           <button onClick={handleUndoClick}>
@@ -200,12 +223,20 @@ export default function EditorHeader(props: {
 
         
 
-        <button onClick={handleShareClick} className="bg-[#5a2d2d] text-white px-[22px] py-[12px] rounded-[100px] flex items-center gap-2 h-[45px] text-[18px] font-bold">
-          <Upload className="w-5" />
-          Share
-        </button>
+        {teaser ? (
+          <button onClick={handleLoginClick} className="bg-[#5a2d2d] text-white px-[22px] py-[12px] rounded-[100px] flex items-center gap-2 h-[45px] text-[18px] font-bold">
+            <LogIn className="w-5" />
+            Login
+          </button>
+        ) : (
+          <button onClick={handleShareClick} className="bg-[#5a2d2d] text-white px-[22px] py-[12px] rounded-[100px] flex items-center gap-2 h-[45px] text-[18px] font-bold">
+            <Upload className="w-5" />
+            Share
+          </button>
+        )}
 
-        {/* ── User Profile Dropdown ───────────────────────────────────── */}
+        {/* ── User Profile Dropdown (hidden in teaser mode) ───────────── */}
+        {!teaser && (
         <div className="relative" ref={profileRef}>
  
           {/* Trigger: profile image */}
@@ -292,6 +323,7 @@ export default function EditorHeader(props: {
             </a>
           </nav>
         </div>
+        )}
         {/* ─────────────────────────────────────────────────────────────── */}
       </div>
     </header>
