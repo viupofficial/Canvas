@@ -19,6 +19,7 @@ import {
   Circle as CircleIcon,
   Triangle as TriangleIcon,
   Shapes,
+  GripVertical,
 } from "lucide-react";
 
 // Pick a small leading icon for a layer based on its Fabric type.
@@ -64,8 +65,37 @@ export default function LayersPanel(props: {
   };
   const cancelRename = () => setEditingId(null);
 
+  // Drag-and-drop reordering state. `draggingId` is the layer being dragged;
+  // `dropIndex` is the display-space slot the drop indicator sits before.
+  const [draggingId, setDraggingId] = React.useState<string | null>(null);
+  const [dropIndex, setDropIndex] = React.useState<number | null>(null);
+
   // Canvas order is bottom→top; display top-most first like every design tool.
   const display = [...layers].reverse();
+
+  // Translate a display-space drop slot into a Fabric canvas index and apply it.
+  // Display index 0 is top-most (canvas index n-1), so the mapping is inverted.
+  const commitDrop = (id: string, targetDisplayIndex: number) => {
+    const n = layers.length;
+    const from = display.findIndex((l) => l.id === id);
+    if (from < 0) return;
+    // When dragging downward the removed row shifts everything above the drop
+    // slot up by one, so account for that before inverting to canvas space.
+    let to = targetDisplayIndex;
+    if (to > from) to -= 1;
+    if (to === from) return;
+    handle()?.moveLayerTo(id, n - 1 - to);
+  };
+
+  const onDragOverRow = (e: React.DragEvent, index: number) => {
+    if (!draggingId) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = "move";
+    // Drop above or below the hovered row depending on cursor position.
+    const rect = e.currentTarget.getBoundingClientRect();
+    const after = e.clientY - rect.top > rect.height / 2;
+    setDropIndex(after ? index + 1 : index);
+  };
 
   if (!display.length) {
     return (
@@ -78,22 +108,66 @@ export default function LayersPanel(props: {
   const iconBtn =
     "shrink-0 h-7 w-7 rounded-[8px] flex items-center justify-center text-[#7D5B59] hover:bg-[#EDE2DE] disabled:opacity-30 disabled:hover:bg-transparent disabled:cursor-not-allowed transition-colors";
 
+  const dropLine = (
+    <div className="h-0.5 -my-0.5 rounded-full bg-[#7D5B59]" />
+  );
+
   return (
-    <div className="flex flex-col gap-1 p-2">
+    <div
+      className="flex flex-col gap-1 p-2"
+      onDragOver={(e) => {
+        // Allow dropping past the last row (into the bottom slot).
+        if (draggingId) e.preventDefault();
+      }}
+    >
       {display.map((layer, i) => {
         const isActive = layer.id === activeLayerId;
         const isTop = i === 0;
         const isBottom = i === display.length - 1;
+        const isDragging = layer.id === draggingId;
+        const canDrag = editingId !== layer.id && !layer.locked;
         return (
-          <div
-            key={layer.id}
-            className={`group rounded-[10px] border px-2 py-1.5 ${
-              isActive
-                ? "bg-[#F2E8E6] border-[#7D5B59]"
-                : "bg-[#F2E8E6B2] border-[#EDE2DE] hover:border-[#7D5B59]/40"
-            }`}
-          >
+          <React.Fragment key={layer.id}>
+            {dropIndex === i && dropLine}
+            <div
+              draggable={canDrag}
+              onDragStart={(e) => {
+                if (!canDrag) return;
+                setDraggingId(layer.id);
+                e.dataTransfer.effectAllowed = "move";
+                e.dataTransfer.setData("text/plain", layer.id);
+              }}
+              onDragOver={(e) => onDragOverRow(e, i)}
+              onDrop={(e) => {
+                e.preventDefault();
+                if (draggingId && dropIndex != null) commitDrop(draggingId, dropIndex);
+                setDraggingId(null);
+                setDropIndex(null);
+              }}
+              onDragEnd={() => {
+                setDraggingId(null);
+                setDropIndex(null);
+              }}
+              className={`group rounded-[10px] border px-2 py-1.5 transition-opacity ${
+                isDragging ? "opacity-40" : ""
+              } ${
+                isActive
+                  ? "bg-[#F2E8E6] border-[#7D5B59]"
+                  : "bg-[#F2E8E6B2] border-[#EDE2DE] hover:border-[#7D5B59]/40"
+              }`}
+            >
             <div className="flex items-center gap-1.5">
+              {/* Drag handle */}
+              <span
+                className={`shrink-0 flex items-center justify-center text-[#7D5B59]/60 ${
+                  canDrag ? "cursor-grab active:cursor-grabbing" : "cursor-not-allowed opacity-30"
+                }`}
+                title={canDrag ? "Drag to reorder" : "Unlock to reorder"}
+                aria-label="Drag to reorder"
+              >
+                <GripVertical size={15} />
+              </span>
+
               {/* Show / hide */}
               <button
                 type="button"
@@ -223,7 +297,9 @@ export default function LayersPanel(props: {
                 <ArrowUpToLine size={14} />
               </button>
             </div>
-          </div>
+            </div>
+            {isBottom && dropIndex === display.length && dropLine}
+          </React.Fragment>
         );
       })}
     </div>

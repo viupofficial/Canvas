@@ -938,12 +938,37 @@ export default function Sidebar({
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
   const [phoneOpen, setPhoneOpen] = useState(false);
   const [bgColor, setBgColor] = useState<string>('#ffffff');
+  // Last uploaded background texture (data URL) — shown as a preview tile so
+  // the user can see what's applied and remove it.
+  const [bgImage, setBgImage] = useState<string | null>(null);
 
   const applyBackgroundColor = (color: string) => {
     setBgColor(color);
+    // The editor clears any background image when a flat color is applied.
+    setBgImage(null);
     if (editorRef?.current?.setBackgroundColor) {
       editorRef.current.setBackgroundColor(color);
     }
+  };
+
+  const handleBackgroundUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    const input = e.currentTarget;
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      const dataUrl = reader.result as string;
+      setBgImage(dataUrl);
+      editorRef?.current?.setBackgroundImage?.(dataUrl);
+    };
+    reader.readAsDataURL(file);
+    // Reset so the same file can be re-selected after removal.
+    input.value = '';
+  };
+
+  const removeBackgroundImage = () => {
+    setBgImage(null);
+    editorRef?.current?.setBackgroundImage?.(null);
   };
 
   const getItemsForCategory = (cat: string) => {
@@ -1061,34 +1086,36 @@ export default function Sidebar({
         <div>
           <div className="flex flex-col gap-4">
             <div className="mb-3">
-              <div className="text-[#191212] text-[17px] font-bold mb-2">Border</div>
-              <div className="text-[10px] text-gray-400 mb-2">Click to apply border to all pages</div>
-              <div className="grid grid-cols-2 gap-2">
-                {[
-                  { src: '/Bordeline.svg', label: 'Borderline' },
-                  { src: '/3.png', label: 'Border 2' },
-                ].map((border) => (
-                  <button
-                    key={border.src}
-                    onClick={() => {
-                      if (editorRef?.current?.addBorder) {
-                        editorRef.current.addBorder(border.src);
-                      }
-                    }}
-                    className="relative h-24 rounded border border-gray-200 overflow-hidden hover:border-[#8C6B6B] hover:shadow transition bg-gray-50 flex items-center justify-center"
-                    title={`Add ${border.label}`}
-                  >
-                    <img
-                      src={border.src}
-                      alt={border.label}
-                      className="w-full h-full object-contain p-1"
-                    />
-                    <span className="absolute bottom-1 left-0 right-0 text-center text-[10px] text-gray-500">
-                      {border.label}
-                    </span>
-                  </button>
-                ))}
+              <div className="text-[#191212] text-[17px] font-bold mb-2">Background</div>
+              <div className="text-[10px] text-gray-400 mb-2">
+                Upload your own image — texture, lighting, anything — and it becomes the background of every page
               </div>
+              <label className="block border-2 border-dashed border-gray-300 rounded-md p-4 text-center text-xs text-gray-500 cursor-pointer hover:bg-gray-50 hover:border-[#8C6B6B] transition">
+                <input
+                  type="file"
+                  accept="image/*"
+                  className="hidden"
+                  onChange={handleBackgroundUpload}
+                />
+                Click to upload a background image
+              </label>
+              {bgImage && (
+                <div className="relative mt-2 h-24 rounded border border-gray-200 overflow-hidden">
+                  <img
+                    src={bgImage}
+                    alt="Current background"
+                    className="w-full h-full object-cover"
+                  />
+                  <button
+                    type="button"
+                    onClick={removeBackgroundImage}
+                    title="Remove background image"
+                    className="absolute top-1 right-1 px-2 py-0.5 rounded bg-white/90 text-[10px] font-semibold text-red-500 border border-red-200 hover:bg-red-50 transition"
+                  >
+                    Remove
+                  </button>
+                </div>
+              )}
             </div>
             {['Shapes', 'Graphics', 'Stickers', 'Color'].map((cat) => (
               <div key={cat} className="mb-3">

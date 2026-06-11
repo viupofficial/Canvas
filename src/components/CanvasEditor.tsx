@@ -26,6 +26,7 @@ export type EditorHandle = {
   save: () => void;
   exportPNG: () => void;
   exportHTML: (eventName?: string) => Promise<string>;
+  exportPDF: (eventName?: string) => Promise<void>;
   previewLocal: (eventName?: string) => void;
   zoomIn: () => void;
   zoomOut: () => void;
@@ -51,6 +52,7 @@ export type EditorHandle = {
   addPhotoToGallery: (url: string) => void;
   addBorder: (url: string) => void;
   setBackgroundColor: (color: string) => void;
+  setBackgroundImage: (url: string | null) => void;
   previewAnimation: (type: string) => void;
   getActiveImageSrc: () => string | null;
   replaceActiveImage: (dataUrl: string) => void;
@@ -65,6 +67,7 @@ export type EditorHandle = {
   moveLayerDown: (id: string) => void;
   moveLayerToFront: (id: string) => void;
   moveLayerToBack: (id: string) => void;
+  moveLayerTo: (id: string, canvasIndex: number) => void;
   toggleLayerVisibility: (id: string) => void;
   toggleLayerLock: (id: string) => void;
   renameLayer: (id: string, name: string) => void;
@@ -482,6 +485,7 @@ const [currentPage, setCurrentPage] = useState(0);
     
     exportPNG,
     exportHTML,
+    exportPDF,
     previewLocal: (eventName?: string) => {
       const canvas = fabricRef.current;
       if (!canvas) return;
@@ -611,9 +615,61 @@ const [currentPage, setCurrentPage] = useState(0);
       const canvas = fabricRef.current;
       if (!canvas) return;
       canvas.backgroundColor = color;
+      // A flat color replaces any uploaded background texture — otherwise the
+      // image would keep covering the color and the change would be invisible.
+      canvas.backgroundImage = undefined;
       canvas.requestRenderAll();
       pushSnapshot();
       saveCurrentPage(currentPageRef.current);
+    },
+    // Set an uploaded image as the background of EVERY page (cover-fit: the
+    // texture keeps its aspect ratio and overflow is cropped). Passing null
+    // removes it everywhere. The live canvas only holds the active page, so
+    // the other pages get the background patched into their stored JSON and
+    // pick it up when loaded.
+    setBackgroundImage: (url: string | null) => {
+      const canvas = fabricRef.current;
+      const fabric = fabricModuleRef.current;
+      if (!canvas || !fabric) return;
+
+      const applyToOtherPages = (bgJson: any) => {
+        setPages((prev) =>
+          prev.map((p, i) => {
+            if (i === currentPageRef.current) return p; // saveCurrentPage covers it
+            // Blank pages (null) become a minimal page so they show the bg too.
+            const page = p ?? { objects: [] };
+            return { ...page, backgroundImage: bgJson ?? undefined };
+          })
+        );
+      };
+
+      if (!url) {
+        canvas.backgroundImage = undefined;
+        canvas.requestRenderAll();
+        pushSnapshot();
+        saveCurrentPage(currentPageRef.current);
+        applyToOtherPages(null);
+        return;
+      }
+      const w = (canvas.width as number) ?? CANVAS_REF_WIDTH;
+      const h = (canvas.height as number) ?? CANVAS_REF_HEIGHT;
+      const imgOpts = url.startsWith('data:') ? undefined : { crossOrigin: 'anonymous' };
+      fabric.Image.fromURL(url, imgOpts).then((img: any) => {
+        const el = img.getElement?.() as HTMLImageElement | null;
+        const natW = (el?.naturalWidth ?? 0) > 0 ? el!.naturalWidth : (img.width || 1);
+        const natH = (el?.naturalHeight ?? 0) > 0 ? el!.naturalHeight : (img.height || 1);
+        const scale = Math.max(w / natW, h / natH);
+        img.set({
+          originX: 'center', originY: 'center',
+          left: w / 2, top: h / 2,
+          scaleX: scale, scaleY: scale,
+        });
+        canvas.backgroundImage = img;
+        canvas.requestRenderAll();
+        pushSnapshot();
+        saveCurrentPage(currentPageRef.current);
+        applyToOtherPages(img.toObject());
+      }).catch((err: any) => console.error('Failed to load background image', err));
     },
     previewAnimation: (type: string) => {
       previewAnimation(type);
@@ -742,6 +798,24 @@ const [currentPage, setCurrentPage] = useState(0);
       if (!obj) return;
       const floor = Math.max(0, objs.findIndex((o: any) => !(o as any).isBorder));
       (canvas as any).moveObjectTo(obj, floor);
+      canvas.requestRenderAll();
+      pushSnapshot();
+      saveCurrentPage(currentPageRef.current);
+      onLayersChangeRef.current?.();
+    },
+    // Drop a layer at an arbitrary canvas stacking index (used by drag-and-drop
+    // reordering in the Layers panel). The index is clamped so it never sinks
+    // below a pinned border or past the top of the stack.
+    moveLayerTo: (id: string, canvasIndex: number) => {
+      const canvas = fabricRef.current;
+      if (!canvas) return;
+      const objs = canvas.getObjects();
+      const obj = objs.find((o: any) => o.id === id);
+      if (!obj) return;
+      const floor = Math.max(0, objs.findIndex((o: any) => !(o as any).isBorder));
+      const target = Math.min(objs.length - 1, Math.max(floor, canvasIndex));
+      if (target === objs.indexOf(obj)) return;
+      (canvas as any).moveObjectTo(obj, target);
       canvas.requestRenderAll();
       pushSnapshot();
       saveCurrentPage(currentPageRef.current);
@@ -1933,6 +2007,54 @@ const [currentPage, setCurrentPage] = useState(0);
     return "rsvp";
   }
 }, [currentPage, musicUrl, pages, serializeCanvas, props]);
+
+  // Render every page to a PNG on an offscreen StaticCanvas and assemble them
+  // into a single PDF (one page per canvas page), named after the event.
+  const exportPDF = useCallback(async (eventName?: string): Promise<void> => {
+    const canvas = fabricRef.current;
+    const fabric = fabricModuleRef.current;
+    if (!canvas || !fabric) return;
+
+    const currentPageJson = serializeCanvas(canvas);
+    const exportedPages = pages.map((page, index) =>
+      index === currentPage ? currentPageJson : (page ?? null)
+    );
+
+    // Pages the user hasn't visited this session may reference fonts that were
+    // never loaded; wait for them so offscreen text renders with the real face.
+    const families = collectFontFamilies(exportedPages);
+    if (families.length) await preloadFonts(families);
+
+    const { jsPDF } = await import("jspdf");
+    const w = CANVAS_REF_WIDTH;
+    const h = CANVAS_REF_HEIGHT;
+    const orientation = h >= w ? "portrait" : "landscape";
+    const pdf = new jsPDF({ orientation, unit: "px", format: [w, h] });
+
+    const el = document.createElement("canvas");
+    const offscreen = new (fabric as any).StaticCanvas(el, { width: w, height: h });
+    try {
+      for (let i = 0; i < exportedPages.length; i++) {
+        offscreen.clear();
+        offscreen.backgroundColor = "#ffffff";
+        const json = exportedPages[i];
+        if (json) {
+          const result = offscreen.loadFromJSON(json);
+          if (result && typeof result.then === "function") await result;
+        }
+        offscreen.renderAll();
+        // multiplier 2 keeps text crisp when the PDF page is viewed at full size.
+        const dataUrl = offscreen.toDataURL({ format: "png", multiplier: 2 });
+        if (i > 0) pdf.addPage([w, h], orientation);
+        pdf.addImage(dataUrl, "PNG", 0, 0, w, h);
+      }
+    } finally {
+      offscreen.dispose();
+    }
+
+    const fileName = (eventName ?? "").trim() || "wedding-invitation";
+    pdf.save(`${fileName}.pdf`);
+  }, [currentPage, pages, serializeCanvas]);
 
   const saveLocal = useCallback(() => {
     const canvas = fabricRef.current;

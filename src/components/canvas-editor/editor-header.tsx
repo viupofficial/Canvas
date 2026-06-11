@@ -2,12 +2,11 @@
 
 'use client';
 
-import { Gift, Upload, LogIn } from 'lucide-react';
+import { Gift, Upload, LogIn, Link2, FileText, Check, Loader2 } from 'lucide-react';
 import { RefObject, useState, useRef, useEffect } from "react";
 import { useRouter } from "next/navigation"; // ✅ ADD THIS
 import { EditorHandle } from "@/src/components/CanvasEditor";
 
-const SHARE_BASE_URL = "http://192.168.56.1:3000/preview";
 /**
  * EditorHeader component
  * 
@@ -60,11 +59,21 @@ export default function EditorHeader(props: {
   const [profileOpen, setProfileOpen] = useState(false);
   const profileRef  = useRef<HTMLDivElement>(null);
 
-  // Close dropdown when clicking outside
+  // ── SHARE DROPDOWN ───────────────────────────────────────────────────────
+  // `shareStatus` drives per-item feedback: generating/copying the link or
+  // rendering the PDF, so the user knows the async work is in flight.
+  const [shareOpen, setShareOpen] = useState(false);
+  const shareRef = useRef<HTMLDivElement>(null);
+  const [shareStatus, setShareStatus] = useState<"idle" | "link" | "copied" | "pdf">("idle");
+
+  // Close dropdowns when clicking outside
   useEffect(() => {
     function handleOutsideClick(e: MouseEvent) {
       if (profileRef.current && !profileRef.current.contains(e.target as Node)) {
         setProfileOpen(false);
+      }
+      if (shareRef.current && !shareRef.current.contains(e.target as Node)) {
+        setShareOpen(false);
       }
     }
     document.addEventListener("mousedown", handleOutsideClick);
@@ -138,27 +147,76 @@ export default function EditorHeader(props: {
   };
 
   /**
-   * Handle the click event for the share button
-   * @description This function will open a new tab with
-   *  the share URL and a message to share with the user's
-   *  friends on WhatsApp.
-   * @param {void} none
-   * @returns {void}
+   * Handle the click event for the share button.
+   * Opens the share dropdown (or defers to the onShare prop if provided).
    */
   const handleShareClick = (): void => {
     if (onShare) return onShare();
+    setShareOpen((o) => !o);
+  };
 
-    const shareUrl = SHARE_BASE_URL;
-  
-    const message = `${eventName} invited you \n\nTap here:\n${shareUrl}`;
-    const encodedMessage = encodeURIComponent(message);
-  
-    const whatsappUrl = `https://wa.me/?text=${encodedMessage}`;
-  
-    /**
-     * Open the WhatsApp share URL in a new tab
-     */
-    window.open(whatsappUrl, "_blank");
+  /**
+   * Copy text to the clipboard. `navigator.clipboard` only exists in secure
+   * contexts (https/localhost) — the editor is often served over plain http on
+   * the LAN, so fall back to a hidden textarea + execCommand there.
+   */
+  const copyText = async (text: string): Promise<void> => {
+    if (navigator.clipboard && window.isSecureContext) {
+      await navigator.clipboard.writeText(text);
+      return;
+    }
+    const ta = document.createElement("textarea");
+    ta.value = text;
+    ta.style.position = "fixed";
+    ta.style.opacity = "0";
+    document.body.appendChild(ta);
+    ta.select();
+    document.execCommand("copy");
+    document.body.removeChild(ta);
+  };
+
+  /**
+   * "Share Link": publish the project exactly like the play (preview) button
+   * does — exportHTML uploads the pages and returns a slug derived from the
+   * event name — then copy the resulting /e/{slug} URL to the clipboard.
+   */
+  const handleShareLink = async (): Promise<void> => {
+    const editor = editorRef.current;
+    if (!editor || shareStatus !== "idle") return;
+    setShareStatus("link");
+    try {
+      const slug = await editor.exportHTML(eventName);
+      const shareUrl = `${window.location.origin}/e/${slug}`;
+      await copyText(shareUrl);
+      setShareStatus("copied");
+      setTimeout(() => {
+        setShareStatus("idle");
+        setShareOpen(false);
+      }, 1500);
+    } catch (e) {
+      console.error("[share] link failed", e);
+      alert("Could not create the share link: " + (e as Error).message);
+      setShareStatus("idle");
+    }
+  };
+
+  /**
+   * "Share PDF": render every page of the invitation to an image and download
+   * them as a single PDF named after the event.
+   */
+  const handleSharePDF = async (): Promise<void> => {
+    const editor = editorRef.current;
+    if (!editor || shareStatus !== "idle") return;
+    setShareStatus("pdf");
+    try {
+      await editor.exportPDF(eventName);
+      setShareOpen(false);
+    } catch (e) {
+      console.error("[share] pdf failed", e);
+      alert("Could not export the PDF: " + (e as Error).message);
+    } finally {
+      setShareStatus("idle");
+    }
   };
 
   return (
@@ -229,10 +287,80 @@ export default function EditorHeader(props: {
             Login
           </button>
         ) : (
-          <button onClick={handleShareClick} className="bg-[#5a2d2d] text-white px-[22px] py-[12px] rounded-[100px] flex items-center gap-2 h-[45px] text-[18px] font-bold">
-            <Upload className="w-5" />
-            Share
-          </button>
+          <div className="relative" ref={shareRef}>
+            <button
+              onClick={handleShareClick}
+              aria-haspopup="true"
+              aria-expanded={shareOpen}
+              className="bg-[#5a2d2d] text-white px-[22px] py-[12px] rounded-[100px] flex items-center gap-2 h-[45px] text-[18px] font-bold"
+            >
+              <Upload className="w-5" />
+              Share
+            </button>
+
+            {/* Share dropdown */}
+            <nav
+              role="menu"
+              className={[
+                "absolute right-0 top-[calc(100%+8px)] min-w-[271px] bg-white rounded-[25px]",
+                "shadow-[0_10px_30px_rgba(0,0,0,0.12)] p-[10px] z-[1000]",
+                "transition-all duration-150 ease-in-out",
+                shareOpen
+                  ? "opacity-100 translate-y-0 pointer-events-auto"
+                  : "opacity-0 -translate-y-1.5 pointer-events-none",
+              ].join(" ")}
+            >
+              {/* Share Link */}
+              <button
+                type="button"
+                role="menuitem"
+                disabled={shareStatus === "pdf"}
+                onClick={handleShareLink}
+                className="w-full flex items-center gap-[10px] px-3 py-[10px] text-[#7D5B59] font-semibold font-[Montserrat] rounded-[10px] hover:bg-[#f7f2f1] disabled:opacity-40 disabled:cursor-not-allowed text-left"
+              >
+                {shareStatus === "link" ? (
+                  <Loader2 className="w-[22px] flex-shrink-0 animate-spin" />
+                ) : shareStatus === "copied" ? (
+                  <Check className="w-[22px] flex-shrink-0 text-green-600" />
+                ) : (
+                  <Link2 className="w-[22px] flex-shrink-0" />
+                )}
+                <span className="flex flex-col items-start min-w-0">
+                  <span>
+                    {shareStatus === "link"
+                      ? "Creating link…"
+                      : shareStatus === "copied"
+                      ? "Link copied!"
+                      : "Share Link"}
+                  </span>
+                  <span className="text-[12px] font-normal text-[#7D5B59]/60 truncate max-w-[190px]">
+                    {eventName}
+                  </span>
+                </span>
+              </button>
+
+              {/* Share PDF */}
+              <button
+                type="button"
+                role="menuitem"
+                disabled={shareStatus === "link" || shareStatus === "copied"}
+                onClick={handleSharePDF}
+                className="w-full flex items-center gap-[10px] px-3 py-[10px] text-[#7D5B59] font-semibold font-[Montserrat] rounded-[10px] hover:bg-[#f7f2f1] disabled:opacity-40 disabled:cursor-not-allowed text-left"
+              >
+                {shareStatus === "pdf" ? (
+                  <Loader2 className="w-[22px] flex-shrink-0 animate-spin" />
+                ) : (
+                  <FileText className="w-[22px] flex-shrink-0" />
+                )}
+                <span className="flex flex-col items-start min-w-0">
+                  <span>{shareStatus === "pdf" ? "Exporting PDF…" : "Share PDF"}</span>
+                  <span className="text-[12px] font-normal text-[#7D5B59]/60">
+                    Download all pages as PDF
+                  </span>
+                </span>
+              </button>
+            </nav>
+          </div>
         )}
 
         {/* ── User Profile Dropdown (hidden in teaser mode) ───────────── */}
