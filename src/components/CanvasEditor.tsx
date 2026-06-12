@@ -18,6 +18,7 @@ import { galleryPage } from "@/src/components/template-list/galleryTemplate";
 import { useEventDataOptional } from "@/src/store/EventDataContext";
 import { useFabricEventSync } from "@/src/hooks/useFabricEventSync";
 import { FONT_GROUPS, loadGoogleFont, collectFontFamilies, preloadFonts } from "@/src/lib/fonts";
+import { downscaleImageFile } from "@/src/lib/imageDownscale";
 export type EditorHandle = {
   undo: () => void;
   redo: () => void;
@@ -1466,9 +1467,7 @@ const [currentPage, setCurrentPage] = useState(0);
       const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
       const x = e.clientX - rect.left;
       const y = e.clientY - rect.top;
-      const reader = new FileReader();
-      reader.onload = async () => {
-        const dataUrl = reader.result as string;
+      downscaleImageFile(file).then(async (dataUrl) => {
         try {
           const img = await fabric.Image.fromURL(dataUrl);
           img.set({ left: x, top: y, scaleX: 0.6, scaleY: 0.6 });
@@ -1478,8 +1477,7 @@ const [currentPage, setCurrentPage] = useState(0);
         } catch (err) {
           console.error('Failed to load dropped file image', err);
         }
-      };
-      reader.readAsDataURL(file);
+      });
       return;
     }
 
@@ -1824,14 +1822,11 @@ const [currentPage, setCurrentPage] = useState(0);
     const file = e.target.files?.[0];
     const input = e.currentTarget;
     if (!file) return;
-    const reader = new FileReader();
-    reader.onload = () => {
-      const dataUrl = reader.result as string;
+    downscaleImageFile(file).then((dataUrl) => {
       const obj = editingImageRef.current ?? fabricRef.current?.getActiveObject();
       replaceObjectImage(obj, dataUrl);
       input.value = '';
-    };
-    reader.readAsDataURL(file);
+    });
   }, [replaceObjectImage]);
 
   useEffect(() => {
@@ -1859,9 +1854,7 @@ const [currentPage, setCurrentPage] = useState(0);
     const fabric = fabricModuleRef.current;
     if (!file || !canvas || !fabric) return;
 
-    const reader = new FileReader();
-    reader.onload = async () => {
-      const dataUrl = reader.result as string;
+    downscaleImageFile(file).then(async (dataUrl) => {
       try {
         const img = await fabric.Image.fromURL(dataUrl);
         img.set({ left: 100, top: 100, scaleX: 0.6, scaleY: 0.6 });
@@ -1871,8 +1864,7 @@ const [currentPage, setCurrentPage] = useState(0);
       } catch (err) {
         console.error('Failed to load uploaded image', err);
       }
-    };
-    reader.readAsDataURL(file);
+    });
     // reset input so same file can be reselected
     e.currentTarget.value = "";
   }, []);

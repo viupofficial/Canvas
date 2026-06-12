@@ -10,6 +10,9 @@ import "@/src/app/globals.css";
 import { useRouter } from "next/navigation";
 import { EventDataProvider, useEventData } from "@/src/store/EventDataContext";
 import { ensureProject, saveProject } from "@/src/lib/projectStorage";
+import { getCanvasUser } from "@/src/lib/userSession";
+
+const API_BASE = "https://vi-up.com/api";
 
 // Where an Apply from the image editor should write the edited result back to.
 type ApplyTarget =
@@ -72,19 +75,52 @@ function ProjectEditorInner({ projectId, teaser }: { projectId?: string; teaser?
     if (!data) return;
     const thumbnail = editorRef.current?.getThumbnail?.() ?? "";
     setSaveStatus("saving");
+
+    // Local copy first: the editor still loads from localStorage on mount.
     try {
       saveProject(projectId, {
         canvasJson: { ...data, eventName },
         thumbnail,
       });
-      setSaveStatus("saved");
-      if (savedTimerRef.current) clearTimeout(savedTimerRef.current);
-      savedTimerRef.current = setTimeout(() => setSaveStatus("idle"), 1500);
     } catch (e) {
-      console.error("[ProjectEditor] save failed", e);
-      setSaveStatus("idle");
+      console.error("[ProjectEditor] local save failed", e);
     }
-  }, [projectId, eventName]);
+
+    const user = getCanvasUser();
+    if (!user) {
+      console.warn("[ProjectEditor] no viup_canvas_user — skipping DB save");
+      setSaveStatus("idle");
+      return;
+    }
+
+    const json_data = {
+      version: 1,
+      eventData,
+      canvas: { ...data, eventName },
+    };
+    console.log("Saving to DB json_data:", json_data);
+
+    fetch(`${API_BASE}/update_design.php`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        design_id: Number(projectId),
+        user_id: user.id,
+        json_data,
+      }),
+    })
+      .then((res) => res.json())
+      .then((resp) => {
+        console.log("[ProjectEditor] update_design response:", resp);
+        setSaveStatus("saved");
+        if (savedTimerRef.current) clearTimeout(savedTimerRef.current);
+        savedTimerRef.current = setTimeout(() => setSaveStatus("idle"), 1500);
+      })
+      .catch((e) => {
+        console.error("[ProjectEditor] DB save failed", e);
+        setSaveStatus("idle");
+      });
+  }, [projectId, eventName, eventData]);
 
   // Always call the freshest persist from the debounced timer.
   const persistRef = useRef(persist);

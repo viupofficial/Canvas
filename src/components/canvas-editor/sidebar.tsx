@@ -12,6 +12,7 @@ import { invitationPage } from "@/src/components/template-list/invitationTemplat
 import { guestbookPage } from "@/src/components/template-list/guestbookTemplate";
 import { galleryPage } from "@/src/components/template-list/galleryTemplate";
 import { envelopePage } from "@/src/components/template-list/EnvelopeTemplate";
+import { downscaleImageFile } from "@/src/lib/imageDownscale";
 
 // Invert a 6-digit hex color (Adobe-style negative). Falls back gracefully for non-hex input.
 function invertHex(color: string): string {
@@ -147,17 +148,19 @@ function PhotoTab({
 
   const handleFiles = (files: FileList | null) => {
     if (!files) return;
+    // Chain sequentially so multi-file uploads keep their FIFO order even
+    // though downscaling finishes at different speeds per file.
+    let chain: Promise<unknown> = Promise.resolve();
     Array.from(files).forEach((file) => {
       if (!file.type.startsWith('image/')) return;
-      const reader = new FileReader();
-      reader.onload = () => {
-        const dataUrl = reader.result as string;
-        setPhotos((prev) => [...prev, dataUrl]);
-        // Grow the gallery page with each newly uploaded photo (FIFO order).
-        // No-op if no gallery page exists.
-        editorRef?.current?.addPhotoToGallery?.(dataUrl);
-      };
-      reader.readAsDataURL(file);
+      chain = chain
+        .then(() => downscaleImageFile(file))
+        .then((dataUrl) => {
+          setPhotos((prev) => [...prev, dataUrl]);
+          // Grow the gallery page with each newly uploaded photo (FIFO order).
+          // No-op if no gallery page exists.
+          editorRef?.current?.addPhotoToGallery?.(dataUrl);
+        });
     });
   };
 
@@ -751,13 +754,10 @@ function MoneyGiftTab() {
   const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    const reader = new FileReader();
-    reader.onload = () => {
-      const dataUrl = reader.result as string;
+    downscaleImageFile(file).then((dataUrl) => {
       setImage(dataUrl);
       pushField({ image: dataUrl });
-    };
-    reader.readAsDataURL(file);
+    });
   };
 
   const handleSave = () => {
@@ -955,13 +955,10 @@ export default function Sidebar({
     const file = e.target.files?.[0];
     const input = e.currentTarget;
     if (!file) return;
-    const reader = new FileReader();
-    reader.onload = () => {
-      const dataUrl = reader.result as string;
+    downscaleImageFile(file).then((dataUrl) => {
       setBgImage(dataUrl);
       editorRef?.current?.setBackgroundImage?.(dataUrl);
-    };
-    reader.readAsDataURL(file);
+    });
     // Reset so the same file can be re-selected after removal.
     input.value = '';
   };
