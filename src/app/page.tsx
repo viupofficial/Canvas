@@ -3,15 +3,24 @@
 import React, { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { MoreVertical, Plus, Pencil, Copy, Trash2 } from "lucide-react";
-import {
-  getProjects,
-  createProject,
-  duplicateProject,
-  deleteProject,
-  renameProject,
-  type ProjectMeta,
-} from "@/src/lib/projectStorage";
+import { getCanvasUser, type CanvasUser } from "@/src/lib/userSession";
 import UserMenu from "@/src/components/UserMenu";
+
+const API_BASE = "https://vi-up.com/api";
+
+type DesignMeta = {
+  id: number;
+  user_id: number;
+  event_id?: number | null;
+  template_id?: number | null;
+  name: string;
+  preview_url?: string | null;
+  status?: string | null;
+  export_path?: string | null;
+  last_modified?: string | null;
+  created_at?: string | null;
+  updated_at?: string | null;
+};
 
 function formatEdited(iso: string): string {
   if (!iso) return "";
@@ -30,17 +39,38 @@ function formatEdited(iso: string): string {
 
 export default function HomePage() {
   const router = useRouter();
-  const [projects, setProjects] = useState<ProjectMeta[]>([]);
+  const [projects, setProjects] = useState<DesignMeta[]>([]);
   const [mounted, setMounted] = useState(false);
-  const [menuId, setMenuId] = useState<string | null>(null);
-  const [renamingId, setRenamingId] = useState<string | null>(null);
+  const [menuId, setMenuId] = useState<number | null>(null);
+  const [renamingId, setRenamingId] = useState<number | null>(null);
   const [renameValue, setRenameValue] = useState("");
+  const userRef = useRef<CanvasUser | null>(null);
 
-  const refresh = () => setProjects(getProjects());
+  const refresh = async () => {
+    const user = userRef.current;
+    if (!user) return;
+    try {
+      const res = await fetch(`${API_BASE}/get_designs.php?user_id=${user.id}`);
+      const data = await res.json();
+      const designs: DesignMeta[] = Array.isArray(data)
+        ? data
+        : data.designs ?? data.data ?? [];
+      setProjects(designs);
+    } catch (e) {
+      console.error("[home] failed to load designs", e);
+    }
+  };
 
   useEffect(() => {
+    const user = getCanvasUser();
+    if (!user) {
+      window.location.href = "https://vi-up.com/login";
+      return;
+    }
+    userRef.current = user;
     setMounted(true);
     refresh();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
@@ -50,39 +80,100 @@ export default function HomePage() {
     return () => window.removeEventListener("mousedown", close);
   }, [menuId]);
 
-  const handleCreate = () => {
-    const project = createProject();
-    router.push(`/editor/${project.id}`);
+  const handleCreate = async () => {
+    const user = userRef.current;
+    if (!user) return;
+    try {
+      const res = await fetch(`${API_BASE}/create_design.php`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          user_id: user.id,
+          name: "Untitled Design",
+          json_data: {},
+        }),
+      });
+      const data = await res.json();
+      if (data.design_id) {
+        router.push(`/editor/${data.design_id}`);
+      } else {
+        console.error("[home] create_design failed", data);
+      }
+    } catch (e) {
+      console.error("[home] failed to create design", e);
+    }
   };
 
-  const handleOpen = (id: string) => {
+  const handleOpen = (id: number) => {
     if (renamingId) return;
     router.push(`/editor/${id}`);
   };
 
-  const handleDuplicate = (id: string) => {
-    duplicateProject(id);
+  const handleDuplicate = async (id: number) => {
     setMenuId(null);
-    refresh();
+    const user = userRef.current;
+    if (!user) return;
+    try {
+      const res = await fetch(
+        `${API_BASE}/get_design.php?design_id=${id}&user_id=${user.id}`
+      );
+      const data = await res.json();
+      const design = data.design ?? data;
+      await fetch(`${API_BASE}/create_design.php`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          user_id: user.id,
+          name: `${design.name || "Untitled Design"} Copy`,
+          json_data: design.json_data ?? {},
+        }),
+      });
+      refresh();
+    } catch (e) {
+      console.error("[home] failed to duplicate design", e);
+    }
   };
 
-  const handleDelete = (id: string, name: string) => {
+  const handleDelete = async (id: number, name: string) => {
     setMenuId(null);
+    const user = userRef.current;
+    if (!user) return;
     if (window.confirm(`Delete "${name}"? This cannot be undone.`)) {
-      deleteProject(id);
+      try {
+        await fetch(`${API_BASE}/delete_design.php`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ design_id: id, user_id: user.id }),
+        });
+      } catch (e) {
+        console.error("[home] failed to delete design", e);
+      }
       refresh();
     }
   };
 
-  const startRename = (p: ProjectMeta) => {
+  const startRename = (p: DesignMeta) => {
     setMenuId(null);
     setRenamingId(p.id);
     setRenameValue(p.name);
   };
 
-  const commitRename = () => {
-    if (renamingId) {
-      renameProject(renamingId, renameValue);
+  const commitRename = async () => {
+    const user = userRef.current;
+    if (renamingId && user) {
+      try {
+        await fetch(`${API_BASE}/update_design.php`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            design_id: renamingId,
+            user_id: user.id,
+            name: renameValue.trim() || "Untitled Design",
+          }),
+        });
+      } catch (e) {
+        console.error("[home] failed to rename design", e);
+      }
       refresh();
     }
     setRenamingId(null);
@@ -98,7 +189,7 @@ export default function HomePage() {
           <img src="/Vi-Up Submark.png" alt="Vi-Up" className="h-[40px] w-[40px]" />
         </a>
 
-       
+
       </div>
         <div className="flex items-center gap-5 mr-[90px]">
           <button
@@ -150,9 +241,9 @@ export default function HomePage() {
               >
                 {/* Thumbnail */}
                 <div className="aspect-[3/4] bg-[#F7F2F0] flex items-center justify-center overflow-hidden">
-                  {p.thumbnail ? (
+                  {p.preview_url ? (
                     // eslint-disable-next-line @next/next/no-img-element
-                    <img src={p.thumbnail} alt={p.name} className="w-full h-full object-contain" />
+                    <img src={p.preview_url} alt={p.name} className="w-full h-full object-contain" />
                   ) : (
                     <span className="text-[#D9C7C2] text-[13px]">No preview</span>
                   )}
@@ -179,7 +270,9 @@ export default function HomePage() {
                   ) : (
                     <div className="text-[14px] font-semibold text-[#191212] truncate">{p.name}</div>
                   )}
-                  <div className="text-[11px] text-[#7D5B5999] mt-0.5">{formatEdited(p.updatedAt)}</div>
+                  <div className="text-[11px] text-[#7D5B5999] mt-0.5">
+                    {formatEdited(p.last_modified || p.updated_at || p.created_at || "")}
+                  </div>
                 </div>
 
                 {/* Menu trigger */}
