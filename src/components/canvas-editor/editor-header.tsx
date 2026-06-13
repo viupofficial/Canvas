@@ -6,6 +6,12 @@ import { Gift, Upload, LogIn, Link2, FileText, Check, Loader2 } from 'lucide-rea
 import { RefObject, useState, useRef, useEffect } from "react";
 import { useRouter } from "next/navigation"; // ✅ ADD THIS
 import { EditorHandle } from "@/src/components/CanvasEditor";
+import {
+  getCanvasUser,
+  clearCanvasUser,
+  avatarFor,
+  type CanvasUser,
+} from "@/src/lib/userSession";
 
 /**
  * EditorHeader component
@@ -48,13 +54,16 @@ export default function EditorHeader(props: {
   const router = useRouter();
 
   // ── PROFILE DROPDOWN ─────────────────────────────────────────────────────
-  // MIGRATION: Replace this mock with real NextAuth data:
-  //   import { useSession, signOut } from "next-auth/react";
-  //   const { data: session } = useSession();
-  //   const username = session?.user?.name ?? "";
-  //   const imgSrc   = session?.user?.image ?? "/placeholder_user.png";
-  const username = "Username";                   // ← swap with session.user.name
-  const imgSrc   = "/placeholder_user2.png";      // ← swap with session.user.image
+  // Reads the session that the /[userId] login-landing route stored in
+  // localStorage (viup_canvas_user). `undefined` = not yet checked (client),
+  // `null` = checked and nobody is logged in.
+  const [user, setUser] = useState<CanvasUser | null | undefined>(undefined);
+  useEffect(() => {
+    setUser(getCanvasUser());
+  }, []);
+
+  const username = user?.name ?? "";
+  const imgSrc   = avatarFor(user ?? null);
 
   const [profileOpen, setProfileOpen] = useState(false);
   const profileRef  = useRef<HTMLDivElement>(null);
@@ -364,7 +373,18 @@ export default function EditorHeader(props: {
         )}
 
         {/* ── User Profile Dropdown (hidden in teaser mode) ───────────── */}
-        {!teaser && (
+        {/* No login data → Login button (matches the Share button styling). */}
+        {!teaser && user === null && (
+          <button
+            onClick={handleLoginClick}
+            className="bg-[#5a2d2d] text-white px-[22px] py-[12px] rounded-[100px] flex items-center gap-2 h-[45px] text-[18px] font-bold"
+          >
+            <LogIn className="w-5" />
+            Login
+          </button>
+        )}
+
+        {!teaser && user && (
         <div className="relative" ref={profileRef}>
  
           {/* Trigger: profile image */}
@@ -396,16 +416,21 @@ export default function EditorHeader(props: {
                 : "opacity-0 -translate-y-1.5 pointer-events-none",
             ].join(" ")}
           >
-            {/* Header row: avatar + username */}
+            {/* Header row: avatar + username + email */}
             <div className="flex items-center gap-[4.5px] px-3 py-2">
               <img
                 src={imgSrc}
                 alt="Profile Picture"
                 className="w-[40px] h-[40px] rounded-full object-cover"
               />
-              <span className="text-[#7D5B59] font-bold text-[20px] font-[Montserrat]">
-                {username}
-              </span>
+              <div className="min-w-0">
+                <span className="block text-[#7D5B59] font-bold text-[20px] font-[Montserrat] truncate">
+                  {username}
+                </span>
+                <span className="block text-[#7D5B5999] text-[13px] truncate">
+                  {user?.email}
+                </span>
+              </div>
             </div>
  
             {/* My Account */}
@@ -434,21 +459,19 @@ export default function EditorHeader(props: {
               <span>My Events</span>
             </a>
  
-            {/* Logout */}
-            {/*
-             * MIGRATION: Replace this <a> with NextAuth signOut:
-             *   import { signOut } from "next-auth/react";
-             *   <button onClick={() => signOut({ callbackUrl: "/" })} ...>Logout</button>
-             */}
-            <a
-              href="/logout"
+            {/* Logout — clears the local session, then bounces to the vi-up.com login. */}
+            <button
               role="menuitem"
-              className="flex items-center gap-[10px] px-3 py-[10px] text-[#7D5B59] font-semibold font-[Montserrat] rounded-[10px] no-underline hover:bg-[#f7f2f1]"
-              onClick={() => setProfileOpen(false)}
+              onClick={() => {
+                clearCanvasUser();
+                setProfileOpen(false);
+                window.location.href = "https://vi-up.com/login";
+              }}
+              className="w-full flex items-center gap-[10px] px-3 py-[10px] text-[#7D5B59] font-semibold font-[Montserrat] rounded-[10px] no-underline hover:bg-[#f7f2f1] bg-transparent border-0 cursor-pointer text-left"
             >
               <i className="fa fa-sign-out" aria-hidden="true" style={{ fontSize: 19 }} />
               <span>Logout</span>
-            </a>
+            </button>
           </nav>
         </div>
         )}

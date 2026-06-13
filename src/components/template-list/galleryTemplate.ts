@@ -30,7 +30,8 @@ export const galleryPage = {
       name: "galleryImage1"
     },
 
-    // Image 2 — same standardized frame as image 1.
+    // Image 2 — same standardized frame, stacked directly on top of image 1.
+    // Hidden initially: the gallery slideshow reveals one photo at a time.
     {
       type: "image",
       src: "/aiCouple-2.png",
@@ -40,12 +41,16 @@ export const galleryPage = {
       originY: "center",
       scaleX: 0.28515625,
       scaleY: 0.2884114583333333,
+      visible: false,
       name: "galleryImage2"
     },
   ]
 };
 
 // Gallery page template
-// Both image slots use the same standardized 292×443 frame, anchored center at
-// (190, 310). "name" identifies them (galleryImage1 / galleryImage2) so the
-// page can be detected/removed by the Photos sidebar toggle.
+// All image slots share the same standardized 292×443 frame, anchored center at
+// (190, 310), so they overlap into a single slot. "name" identifies them
+// (galleryImage1 / galleryImage2 / …) so the page can be detected/removed by the
+// Photos sidebar toggle, and so the slideshow can cycle which one is visible —
+// the slot shows one photo at a time, swapping every few seconds (editor +
+// published view). Uploaded photos are appended as more galleryImageN slots.

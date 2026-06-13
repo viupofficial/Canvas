@@ -195,6 +195,29 @@ export default function RsvpPlayer({ pages, envelope, musicUrl, borderUrl }: Rsv
       cancellers.push(() => cancelAnimationFrame(rafId));
     };
 
+    // Gallery slideshow: the gallery page's photos all share one slot (named
+    // galleryImage1, galleryImage2, …). Show one at a time, advancing every 5s,
+    // looping through every photo. No-op on pages without a gallery.
+    const startGallerySlideshow = (rc: any) => {
+      const imgs = rc
+        .getObjects()
+        .filter((o: any) => typeof o?.name === "string" && o.name.startsWith("galleryImage"));
+      if (!imgs.length) return;
+      let gi = 0;
+      const show = () => {
+        imgs.forEach((o: any, n: number) => o.set({ visible: n === gi }));
+        rc.requestRenderAll();
+      };
+      show();
+      if (imgs.length < 2) return; // a single photo never needs to cycle
+      const gid = setInterval(() => {
+        if (cancelled) return;
+        gi = (gi + 1) % imgs.length;
+        show();
+      }, 5000);
+      cancellers.push(() => clearInterval(gid));
+    };
+
     root.innerHTML = "";
 
     import("fabric").then((mod: any) => {
@@ -241,6 +264,7 @@ export default function RsvpPlayer({ pages, envelope, musicUrl, borderUrl }: Rsv
             });
             toRemove.forEach((o) => rc.remove(o));
             startAnimations(rc);
+            startGallerySlideshow(rc);
             rc.requestRenderAll();
             // Webfonts used by this page may not be ready at first paint; load
             // them, then repaint so text renders with the correct family.

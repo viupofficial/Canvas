@@ -2208,21 +2208,13 @@ const saveCurrentPage = (index: number = currentPageRef.current) => {
     return objs.some(isGalleryObj);
   };
 
-  // Standardized gallery slot: 292×443, centered at x=190, stacked vertically.
-  // All gallery images (template defaults + uploads) share this frame so a new
-  // photo can be placed directly below the lowest existing one.
-  const GALLERY_SLOT = { centerX: 190, width: 292, height: 443, gap: 24, firstTop: 310 };
+  // Standardized gallery slot: 292×443, centered at (190, 310). Every gallery
+  // image (template defaults + uploads) shares this exact frame, so they all
+  // overlap into one slot — the slideshow shows one at a time.
+  const GALLERY_SLOT = { centerX: 190, width: 292, height: 443, firstTop: 310 };
 
-  // Center-Y for the next stacked slot, given the gallery images already present.
-  // Images use center origin, so an image's `top` is its center and its bottom
-  // edge is `top + height/2` (height is the standardized 443).
-  const nextGalleryTop = (galleryObjs: any[]): number => {
-    if (!galleryObjs.length) return GALLERY_SLOT.firstTop;
-    const maxBottom = Math.max(
-      ...galleryObjs.map((o) => (o.top ?? GALLERY_SLOT.firstTop) + GALLERY_SLOT.height / 2),
-    );
-    return maxBottom + GALLERY_SLOT.gap + GALLERY_SLOT.height / 2;
-  };
+  // How long each gallery photo stays on screen before the slideshow advances.
+  const GALLERY_SLIDESHOW_MS = 5000;
 
   // Index of the gallery page, scanning live content for the current page so an
   // unsaved just-added gallery page is still found. Returns -1 if none.
@@ -2299,16 +2291,19 @@ const saveCurrentPage = (index: number = currentPageRef.current) => {
     }, 0);
   };
 
-  // Append a photo to the gallery page as a new standardized 292×443 slot,
-  // stacked below the lowest existing gallery image (FIFO: oldest on top,
-  // newest at the bottom). No-op if there is no gallery page. Works whether the
-  // gallery is the visible page (added live) or another page (appended to its
-  // stored JSON so it shows when navigated to).
+  // Append a photo to the gallery page as another standardized 292×443 slot in
+  // the same overlapping frame, so it joins the slideshow rotation (the slot
+  // shows one photo at a time). No-op if there is no gallery page. Works whether
+  // the gallery is the visible page (added live) or another page (appended to
+  // its stored JSON so it shows when navigated to).
   const addPhotoToGallery = (url: string) => {
     if (!url) return;
     const galleryIndex = findGalleryPageIndex();
     if (galleryIndex < 0) return;
 
+    // Start hidden so the upload joins the back of the slideshow queue instead
+    // of popping on top of the photo currently showing — the cycler reveals it
+    // when its turn comes around.
     const buildSlot = (natW: number, natH: number, centerY: number, index: number) => ({
       left: GALLERY_SLOT.centerX,
       top: centerY,
@@ -2316,6 +2311,7 @@ const saveCurrentPage = (index: number = currentPageRef.current) => {
       originY: 'center',
       scaleX: GALLERY_SLOT.width / (natW || 1),
       scaleY: GALLERY_SLOT.height / (natH || 1),
+      visible: false,
       name: `galleryImage${index}`,
     });
 
@@ -2331,7 +2327,7 @@ const saveCurrentPage = (index: number = currentPageRef.current) => {
           const natW = (el?.naturalWidth ?? 0) > 0 ? el!.naturalWidth : img.width || 1;
           const natH = (el?.naturalHeight ?? 0) > 0 ? el!.naturalHeight : img.height || 1;
           const existing = canvas.getObjects().filter(isGalleryObj);
-          const slot = buildSlot(natW, natH, nextGalleryTop(existing), existing.length + 1);
+          const slot = buildSlot(natW, natH, GALLERY_SLOT.firstTop, existing.length + 1);
           img.set(slot);
           canvas.add(img);
           canvas.requestRenderAll();
@@ -2351,7 +2347,7 @@ const saveCurrentPage = (index: number = currentPageRef.current) => {
         const page = prev[galleryIndex];
         const objects = Array.isArray(page?.objects) ? page.objects : [];
         const existing = objects.filter(isGalleryObj);
-        const slot = buildSlot(natW, natH, nextGalleryTop(existing), existing.length + 1);
+        const slot = buildSlot(natW, natH, GALLERY_SLOT.firstTop, existing.length + 1);
         const updated = [...prev];
         updated[galleryIndex] = { ...page, objects: [...objects, { type: 'image', src: url, ...slot }] };
         return updated;
@@ -2360,6 +2356,43 @@ const saveCurrentPage = (index: number = currentPageRef.current) => {
     probe.onerror = () => console.error('Failed to load photo for gallery', url);
     probe.src = url;
   };
+
+  // ── Gallery slideshow ──────────────────────────────────────────────────────
+  // While the gallery page is on screen, its overlapping photos are shown one at
+  // a time, advancing every GALLERY_SLIDESHOW_MS. This is visual only: toggling
+  // `visible` fires no object:* events, so it never enters the undo history or
+  // triggers autosave. The published view (RsvpPlayer) runs the same rotation.
+  const galleryActive = isGalleryPageData(pages[currentPage]);
+  useEffect(() => {
+    const canvas = fabricRef.current;
+    if (!isLoaded || !canvas || !galleryActive) return;
+
+    let idx = 0;
+    const enforce = (): boolean => {
+      const imgs = canvas.getObjects().filter(isGalleryObj);
+      if (!imgs.length) return false;
+      const active = ((idx % imgs.length) + imgs.length) % imgs.length;
+      imgs.forEach((o: any, n: number) => o.set({ visible: n === active }));
+      canvas.requestRenderAll();
+      return true;
+    };
+
+    // The page may still be loading into the canvas — poll briefly (up to ~3s)
+    // until the gallery images exist, then reveal the first one.
+    let polls = 0;
+    const seed = setInterval(() => {
+      if (enforce() || ++polls > 30) clearInterval(seed);
+    }, 100);
+
+    const id = setInterval(() => {
+      // Don't swap out from under the user while they're editing a photo.
+      if (canvas.getActiveObject()) return;
+      idx += 1;
+      enforce();
+    }, GALLERY_SLIDESHOW_MS);
+
+    return () => { clearInterval(seed); clearInterval(id); };
+  }, [currentPage, isLoaded, galleryActive]);
 
   //pages function end
 

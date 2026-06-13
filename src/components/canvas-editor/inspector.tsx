@@ -63,6 +63,16 @@ function InvertIcon() {
   );
 }
 
+// Swap fill ↔ stroke icon — two overlapping squares (one filled, one outlined).
+function SwapColorsIcon() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+      <rect x="3" y="3" width="11" height="11" rx="1.5" fill="currentColor" stroke="none" />
+      <rect x="10" y="10" width="11" height="11" rx="1.5" />
+    </svg>
+  );
+}
+
 const colorIconBtn =
   "h-[34px] w-[34px] shrink-0 rounded-[10px] flex items-center justify-center bg-[#F2E8E6B2] text-[#7D5B59] border border-[#EDE2DE] hover:bg-[#EDE2DE] transition-colors";
 
@@ -795,6 +805,25 @@ export default function Inspector(props: {
                 onRevert={() => updateSelected({ fill: orig?.fill ?? DEFAULT_FILL })}
                 onInvert={() => updateSelected({ fill: buildRgba(invertHex(fillParsed.hex), fillParsed.opacity) })}
               />
+            )}
+
+            {supportsFill && (
+              <div className="flex justify-end -mt-0 -mb-4">
+                <button
+                  type="button"
+                  title="Swap Fill & Stroke colors"
+                  aria-label="Swap Fill and Stroke colors"
+                  onClick={() =>
+                    updateSelected({
+                      fill: buildRgba(strokeParsed.hex, strokeParsed.opacity),
+                      stroke: buildRgba(fillParsed.hex, fillParsed.opacity),
+                    })
+                  }
+                  className={colorIconBtn}
+                >
+                  <SwapColorsIcon />
+                </button>
+              </div>
             )}
 
             <ColorRow

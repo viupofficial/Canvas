@@ -13,7 +13,8 @@ import {
 // and renders the avatar / name / email dynamically.
 export default function UserMenu() {
   const profileRef = useRef<HTMLDivElement | null>(null);
-  const [user, setUser] = useState<CanvasUser | null>(null);
+  // `undefined` = not yet checked (client), `null` = checked, nobody logged in.
+  const [user, setUser] = useState<CanvasUser | null | undefined>(undefined);
   const [profileOpen, setProfileOpen] = useState(false);
 
   // Read the session on the client only (avoids hydration mismatch).
@@ -33,8 +34,21 @@ export default function UserMenu() {
     return () => window.removeEventListener("mousedown", onDown);
   }, [profileOpen]);
 
-  // Nothing to show until we know who is logged in.
-  if (!user) return null;
+  // Still checking the session — render nothing to avoid a hydration flash.
+  if (user === undefined) return null;
+
+  // No login data → Login button (matches the editor Share button styling).
+  if (user === null) {
+    return (
+      <a
+        href="https://vi-up.com/login"
+        className="bg-[#5a2d2d] text-white px-[22px] py-[12px] rounded-[100px] flex items-center gap-2 h-[45px] text-[18px] font-bold no-underline"
+      >
+        <i className="fa fa-sign-in" aria-hidden="true" style={{ fontSize: 19 }} />
+        Login
+      </a>
+    );
+  }
 
   const imgSrc = avatarFor(user);
   const username = user.name;
