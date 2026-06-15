@@ -19,6 +19,32 @@ import { useEventDataOptional } from "@/src/store/EventDataContext";
 import { useFabricEventSync } from "@/src/hooks/useFabricEventSync";
 import { FONT_GROUPS, loadGoogleFont, collectFontFamilies, preloadFonts } from "@/src/lib/fonts";
 import { downscaleImageFile } from "@/src/lib/imageDownscale";
+
+// Which pages a background change touches: just the active page (default) or
+// the whole invitation (PowerPoint's "Apply to All").
+export type BackgroundScope = 'current' | 'all';
+
+// Adjustment options for an uploaded background image — modeled on PowerPoint's
+// "Format Background" panel (picture / texture fill). All fields are optional so
+// callers can pass just what they need; sensible defaults fill the rest.
+export type BackgroundOptions = {
+  // How the (non-tiled) image is sized to the page.
+  fit?: 'cover' | 'contain' | 'stretch';
+  // When true the image repeats as a texture instead of being sized to the page.
+  tile?: boolean;
+  // User scale multipliers layered on top of the fit base (1 = 100%).
+  scaleX?: number;
+  scaleY?: number;
+  // Pixel offset from centered (non-tile) / from origin (tile).
+  offsetX?: number;
+  offsetY?: number;
+  // 0..1 — 1 is fully opaque (PowerPoint exposes the inverse as "Transparency").
+  opacity?: number;
+  // Mirror the image horizontally / vertically.
+  flipX?: boolean;
+  flipY?: boolean;
+};
+
 export type EditorHandle = {
   undo: () => void;
   redo: () => void;
@@ -53,8 +79,8 @@ export type EditorHandle = {
   addPhotoToGallery: (url: string) => void;
   setGallerySlideInterval: (ms: number) => void;
   addBorder: (url: string) => void;
-  setBackgroundColor: (color: string) => void;
-  setBackgroundImage: (url: string | null) => void;
+  setBackgroundColor: (color: string, scope?: BackgroundScope) => void;
+  setBackgroundImage: (url: string | null, opts?: BackgroundOptions, scope?: BackgroundScope) => void;
   previewAnimation: (type: string) => void;
   getActiveImageSrc: () => string | null;
   replaceActiveImage: (dataUrl: string) => void;
@@ -206,6 +232,9 @@ const CanvasEditor = forwardRef<
 const [currentPage, setCurrentPage] = useState(0);
   const currentPageRef = useRef(0);
   const fabricModuleRef = useRef<any>(null);
+  // Flat color drawn behind the background picture (and used when a picture is
+  // removed). Tracks the last solid color the user picked.
+  const bgFlatColorRef = useRef<string>('#ffffff');
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [isLoaded, setIsLoaded] = useState(false);
   const [musicUrl, setMusicUrl] = useState<string | null>(props.initialMusicUrl ?? null);
@@ -619,9 +648,10 @@ const [currentPage, setCurrentPage] = useState(0);
     addBorder: (url: string) => {
       addBorder(url);
     },
-    setBackgroundColor: (color: string) => {
+    setBackgroundColor: (color: string, scope: BackgroundScope = 'current') => {
       const canvas = fabricRef.current;
       if (!canvas) return;
+      bgFlatColorRef.current = color;
       canvas.backgroundColor = color;
       // A flat color replaces any uploaded background texture — otherwise the
       // image would keep covering the color and the change would be invisible.
@@ -629,54 +659,105 @@ const [currentPage, setCurrentPage] = useState(0);
       canvas.requestRenderAll();
       pushSnapshot();
       saveCurrentPage(currentPageRef.current);
+      // Only spread to the other pages when the caller asked to apply to all.
+      if (scope === 'all') {
+        applyBgToOtherPages({ backgroundColor: color, backgroundImage: undefined });
+      }
     },
-    // Set an uploaded image as the background of EVERY page (cover-fit: the
-    // texture keeps its aspect ratio and overflow is cropped). Passing null
-    // removes it everywhere. The live canvas only holds the active page, so
-    // the other pages get the background patched into their stored JSON and
-    // pick it up when loaded.
-    setBackgroundImage: (url: string | null) => {
+    // Set an uploaded image as the page background. `opts` mirrors the PowerPoint
+    // "Format Background" controls (fit / tile / scale / offset / transparency /
+    // mirror). By default it affects only the active page; pass scope 'all' to
+    // apply it to every page. Passing null removes it. The live canvas only holds
+    // the active page, so the other pages get the background patched into their
+    // stored JSON and pick it up when loaded.
+    setBackgroundImage: (url: string | null, opts?: BackgroundOptions, scope: BackgroundScope = 'current') => {
       const canvas = fabricRef.current;
       const fabric = fabricModuleRef.current;
       if (!canvas || !fabric) return;
 
-      const applyToOtherPages = (bgJson: any) => {
-        setPages((prev) =>
-          prev.map((p, i) => {
-            if (i === currentPageRef.current) return p; // saveCurrentPage covers it
-            // Blank pages (null) become a minimal page so they show the bg too.
-            const page = p ?? { objects: [] };
-            return { ...page, backgroundImage: bgJson ?? undefined };
-          })
-        );
-      };
-
       if (!url) {
         canvas.backgroundImage = undefined;
+        canvas.backgroundColor = bgFlatColorRef.current;
         canvas.requestRenderAll();
         pushSnapshot();
         saveCurrentPage(currentPageRef.current);
-        applyToOtherPages(null);
+        if (scope === 'all') {
+          applyBgToOtherPages({ backgroundImage: undefined, backgroundColor: bgFlatColorRef.current });
+        }
         return;
       }
+
+      const {
+        fit = 'cover',
+        tile = false,
+        scaleX: uScaleX = 1,
+        scaleY: uScaleY = 1,
+        offsetX = 0,
+        offsetY = 0,
+        opacity = 1,
+        flipX = false,
+        flipY = false,
+      } = opts ?? {};
+
       const w = (canvas.width as number) ?? CANVAS_REF_WIDTH;
       const h = (canvas.height as number) ?? CANVAS_REF_HEIGHT;
       const imgOpts = url.startsWith('data:') ? undefined : { crossOrigin: 'anonymous' };
-      fabric.Image.fromURL(url, imgOpts).then((img: any) => {
+
+      fabric.Image.fromURL(url, imgOpts).then(async (img: any) => {
         const el = img.getElement?.() as HTMLImageElement | null;
         const natW = (el?.naturalWidth ?? 0) > 0 ? el!.naturalWidth : (img.width || 1);
         const natH = (el?.naturalHeight ?? 0) > 0 ? el!.naturalHeight : (img.height || 1);
-        const scale = Math.max(w / natW, h / natH);
+
+        if (tile) {
+          // Repeat the picture as a texture. Opacity + mirror are baked into the
+          // pattern source (patterns can't carry those props), and scale/offset
+          // ride on patternTransform so a single source serializes cleanly.
+          const source = await bakeImageSource(el ?? img, natW, natH, opacity, flipX, flipY);
+          const pattern = new fabric.Pattern({
+            source,
+            repeat: 'repeat',
+            patternTransform: [uScaleX, 0, 0, uScaleY, offsetX, offsetY],
+          });
+          canvas.backgroundImage = undefined;
+          canvas.backgroundColor = pattern;
+          canvas.requestRenderAll();
+          pushSnapshot();
+          saveCurrentPage(currentPageRef.current);
+          if (scope === 'all') {
+            applyBgToOtherPages({ backgroundImage: undefined, backgroundColor: pattern.toObject() });
+          }
+          return;
+        }
+
+        // Single picture sized to the page. `fit` sets the base scale, the user
+        // multipliers layer on top, and the image is centered + nudged by offset.
+        let baseX: number;
+        let baseY: number;
+        if (fit === 'stretch') {
+          baseX = w / natW;
+          baseY = h / natH;
+        } else {
+          const s = fit === 'contain'
+            ? Math.min(w / natW, h / natH)
+            : Math.max(w / natW, h / natH);
+          baseX = s;
+          baseY = s;
+        }
         img.set({
           originX: 'center', originY: 'center',
-          left: w / 2, top: h / 2,
-          scaleX: scale, scaleY: scale,
+          left: w / 2 + offsetX, top: h / 2 + offsetY,
+          scaleX: baseX * uScaleX, scaleY: baseY * uScaleY,
+          opacity, flipX, flipY,
         });
         canvas.backgroundImage = img;
+        // Keep the flat color behind the picture so 'contain' shows a backdrop.
+        canvas.backgroundColor = bgFlatColorRef.current;
         canvas.requestRenderAll();
         pushSnapshot();
         saveCurrentPage(currentPageRef.current);
-        applyToOtherPages(img.toObject());
+        if (scope === 'all') {
+          applyBgToOtherPages({ backgroundImage: img.toObject(), backgroundColor: bgFlatColorRef.current });
+        }
       }).catch((err: any) => console.error('Failed to load background image', err));
     },
     previewAnimation: (type: string) => {
@@ -2129,6 +2210,50 @@ const saveCurrentPage = (index: number = currentPageRef.current) => {
     const updated = [...prev];
     updated[index] = serializeCanvas(canvas);
     return updated;
+  });
+};
+
+// Patch the stored background of every page EXCEPT the active one (saveCurrentPage
+// already covers that). Keeps the whole invitation sharing a single background.
+// `undefined` values clear the corresponding property.
+const applyBgToOtherPages = (patch: { backgroundImage?: any; backgroundColor?: any }) => {
+  setPages(prev =>
+    prev.map((p, i) => {
+      if (i === currentPageRef.current) return p;
+      // Blank pages (null) become a minimal page so they show the bg too.
+      const page = p ?? { objects: [] };
+      return { ...page, ...patch };
+    })
+  );
+};
+
+// Bake opacity + mirror into a fresh image so it can be used as a tiling pattern
+// source (Fabric patterns carry neither). Returns a load-complete HTMLImageElement
+// backed by a data URL so it serializes cleanly into each page's JSON.
+const bakeImageSource = (
+  source: CanvasImageSource,
+  natW: number,
+  natH: number,
+  opacity: number,
+  flipX: boolean,
+  flipY: boolean,
+): Promise<HTMLImageElement> => {
+  const off = document.createElement('canvas');
+  off.width = Math.max(1, Math.round(natW));
+  off.height = Math.max(1, Math.round(natH));
+  const ctx = off.getContext('2d');
+  if (ctx) {
+    ctx.globalAlpha = Math.max(0, Math.min(1, opacity));
+    ctx.translate(flipX ? off.width : 0, flipY ? off.height : 0);
+    ctx.scale(flipX ? -1 : 1, flipY ? -1 : 1);
+    ctx.drawImage(source, 0, 0, off.width, off.height);
+  }
+  const dataUrl = off.toDataURL('image/png');
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => resolve(img);
+    img.onerror = reject;
+    img.src = dataUrl;
   });
 };
 

@@ -47,6 +47,7 @@ function InvertIcon() {
 type Tab =
   | 'templates'
   | 'elements'
+  | 'background'
   | 'text'
   | 'photo'
   | 'music'
@@ -63,6 +64,7 @@ type PreviewTabName = typeof PREVIEW_TABS[number];
 const SIDEBAR_ITEMS: { id: Tab; label: string; icon: string; disabled?: boolean }[] = [
   { id: 'templates', label: 'Templates', icon: '/template.svg' },
   { id: 'elements', label: 'Elements', icon: '/elements.svg' },
+  { id: 'background', label: 'Background', icon: '/background.svg' },
   { id: 'text', label: 'Text', icon: '/text.svg' },
   { id: 'photo', label: 'Photo Gallery', icon: '/photo-gallery.svg' },
   { id: 'music', label: 'Music', icon: '/music.svg' },
@@ -977,6 +979,344 @@ function WishlistTab({ editorRef: _editorRef }: { editorRef?: React.RefObject<Ed
 //   );
 // }
 
+// PowerPoint-style "Format Background" panel. Lets the user fill the canvas
+// background with a solid color or an uploaded picture, then fine-tune the
+// picture (tile as texture, fit, scale, offset, transparency, mirror). All
+// changes are pushed live to the editor, which applies them to every page.
+type BgFit = 'cover' | 'contain' | 'stretch';
+type BgMirror = 'none' | 'horizontal' | 'vertical' | 'both';
+
+const BG_SWATCHES = [
+  '#ffffff', '#f5e8dd', '#fde2e4', '#fad2e1',
+  '#e2eafc', '#d0f4de', '#fff1ba', '#1f2937',
+];
+
+function NumberField({
+  label, value, onChange, min, max, step = 1, suffix,
+}: {
+  label: string;
+  value: number;
+  onChange: (v: number) => void;
+  min?: number;
+  max?: number;
+  step?: number;
+  suffix?: string;
+}) {
+  return (
+    <label className="flex flex-col gap-1">
+      <span className="text-[11px] text-[#7D5B5980] font-[600]">{label}</span>
+      <div className="flex items-center bg-[#F2E8E6B2] border border-[#EDE2DE] rounded-[10px] px-2.5 py-1.5">
+        <input
+          type="number"
+          value={value}
+          min={min}
+          max={max}
+          step={step}
+          onChange={(e) => onChange(Number(e.target.value))}
+          className="flex-1 min-w-0 bg-transparent outline-none text-[13px] font-[600] text-[#7D5B59] [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+        />
+        {suffix && <span className="text-[12px] text-[#B98587] font-[600] pl-1">{suffix}</span>}
+      </div>
+    </label>
+  );
+}
+
+function BackgroundTab({ editorRef }: { editorRef?: React.RefObject<EditorHandle | null> }) {
+  const [fillType, setFillType] = useState<'color' | 'picture'>('color');
+  const [bgColor, setBgColor] = useState('#ffffff');
+  const [src, setSrc] = useState<string | null>(null);
+  const [tile, setTile] = useState(false);
+  const [fit, setFit] = useState<BgFit>('cover');
+  const [scaleX, setScaleX] = useState(100);
+  const [scaleY, setScaleY] = useState(100);
+  const [offsetX, setOffsetX] = useState(0);
+  const [offsetY, setOffsetY] = useState(0);
+  const [transparency, setTransparency] = useState(0);
+  const [mirror, setMirror] = useState<BgMirror>('none');
+  const fileRef = React.useRef<HTMLInputElement>(null);
+
+  // The current adjustment controls packaged for the editor API.
+  const buildOpts = () => ({
+    tile,
+    fit,
+    scaleX: scaleX / 100,
+    scaleY: scaleY / 100,
+    offsetX,
+    offsetY,
+    opacity: 1 - transparency / 100,
+    flipX: mirror === 'horizontal' || mirror === 'both',
+    flipY: mirror === 'vertical' || mirror === 'both',
+  });
+
+  // Background changes affect ONLY the active page by default; "Apply to all
+  // pages" re-runs the current fill across every page.
+  const applyColor = (c: string) => {
+    setBgColor(c);
+    setFillType('color');
+    setSrc(null);
+    editorRef?.current?.setBackgroundColor?.(c);
+  };
+
+  const applyToAll = () => {
+    if (fillType === 'picture' && src) {
+      editorRef?.current?.setBackgroundImage?.(src, buildOpts(), 'all');
+    } else {
+      editorRef?.current?.setBackgroundColor?.(bgColor, 'all');
+    }
+  };
+
+  // Re-apply the picture to the active page whenever any setting changes (lightly
+  // debounced so dragging a slider doesn't serialize the canvas on every pixel).
+  const applyKey = `${src}|${tile}|${fit}|${scaleX}|${scaleY}|${offsetX}|${offsetY}|${transparency}|${mirror}`;
+  useEffect(() => {
+    if (fillType !== 'picture' || !src) return;
+    const id = setTimeout(() => {
+      editorRef?.current?.setBackgroundImage?.(src, buildOpts());
+    }, 60);
+    return () => clearTimeout(id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [applyKey, fillType]);
+
+  const handleUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    const input = e.currentTarget;
+    if (!file) return;
+    downscaleImageFile(file).then((dataUrl) => {
+      // Start each new picture from clean defaults so the result is predictable.
+      setTile(false);
+      setFit('cover');
+      setScaleX(100);
+      setScaleY(100);
+      setOffsetX(0);
+      setOffsetY(0);
+      setTransparency(0);
+      setMirror('none');
+      setFillType('picture');
+      setSrc(dataUrl);
+    });
+    input.value = '';
+  };
+
+  // Cancel the background effect on the active page and clear the panel back to
+  // its starting state. Wired to both the picture "Remove" and "Reset" buttons.
+  const resetAdjustments = () => {
+    setTile(false);
+    setFit('cover');
+    setScaleX(100);
+    setScaleY(100);
+    setOffsetX(0);
+    setOffsetY(0);
+    setTransparency(0);
+    setMirror('none');
+    setSrc(null);
+    editorRef?.current?.setBackgroundImage?.(null);
+  };
+
+  const fillTabCls = (active: boolean) =>
+    `flex-1 py-1.5 rounded-[10px] text-[12px] font-[600] transition-colors ${
+      active ? 'bg-[#8C6B6B] text-white' : 'bg-[#F2E8E6B2] text-[#7D5B59] hover:bg-[#EDE2DE]'
+    }`;
+
+  return (
+    <div>
+      <div className="text-[#191212] text-[17px] font-bold mb-3">Background</div>
+
+      {/* Fill type */}
+      <div className="flex gap-2 mb-4">
+        <button type="button" className={fillTabCls(fillType === 'color')} onClick={() => applyColor(bgColor)}>
+          Solid color
+        </button>
+        <button type="button" className={fillTabCls(fillType === 'picture')} onClick={() => setFillType('picture')}>
+          Picture
+        </button>
+      </div>
+
+      {fillType === 'color' ? (
+        <div className="flex flex-col gap-3">
+          <div className="flex flex-wrap gap-2">
+            {BG_SWATCHES.map((color) => (
+              <button
+                key={color}
+                type="button"
+                onClick={() => applyColor(color)}
+                title={color}
+                aria-label={`Set background to ${color}`}
+                className={`w-7 h-7 rounded-full border hover:scale-110 transition ${
+                  bgColor.toLowerCase() === color.toLowerCase() ? 'border-[#8C6B6B] ring-2 ring-[#8C6B6B]/40' : 'border-gray-300'
+                }`}
+                style={{ backgroundColor: color }}
+              />
+            ))}
+          </div>
+          <label className="flex items-center gap-3 bg-[#F2E8E6] rounded-[12px] px-3 py-2">
+            <span
+              className="relative inline-block w-6 h-6 rounded-[5px] border border-[#EDE2DE] cursor-pointer overflow-hidden shrink-0"
+              style={{ backgroundColor: bgColor }}
+            >
+              <input
+                type="color"
+                className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                value={bgColor}
+                onChange={(e) => applyColor(e.target.value)}
+              />
+            </span>
+            <input
+              className="flex-1 min-w-0 bg-transparent outline-none uppercase tracking-tight font-[600] text-[13px] text-[#7D5B59]"
+              value={bgColor.replace('#', '').toUpperCase()}
+              maxLength={6}
+              onChange={(e) => {
+                const hex = e.target.value.replace('#', '');
+                if (/^[0-9a-fA-F]{6}$/.test(hex)) applyColor('#' + hex);
+              }}
+            />
+          </label>
+          <button
+            type="button"
+            onClick={applyToAll}
+            className="mt-1 py-2 rounded-md bg-[#8C6B6B] text-white text-[13px] font-semibold hover:opacity-90 transition"
+          >
+            Apply to all pages
+          </button>
+        </div>
+      ) : (
+        <div className="flex flex-col gap-4">
+          {/* Picture source */}
+          <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={handleUpload} />
+          {!src ? (
+            <button
+              type="button"
+              onClick={() => fileRef.current?.click()}
+              className="block border-2 border-dashed border-gray-300 rounded-md p-5 text-center text-xs text-gray-500 cursor-pointer hover:bg-gray-50 hover:border-[#8C6B6B] transition"
+            >
+              Click to upload a background picture
+            </button>
+          ) : (
+            <div className="relative h-28 rounded border border-gray-200 overflow-hidden">
+              <img src={src} alt="Current background" className="w-full h-full object-cover" />
+              <div className="absolute top-1 right-1 flex gap-1">
+                <button
+                  type="button"
+                  onClick={() => fileRef.current?.click()}
+                  className="px-2 py-0.5 rounded bg-white/90 text-[10px] font-semibold text-[#7D5B59] border border-[#EDE2DE] hover:bg-white transition"
+                >
+                  Replace
+                </button>
+                <button
+                  type="button"
+                  onClick={resetAdjustments}
+                  className="px-2 py-0.5 rounded bg-white/90 text-[10px] font-semibold text-red-500 border border-red-200 hover:bg-red-50 transition"
+                >
+                  Remove
+                </button>
+              </div>
+            </div>
+          )}
+
+          {src && (
+            <>
+              {/* Tile as texture */}
+              <label className="flex items-center justify-between">
+                <span className="text-[12px] text-[#7D5B59] font-[600]">Tile picture as texture</span>
+                <button
+                  type="button"
+                  role="switch"
+                  aria-checked={tile}
+                  onClick={() => setTile((v) => !v)}
+                  className={`relative inline-flex h-5 w-9 shrink-0 items-center rounded-full transition-colors ${
+                    tile ? 'bg-[#8C6B6B]' : 'bg-gray-300'
+                  }`}
+                >
+                  <span
+                    className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${
+                      tile ? 'translate-x-[18px]' : 'translate-x-[2px]'
+                    }`}
+                  />
+                </button>
+              </label>
+
+              {/* Fit (single picture only) */}
+              {!tile && (
+                <label className="flex flex-col gap-1">
+                  <span className="text-[11px] text-[#7D5B5980] font-[600]">Fit</span>
+                  <select
+                    value={fit}
+                    onChange={(e) => setFit(e.target.value as BgFit)}
+                    className="px-3 py-2 border border-gray-200 rounded-[10px] text-[13px] bg-white text-[#7D5B59] font-[600]"
+                  >
+                    <option value="cover">Fill (cover)</option>
+                    <option value="contain">Fit (contain)</option>
+                    <option value="stretch">Stretch</option>
+                  </select>
+                </label>
+              )}
+
+              {/* Transparency */}
+              <label className="flex flex-col gap-1">
+                <div className="flex items-center justify-between">
+                  <span className="text-[11px] text-[#7D5B5980] font-[600]">Transparency</span>
+                  <span className="text-[11px] text-[#7D5B59] font-[600]">{transparency}%</span>
+                </div>
+                <input
+                  type="range"
+                  min={0}
+                  max={100}
+                  value={transparency}
+                  onChange={(e) => setTransparency(Number(e.target.value))}
+                  className="w-full accent-[#8C6B6B]"
+                />
+              </label>
+
+              {/* Scale */}
+              <div className="grid grid-cols-2 gap-2">
+                <NumberField label="Scale X" value={scaleX} onChange={setScaleX} min={1} max={1000} suffix="%" />
+                <NumberField label="Scale Y" value={scaleY} onChange={setScaleY} min={1} max={1000} suffix="%" />
+              </div>
+
+              {/* Offset */}
+              <div className="grid grid-cols-2 gap-2">
+                <NumberField label="Offset X" value={offsetX} onChange={setOffsetX} suffix="px" />
+                <NumberField label="Offset Y" value={offsetY} onChange={setOffsetY} suffix="px" />
+              </div>
+
+              {/* Mirror */}
+              <label className="flex flex-col gap-1">
+                <span className="text-[11px] text-[#7D5B5980] font-[600]">Mirror type</span>
+                <select
+                  value={mirror}
+                  onChange={(e) => setMirror(e.target.value as BgMirror)}
+                  className="px-3 py-2 border border-gray-200 rounded-[10px] text-[13px] bg-white text-[#7D5B59] font-[600]"
+                >
+                  <option value="none">None</option>
+                  <option value="horizontal">Horizontal</option>
+                  <option value="vertical">Vertical</option>
+                  <option value="both">Both</option>
+                </select>
+              </label>
+
+              <div className="mt-1 flex flex-col gap-2">
+                <button
+                  type="button"
+                  onClick={applyToAll}
+                  className="py-2 rounded-md bg-[#8C6B6B] text-white text-[13px] font-semibold hover:opacity-90 transition"
+                >
+                  Apply to all pages
+                </button>
+                <button
+                  type="button"
+                  onClick={resetAdjustments}
+                  className="py-2 rounded-md border border-[#EDE2DE] text-[12px] font-[600] text-[#7D5B59] hover:bg-[#F2E8E6B2] transition"
+                >
+                  Reset adjustments
+                </button>
+              </div>
+            </>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function TemplatesTab({ editorRef }: { editorRef?: React.RefObject<EditorHandle | null> }) {
   return (
     <div>
@@ -1016,34 +1356,14 @@ export default function Sidebar({
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
   const [phoneOpen, setPhoneOpen] = useState(false);
   const [bgColor, setBgColor] = useState<string>('#ffffff');
-  // Last uploaded background texture (data URL) — shown as a preview tile so
-  // the user can see what's applied and remove it.
-  const [bgImage, setBgImage] = useState<string | null>(null);
 
+  // Quick background-color swatch used by the Elements tab's "Color" category.
+  // Full background controls (image, adjustments) live in the Background tab.
   const applyBackgroundColor = (color: string) => {
     setBgColor(color);
-    // The editor clears any background image when a flat color is applied.
-    setBgImage(null);
     if (editorRef?.current?.setBackgroundColor) {
       editorRef.current.setBackgroundColor(color);
     }
-  };
-
-  const handleBackgroundUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    const input = e.currentTarget;
-    if (!file) return;
-    downscaleImageFile(file).then((dataUrl) => {
-      setBgImage(dataUrl);
-      editorRef?.current?.setBackgroundImage?.(dataUrl);
-    });
-    // Reset so the same file can be re-selected after removal.
-    input.value = '';
-  };
-
-  const removeBackgroundImage = () => {
-    setBgImage(null);
-    editorRef?.current?.setBackgroundImage?.(null);
   };
 
   const getItemsForCategory = (cat: string) => {
@@ -1161,38 +1481,6 @@ export default function Sidebar({
       {active === 'elements' ? (
         <div>
           <div className="flex flex-col gap-4">
-            <div className="mb-3">
-              <div className="text-[#191212] text-[17px] font-bold mb-2">Background</div>
-              <div className="text-[10px] text-gray-400 mb-2">
-                Upload your own image — texture, lighting, anything — and it becomes the background of every page
-              </div>
-              <label className="block border-2 border-dashed border-gray-300 rounded-md p-4 text-center text-xs text-gray-500 cursor-pointer hover:bg-gray-50 hover:border-[#8C6B6B] transition">
-                <input
-                  type="file"
-                  accept="image/*"
-                  className="hidden"
-                  onChange={handleBackgroundUpload}
-                />
-                Click to upload a background image
-              </label>
-              {bgImage && (
-                <div className="relative mt-2 h-24 rounded border border-gray-200 overflow-hidden">
-                  <img
-                    src={bgImage}
-                    alt="Current background"
-                    className="w-full h-full object-cover"
-                  />
-                  <button
-                    type="button"
-                    onClick={removeBackgroundImage}
-                    title="Remove background image"
-                    className="absolute top-1 right-1 px-2 py-0.5 rounded bg-white/90 text-[10px] font-semibold text-red-500 border border-red-200 hover:bg-red-50 transition"
-                  >
-                    Remove
-                  </button>
-                </div>
-              )}
-            </div>
             {['Shapes', 'Graphics', 'Stickers', 'Color'].map((cat) => (
               <div key={cat} className="mb-3">
                 <div className="flex items-center justify-between">
@@ -1287,6 +1575,8 @@ export default function Sidebar({
             ))}
           </div>
         </div>
+      ) : active === 'background' ? (
+        <BackgroundTab editorRef={editorRef} />
       ) : active === 'photo' ? (
         <PhotoTab editorRef={editorRef} onEditImage={onEditImage} />
       ) : active === 'music' ? (
