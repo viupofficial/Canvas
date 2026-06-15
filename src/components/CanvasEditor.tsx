@@ -51,6 +51,7 @@ export type EditorHandle = {
   removeGalleryPage: () => void;
   hasGalleryPage: () => boolean;
   addPhotoToGallery: (url: string) => void;
+  setGallerySlideInterval: (ms: number) => void;
   addBorder: (url: string) => void;
   setBackgroundColor: (color: string) => void;
   setBackgroundImage: (url: string | null) => void;
@@ -60,6 +61,8 @@ export type EditorHandle = {
   isActiveObjectImage: () => boolean;
   getProjectData: () => { pages: any[]; currentPage: number; musicUrl: string | null };
   getThumbnail: () => string;
+  goToPage: (index: number) => void;
+  reorderPages: (from: number, to: number) => void;
   // ── Layer tab ──────────────────────────────────────────────────────────────
   // All scoped to the active page (the canvas only ever holds its objects).
   getLayers: () => LayerInfo[];
@@ -180,6 +183,7 @@ const CanvasEditor = forwardRef<
     onEditImage?: (src: string, opts?: { crop?: boolean }) => void;
     onCanvasChange?: () => void;
     onLayersChange?: () => void;
+    onPagesChange?: (count: number, current: number) => void;
     initialPages?: any[] | null;
     initialMusicUrl?: string | null;
     contacts: any[];
@@ -243,6 +247,8 @@ const [currentPage, setCurrentPage] = useState(0);
   // selection changes — so the Inspector's Layer tab can refresh.
   const onLayersChangeRef = useRef(props.onLayersChange);
   onLayersChangeRef.current = props.onLayersChange;
+  const onPagesChangeRef = useRef(props.onPagesChange);
+  onPagesChangeRef.current = props.onPagesChange;
   const toggleFullscreenRef = useRef<() => void>(() => {});
   const textToolRef = useRef(false);
   const textToolStartRef = useRef<{ x: number; y: number } | null>(null);
@@ -522,6 +528,7 @@ const [currentPage, setCurrentPage] = useState(0);
     removeGalleryPage,
     hasGalleryPage,
     addPhotoToGallery,
+    setGallerySlideInterval,
     updateActiveObject: (props: Record<string, any>) => {
       const canvas = fabricRef.current;
       if (!canvas) return;
@@ -889,6 +896,31 @@ const [currentPage, setCurrentPage] = useState(0);
       saveCurrentPage(currentPageRef.current);
       setOverlay(null);
       onLayersChangeRef.current?.();
+    },
+    goToPage,
+    reorderPages: (from: number, to: number) => {
+      if (from === to || from < 0 || to < 0 || from >= pages.length || to >= pages.length) return;
+      const canvas = fabricRef.current;
+      if (!canvas) return;
+      flushPending();
+      const currentJson = serializeCanvas(canvas);
+      const updated = [...pages];
+      updated[currentPageRef.current] = currentJson;
+      const [moved] = updated.splice(from, 1);
+      updated.splice(to, 0, moved);
+      const cur = currentPageRef.current;
+      let newCurrent = cur;
+      if (cur === from) {
+        newCurrent = to;
+      } else if (from < cur && to >= cur) {
+        newCurrent = cur - 1;
+      } else if (from > cur && to <= cur) {
+        newCurrent = cur + 1;
+      }
+      historiesRef.current.clear();
+      currentPageRef.current = newCurrent;
+      setPages(updated);
+      setCurrentPage(newCurrent);
     },
   }));
 
@@ -2214,7 +2246,10 @@ const saveCurrentPage = (index: number = currentPageRef.current) => {
   const GALLERY_SLOT = { centerX: 190, width: 292, height: 443, firstTop: 310 };
 
   // How long each gallery photo stays on screen before the slideshow advances.
-  const GALLERY_SLIDESHOW_MS = 5000;
+  const [gallerySlideMs, setGallerySlideMsState] = React.useState(5000);
+  const setGallerySlideInterval = (ms: number) => {
+    setGallerySlideMsState(Math.max(500, ms));
+  };
 
   // Index of the gallery page, scanning live content for the current page so an
   // unsaved just-added gallery page is still found. Returns -1 if none.
@@ -2359,9 +2394,11 @@ const saveCurrentPage = (index: number = currentPageRef.current) => {
 
   // ── Gallery slideshow ──────────────────────────────────────────────────────
   // While the gallery page is on screen, its overlapping photos are shown one at
-  // a time, advancing every GALLERY_SLIDESHOW_MS. This is visual only: toggling
-  // `visible` fires no object:* events, so it never enters the undo history or
-  // triggers autosave. The published view (RsvpPlayer) runs the same rotation.
+  // a time, advancing every gallerySlideMs milliseconds. Including gallerySlideMs
+  // in the dep array means the effect restarts (with idx=0) whenever the user
+  // changes the interval — guaranteeing the new value is used immediately.
+  // This is visual only: toggling `visible` fires no object:* events, so it
+  // never enters the undo history or triggers autosave.
   const galleryActive = isGalleryPageData(pages[currentPage]);
   useEffect(() => {
     const canvas = fabricRef.current;
@@ -2389,12 +2426,16 @@ const saveCurrentPage = (index: number = currentPageRef.current) => {
       if (canvas.getActiveObject()) return;
       idx += 1;
       enforce();
-    }, GALLERY_SLIDESHOW_MS);
+    }, gallerySlideMs);
 
     return () => { clearInterval(seed); clearInterval(id); };
-  }, [currentPage, isLoaded, galleryActive]);
+  }, [currentPage, isLoaded, galleryActive, gallerySlideMs]);
 
   //pages function end
+
+  useEffect(() => {
+    onPagesChangeRef.current?.(pages.length, currentPage);
+  }, [pages.length, currentPage]);
 
   //template function start
   const loadTemplate = (templatePages: any[]) => {

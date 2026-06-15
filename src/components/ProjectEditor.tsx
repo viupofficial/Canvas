@@ -38,7 +38,7 @@ export default function ProjectEditor({
 
 function ProjectEditorInner({ projectId, teaser }: { projectId?: string; teaser?: boolean }) {
   const editorRef = useRef<EditorHandle | null>(null);
-  const [isPremium, setIsPremium] = useState(false);
+  // const [isPremium, setIsPremium] = useState(false); // disabled — all tabs unlocked
   const [previewMode, setPreviewMode] = useState<"desktop" | "phone">("desktop");
   const [eventName, setEventName] = useState("Bride & Groom");
   const router = useRouter();
@@ -200,7 +200,7 @@ function ProjectEditorInner({ projectId, teaser }: { projectId?: string; teaser?
             editorRef.current?.exportHTML(eventName).then((slug) => router.push(`/e/${slug}`));
           }}
           onPreviewLocal={() => editorRef.current?.previewLocal(eventName)}
-          onUpgrade={() => setIsPremium(true)}
+          // onUpgrade={() => setIsPremium(true)}
           teaser={teaser}
           onLogin={() => { window.location.href = "https://vi-up.com/login"; }}
           eventName={eventName}
@@ -210,7 +210,6 @@ function ProjectEditorInner({ projectId, teaser }: { projectId?: string; teaser?
         <div className="flex w-full gap-6 flex-1 min-h-0 overflow-hidden">
           <Sidebar
             editorRef={editorRef}
-            isPremium={isPremium}
             isPhonePreview={previewMode === "phone"}
             onEditImage={handleSidebarEditImage}
           />

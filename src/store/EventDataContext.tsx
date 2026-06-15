@@ -16,6 +16,8 @@ export type CalendarData = {
   date: string;
   // Optional fields used by calendar export (ICS / Google link). All optional —
   // pre-existing records with only `date` continue to work unchanged.
+  startTime?: string;
+  endTime?: string;
   endDate?: string;
   title?: string;
   description?: string;

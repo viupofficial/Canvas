@@ -38,6 +38,7 @@ export default function EditorLayoutClient({
   const editorRef = editorRefProp ?? internalRef;
   const [selected, setSelected] = useState<any | null>(null);
   const [layers, setLayers] = useState<LayerInfo[]>([]);
+  const [pagesInfo, setPagesInfo] = useState({ count: 1, current: 0 });
   const [internalPreviewMode, setInternalPreviewMode] = useState<"desktop" | "phone">("desktop");
 
   const previewMode = previewModeProp ?? internalPreviewMode;
@@ -48,6 +49,10 @@ export default function EditorLayoutClient({
   const refreshLayers = useCallback(() => {
     setLayers(editorRef.current?.getLayers?.() ?? []);
   }, [editorRef]);
+
+  const handlePagesChange = useCallback((count: number, current: number) => {
+    setPagesInfo({ count, current });
+  }, []);
 
   const onSelectionChange = (obj: any | null) => {
     setSelected(obj);
@@ -66,6 +71,7 @@ export default function EditorLayoutClient({
       onEditImage={onEditImage}
       onCanvasChange={onCanvasChange}
       onLayersChange={refreshLayers}
+      onPagesChange={handlePagesChange}
       initialPages={initialPages}
       initialMusicUrl={initialMusicUrl}
       contacts={contacts}
@@ -175,7 +181,7 @@ export default function EditorLayoutClient({
           )}
         </div>
       ) : (
-        <Inspector selected={selected} updateSelected={updateSelected} editorRef={editorRef} layers={layers} />
+        <Inspector selected={selected} updateSelected={updateSelected} editorRef={editorRef} layers={layers} pageCount={pagesInfo.count} currentPageIndex={pagesInfo.current} />
       )}
     </div>
   );

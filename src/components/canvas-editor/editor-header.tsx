@@ -2,7 +2,7 @@
 
 'use client';
 
-import { Gift, Upload, LogIn, Link2, FileText, Check, Loader2 } from 'lucide-react';
+import { Upload, LogIn, Link2, FileText, Check, Loader2 } from 'lucide-react';
 import { RefObject, useState, useRef, useEffect } from "react";
 import { useRouter } from "next/navigation"; // ✅ ADD THIS
 import { EditorHandle } from "@/src/components/CanvasEditor";
@@ -97,7 +97,7 @@ export default function EditorHeader(props: {
     props.onEventNameChange?.(name);
   };
 
-  const { editorRef, onUndo, onRedo, onSave, onPreview, onUpgrade, onProfile, onShare, onLogin, teaser } = props;
+  const { editorRef, onUndo, onRedo, onSave, onPreview, onProfile, onShare, onLogin, teaser } = props;
 
   /**
    * Handle the click event for the login button (teaser mode).
@@ -139,13 +139,11 @@ export default function EditorHeader(props: {
     console.log('Preview action triggered');
   };
 
-  /**
-   * Handle the click event for the upgrade button
-   */
-  const handleUpgradeClick = () => {
-    if (onUpgrade) return onUpgrade();
-    console.log('Upgrade action triggered');
-  };
+  // Upgrade button disabled — kept for reference
+  // const handleUpgradeClick = () => {
+  //   if (onUpgrade) return onUpgrade();
+  //   console.log('Upgrade action triggered');
+  // };
 
   /**
    * Handle the click event for the profile button
@@ -284,9 +282,11 @@ export default function EditorHeader(props: {
           Local
         </button> */}
 
+        {/* Unlock Package button — disabled for now
         <button onClick={handleUpgradeClick} className="border-3 rounded-[100px] px-[22px] py-[12px] flex items-center gap-2 h-[45px] text-[18px] font-bold">
           <Gift /> Upgrade Package
         </button>
+        */}
 
         
 

@@ -25,7 +25,7 @@ export default function LivePreviewPanel({ activeTab }: { activeTab: PreviewTab 
 
   return (
     <div className="mb-4">
-      <div className="flex items-center justify-between mb-2">
+      <div className="flex items-center gap-1.5 mb-2">
         <span className="text-[11px] font-semibold text-[#7D5B59] uppercase tracking-wide">
           Live Preview
         </span>
@@ -112,12 +112,19 @@ function LocationCard({ location }: { location: { address: string } | null }) {
   );
 }
 
-function CalendarCard({ calendar }: { calendar: { date: string } | null }) {
+function CalendarCard({ calendar }: { calendar: { date: string; startTime?: string; endTime?: string } | null }) {
   return (
     <CardFrame title="Calendar">
-      <p className="text-[11px] text-center text-[#191212] font-semibold mb-2">
+      <p className="text-[11px] text-center text-[#191212] font-semibold mb-1">
         {calendar?.date ? formatDate(calendar.date) : "Select a date"}
       </p>
+      {(calendar?.startTime || calendar?.endTime) && (
+        <p className="text-[10px] text-center text-[#7D5B59] mb-2">
+          {calendar.startTime ?? ''}
+          {calendar.startTime && calendar.endTime ? ' – ' : ''}
+          {calendar.endTime ?? ''}
+        </p>
+      )}
       <div className="grid grid-cols-7 gap-1 text-[9px] text-center text-neutral-500">
         {["S", "M", "T", "W", "T", "F", "S"].map((d, i) => (
           <span key={i} className="font-semibold">{d}</span>

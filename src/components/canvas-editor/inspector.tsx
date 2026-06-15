@@ -2,6 +2,7 @@
 import React from "react";
 import { FONT_GROUPS } from "@/src/lib/fonts";
 import LayersPanel from "@/src/components/canvas-editor/LayersPanel";
+import ArtboardPanel from "@/src/components/canvas-editor/ArtboardPanel";
 import type { LayerInfo } from "@/src/components/CanvasEditor";
 
 // Parse any CSS color (hex3/6/8, rgb, rgba) into { hex, opacity 0-100 }.
@@ -163,9 +164,11 @@ export default function Inspector(props: {
   updateSelected: (patch: Record<string, any>) => void;
   editorRef?: React.RefObject<any>;
   layers?: LayerInfo[];
+  pageCount?: number;
+  currentPageIndex?: number;
 }) {
-  const { selected, updateSelected, editorRef, layers = [] } = props;
-  const [tab, setTab] = React.useState<"design" | "layers">("design");
+  const { selected, updateSelected, editorRef, layers = [], pageCount = 1, currentPageIndex = 0 } = props;
+  const [tab, setTab] = React.useState<"design" | "layers" | "artboard">("design");
   const [showTextStyles, setShowTextStyles] = React.useState(false);
   // When on, editing width or height scales both axes by the same factor so the
   // element resizes uniformly (keeps proportions).
@@ -237,27 +240,33 @@ export default function Inspector(props: {
     <aside className="w-80 bg-brand-cream border-[#EDE2DE] border-[1px] overflow-y-auto h-full">
       <div className="border-b-[1px] border-[#EDE2DE] pb-3 p-4">
         <h3 className="font-[600] text-[20px] capitalize">
-          {tab === "layers" ? "Layers" : selected?.type ?? "Inspector"}
+          {tab === "layers" ? "Layers" : tab === "artboard" ? "Artboard" : selected?.type ?? "Inspector"}
         </h3>
       </div>
 
-      {/* Tab switcher: element properties vs. the active page's layer stack. */}
+      {/* Tab switcher: Design / Layers / Artboard */}
       <div className="flex gap-1 p-2 border-b-[1px] border-[#EDE2DE]">
-        {(["design", "layers"] as const).map((t) => (
+        {(["design", "layers", "artboard"] as const).map((t) => (
           <button
             key={t}
             type="button"
             onClick={() => setTab(t)}
-            className={`flex-1 py-[6px] rounded-[8px] text-[13px] font-[700] capitalize transition-colors ${
+            className={`flex-1 py-[6px] rounded-[8px] text-[12px] font-[700] capitalize transition-colors ${
               tab === t ? "bg-[#7D5B59] text-white" : "bg-[#F2E8E6B2] text-[#7D5B59]"
             }`}
           >
-            {t === "design" ? "Design" : "Layers"}
+            {t === "design" ? "Design" : t === "layers" ? "Layers" : "Artboard"}
           </button>
         ))}
       </div>
 
-      {tab === "layers" ? (
+      {tab === "artboard" ? (
+        <ArtboardPanel
+          pageCount={pageCount}
+          currentPageIndex={currentPageIndex}
+          editorRef={editorRef}
+        />
+      ) : tab === "layers" ? (
         <LayersPanel
           layers={layers}
           activeLayerId={selected?.id ?? null}

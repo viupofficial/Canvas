@@ -74,7 +74,7 @@ const SIDEBAR_ITEMS: { id: Tab; label: string; icon: string; disabled?: boolean 
   // { id: 'wishlist', label: 'Wishlist', icon: '/wishlist.svg' },
 ];
 
-const PREMIUM_TABS: Tab[] = ['rsvp', 'money', 'wishlist'];
+// const PREMIUM_TABS: Tab[] = ['rsvp', 'money', 'wishlist']; // disabled — all tabs unlocked
 
 const TEMPLATE_LIST = [
   {
@@ -120,6 +120,7 @@ function PhotoTab({
   // edit / duplicate / delete can all operate in place by index.
   const [photos, setPhotos] = useState<string[]>([...DEFAULT_PHOTOS]);
   const [menu, setMenu] = useState<{ x: number; y: number; index: number } | null>(null);
+  const [slideIntervalSec, setSlideIntervalSec] = useState(5);
   const fileInputRef = React.useRef<HTMLInputElement>(null);
 
   // Gallery toggle — ON ⇒ a gallery page exists in the canvas, OFF ⇒ none.
@@ -206,6 +207,28 @@ function PhotoTab({
           />
         </button>
       </div>
+
+      {galleryOn && (
+        <div className="flex items-center justify-between mb-3 px-1">
+          <label className="text-[12px] text-gray-500 font-medium">Slide every</label>
+          <div className="flex items-center gap-1">
+            <input
+              type="number"
+              min={1}
+              max={60}
+              value={slideIntervalSec}
+              onChange={(e) => {
+                const sec = Math.max(1, Math.min(60, Number(e.target.value)));
+                setSlideIntervalSec(sec);
+                editorRef?.current?.setGallerySlideInterval?.(sec * 1000);
+              }}
+              className="w-14 px-2 py-1 border border-gray-200 rounded text-[12px] text-center font-semibold text-[#7D5B59] bg-[#F2E8E6B2] outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+            />
+            <span className="text-[12px] text-gray-500">sec</span>
+          </div>
+        </div>
+      )}
+
       <input
         ref={fileInputRef}
         type="file"
@@ -348,6 +371,11 @@ function ContactTab() {
     pushLive(updated);
   };
 
+  const handleDelete = (index: number) => {
+    const updated = contacts.filter((_, i) => i !== index);
+    pushLive(updated.length ? updated : [{ name: '', phone: '' }]);
+  };
+
   const handleSave = () => {
     const valid = contacts.every(c => c.name && c.phone);
     if (!valid) {
@@ -366,6 +394,21 @@ function ContactTab() {
             key={i}
             className={`flex flex-col gap-2 ${i > 0 ? 'mt-4 pt-4 border-t border-gray-200' : ''}`}
           >
+            <div className="flex items-center justify-between">
+              <span className="text-[11px] font-semibold text-[#7D5B5980]">Contact {i + 1}</span>
+              {contacts.length > 1 && (
+                <button
+                  type="button"
+                  onClick={() => handleDelete(i)}
+                  title="Remove contact"
+                  className="h-6 w-6 flex items-center justify-center rounded-full text-red-400 hover:bg-red-50 hover:text-red-600 transition-colors"
+                >
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" aria-hidden>
+                    <path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6" />
+                  </svg>
+                </button>
+              )}
+            </div>
             <input
               value={c.name}
               onChange={(e) => handleChange(i, 'name', e.target.value)}
@@ -442,6 +485,8 @@ function CalendarTab() {
   const { eventData, setSection, updateEventData } = useEventData();
   const [date, setDate] = useState(eventData.calendar?.date ?? '');
   const [title, setTitle] = useState(eventData.calendar?.title ?? '');
+  const [startTime, setStartTime] = useState(eventData.calendar?.startTime ?? '');
+  const [endTime, setEndTime] = useState(eventData.calendar?.endTime ?? '');
   const [reminder, setReminder] = useState<number | ''>(
     typeof eventData.calendar?.reminderMinutes === 'number'
       ? eventData.calendar.reminderMinutes
@@ -460,6 +505,16 @@ function CalendarTab() {
   const handleTitleChange = (value: string) => {
     setTitle(value);
     if (date) updateEventData('calendar', { title: value });
+  };
+
+  const handleStartTimeChange = (value: string) => {
+    setStartTime(value);
+    if (date) updateEventData('calendar', { startTime: value || undefined });
+  };
+
+  const handleEndTimeChange = (value: string) => {
+    setEndTime(value);
+    if (date) updateEventData('calendar', { endTime: value || undefined });
   };
 
   const handleReminderChange = (raw: string) => {
@@ -482,6 +537,8 @@ function CalendarTab() {
     }
     setSection('calendar', {
       date,
+      ...(startTime ? { startTime } : {}),
+      ...(endTime ? { endTime } : {}),
       ...(title.trim() ? { title: title.trim() } : {}),
       ...(typeof reminder === 'number' && reminder > 0
         ? { reminderMinutes: reminder }
@@ -519,6 +576,28 @@ function CalendarTab() {
           onChange={(e) => handleDateChange(e.target.value)}
           className="px-3 py-2 border border-gray-300 rounded-md text-sm"
         />
+
+        <label className="text-xs text-gray-600">Time</label>
+        <div className="grid grid-cols-2 gap-2">
+          <div className="flex flex-col gap-1">
+            <span className="text-[10px] text-gray-400">From</span>
+            <input
+              type="time"
+              value={startTime}
+              onChange={(e) => handleStartTimeChange(e.target.value)}
+              className="px-3 py-2 border border-gray-300 rounded-md text-sm"
+            />
+          </div>
+          <div className="flex flex-col gap-1">
+            <span className="text-[10px] text-gray-400">To</span>
+            <input
+              type="time"
+              value={endTime}
+              onChange={(e) => handleEndTimeChange(e.target.value)}
+              className="px-3 py-2 border border-gray-300 rounded-md text-sm"
+            />
+          </div>
+        </div>
 
         <label className="text-xs text-gray-600">Notification</label>
         <select
@@ -885,17 +964,18 @@ function WishlistTab({ editorRef: _editorRef }: { editorRef?: React.RefObject<Ed
   );
 }
 
-function LockedTab() {
-  return (
-    <div className="flex flex-col items-center justify-center gap-3 py-10 text-center">
-      <span className="text-4xl">🔒</span>
-      <p className="text-[15px] font-[600] text-[#7D5B59]">Premium Feature</p>
-      <p className="text-[12px] text-[#7D5B5980]">
-        Upgrade your package to unlock<br />this feature.
-      </p>
-    </div>
-  );
-}
+// LockedTab disabled — all tabs are now unlocked
+// function LockedTab() {
+//   return (
+//     <div className="flex flex-col items-center justify-center gap-3 py-10 text-center">
+//       <span className="text-4xl">🔒</span>
+//       <p className="text-[15px] font-[600] text-[#7D5B59]">Premium Feature</p>
+//       <p className="text-[12px] text-[#7D5B5980]">
+//         Upgrade your package to unlock<br />this feature.
+//       </p>
+//     </div>
+//   );
+// }
 
 function TemplatesTab({ editorRef }: { editorRef?: React.RefObject<EditorHandle | null> }) {
   return (
@@ -925,12 +1005,10 @@ function TemplatesTab({ editorRef }: { editorRef?: React.RefObject<EditorHandle 
 
 export default function Sidebar({
   editorRef,
-  isPremium = false,
   isPhonePreview = false,
   onEditImage,
 }: {
   editorRef?: React.RefObject<EditorHandle | null>;
-  isPremium?: boolean;
   isPhonePreview?: boolean;
   onEditImage?: (src: string, onReplace: (dataUrl: string) => void) => void;
 }) {
@@ -1039,10 +1117,11 @@ export default function Sidebar({
       editorRef?.current?.enterTextTool?.();
       return;
     }
-    if (PREMIUM_TABS.includes(id) && !isPremium) {
-      setActive(id);
-      return;
-    }
+    // Premium lock disabled — all tabs accessible
+    // if (PREMIUM_TABS.includes(id) && !isPremium) {
+    //   setActive(id);
+    //   return;
+    // }
     setActive((prev) => (prev === id ? null : id));
   };
 
@@ -1050,7 +1129,7 @@ export default function Sidebar({
     <aside className="bg-brand-cream transition-all duration-200 w-30 h-full overflow-y-auto shrink-0">
       <nav className="flex flex-col gap-2 pt-4">
         {SIDEBAR_ITEMS.map((it) => {
-          const isLocked = PREMIUM_TABS.includes(it.id) && !isPremium;
+          const isLocked = false; // Premium lock disabled
           return (
             <button
               key={it.id}
@@ -1219,11 +1298,11 @@ export default function Sidebar({
       ) : active === 'calendar' ? (
         <CalendarTab />
       ) : active === 'rsvp' ? (
-        !isPremium ? <LockedTab /> : <RSVPTab />
+        <RSVPTab />
       ) : active === 'money' ? (
-        !isPremium ? <LockedTab /> : <MoneyGiftTab />
+        <MoneyGiftTab />
       ) : active === 'wishlist' ? (
-        !isPremium ? <LockedTab /> : <WishlistTab editorRef={editorRef} />
+        <WishlistTab editorRef={editorRef} />
       ) : active === 'templates' ? (
         <TemplatesTab editorRef={editorRef} />
       ) : (

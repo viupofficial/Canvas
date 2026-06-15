@@ -22,6 +22,8 @@ export default function EventFooter({
   } | null;
   calendar?: {
     date: string;
+    startTime?: string;
+    endTime?: string;
     endDate?: string;
     title?: string;
     description?: string;
@@ -103,9 +105,15 @@ export default function EventFooter({
 // safely for legacy records that only have `{ date }`.
 const buildExportInput = (cal: any, loc: any): CalendarExportInput | null => {
   if (!cal?.date) return null;
+  // Combine date + startTime/endTime into datetime strings so ICS and Google
+  // Calendar links carry the correct start/end time.
+  const startDateTime = cal.startTime ? `${cal.date}T${cal.startTime}` : cal.date;
+  const endDateTime = cal.endTime
+    ? `${cal.date}T${cal.endTime}`
+    : cal.endDate ?? undefined;
   return {
-    date: cal.date,
-    endDate: cal.endDate,
+    date: startDateTime,
+    endDate: endDateTime,
     title: cal.title,
     description: cal.description,
     location: loc?.address,
@@ -442,7 +450,7 @@ const formatEmbedDate = (dateStr: string) => {
                                 textAlign: "center",
                                 fontFamily: "Montserrat",
                                 fontSize: "16px",
-                                marginBottom: "10px",
+                                marginBottom: "4px",
                                 width: "100%",
                                 fontWeight: "100",
                                 paddingBottom: "5px"
@@ -451,6 +459,19 @@ const formatEmbedDate = (dateStr: string) => {
   {calendar?.date ? formatDate(calendar.date) : "Select a date"}
 </strong>
                             </p>
+                            {(calendar?.startTime || calendar?.endTime) && (
+                              <p style={{
+                                textAlign: "center",
+                                fontFamily: "Montserrat",
+                                fontSize: "14px",
+                                marginBottom: "10px",
+                                fontWeight: "400",
+                              }}>
+                                {calendar.startTime ?? ''}
+                                {calendar.startTime && calendar.endTime ? ' – ' : ''}
+                                {calendar.endTime ?? ''}
+                              </p>
+                            )}
 
                             {(() => {
                               const embedBase =
