@@ -40,6 +40,9 @@ function ProjectEditorInner({ projectId, teaser }: { projectId?: string; teaser?
   const editorRef = useRef<EditorHandle | null>(null);
   // const [isPremium, setIsPremium] = useState(false); // disabled — all tabs unlocked
   const [previewMode, setPreviewMode] = useState<"desktop" | "phone">("desktop");
+  // Bumped whenever the active page's content is (re)loaded — the Background panel
+  // watches this to re-read and display the current page's background.
+  const [bgReadNonce, setBgReadNonce] = useState(0);
   const [eventName, setEventName] = useState("Bride & Groom");
   const router = useRouter();
 
@@ -212,6 +215,7 @@ function ProjectEditorInner({ projectId, teaser }: { projectId?: string; teaser?
             editorRef={editorRef}
             isPhonePreview={previewMode === "phone"}
             onEditImage={handleSidebarEditImage}
+            bgReadNonce={bgReadNonce}
           />
 
           <div className="flex-1 min-w-0">
@@ -226,6 +230,7 @@ function ProjectEditorInner({ projectId, teaser }: { projectId?: string; teaser?
               eventName={eventName}
               onEditImage={handleCanvasEditImage}
               onCanvasChange={handleCanvasChange}
+              onContentReplaced={() => setBgReadNonce((n) => n + 1)}
               initialPages={initialPages}
               initialMusicUrl={initialMusicUrl}
             />

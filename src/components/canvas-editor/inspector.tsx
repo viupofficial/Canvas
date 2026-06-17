@@ -780,7 +780,25 @@ export default function Inspector(props: {
 
           {/* ── Color Options ──────────────────────────────────── */}
           <div className={sectionCls}>
-            <h5 className="font-[600] text-[13px] text-[#7D5B59]">Color Options</h5>
+            <div className="flex items-center justify-between">
+              <h5 className="font-[600] text-[13px] text-[#7D5B59]">Color Options</h5>
+              {supportsFill && (
+                <button
+                  type="button"
+                  title="Swap Fill & Stroke colors"
+                  aria-label="Swap Fill and Stroke colors"
+                  onClick={() =>
+                    updateSelected({
+                      fill: buildRgba(strokeParsed.hex, strokeParsed.opacity),
+                      stroke: buildRgba(fillParsed.hex, fillParsed.opacity),
+                    })
+                  }
+                  className={colorIconBtn}
+                >
+                  <SwapColorsIcon />
+                </button>
+              )}
+            </div>
 
             {/* Quick actions — affect all colors at once */}
             {/* <div>
@@ -814,25 +832,6 @@ export default function Inspector(props: {
                 onRevert={() => updateSelected({ fill: orig?.fill ?? DEFAULT_FILL })}
                 onInvert={() => updateSelected({ fill: buildRgba(invertHex(fillParsed.hex), fillParsed.opacity) })}
               />
-            )}
-
-            {supportsFill && (
-              <div className="flex justify-end -mt-0 -mb-4">
-                <button
-                  type="button"
-                  title="Swap Fill & Stroke colors"
-                  aria-label="Swap Fill and Stroke colors"
-                  onClick={() =>
-                    updateSelected({
-                      fill: buildRgba(strokeParsed.hex, strokeParsed.opacity),
-                      stroke: buildRgba(fillParsed.hex, fillParsed.opacity),
-                    })
-                  }
-                  className={colorIconBtn}
-                >
-                  <SwapColorsIcon />
-                </button>
-              </div>
             )}
 
             <ColorRow
@@ -879,7 +878,8 @@ export default function Inspector(props: {
           </div>
 
           {/* ── Animation ──────────────────────────────────────── */}
-          <div className={sectionCls}>
+          {/* Hidden for now — keep for later. */}
+          {/* <div className={sectionCls}>
             <h5 className="font-[600] text-[13px] text-[#7D5B59]">Animation</h5>
             <div>
               <label className={labelCls}>Preset</label>
@@ -912,7 +912,7 @@ export default function Inspector(props: {
             <p className="text-[11px] text-[#7D5B5980] font-[600]">
               Preview plays once here. Loops continuously in the published invitation.
             </p>
-          </div>
+          </div> */}
 
           {/* ── Delete ─────────────────────────────────────────── */}
           <div className="p-4">

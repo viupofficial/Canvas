@@ -1,9 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
-import path from "path";
-import fs from "fs";
+import { put } from "@vercel/blob";
 
 export const runtime = "nodejs";
 
+// Store uploaded music in Vercel Blob (same store the published events use).
+// The previous implementation wrote into public/uploads via fs, which only
+// works in local dev — on a live deployment the filesystem is read-only and
+// public/ is served from the build, so uploads silently failed there.
 export async function POST(req: NextRequest) {
   try {
     const formData = await req.formData();
@@ -14,23 +17,21 @@ export async function POST(req: NextRequest) {
     }
 
     const blob = file as File;
-    const buffer = Buffer.from(await blob.arrayBuffer());
 
-    const uploadsDir = path.join(process.cwd(), "public", "uploads");
-    fs.mkdirSync(uploadsDir, { recursive: true });
+    const safeName =
+      (blob.name || "music")
+        .toLowerCase()
+        .replace(/[^a-z0-9.]+/g, "-")
+        .replace(/^-+|-+$/g, "") || "music";
 
-    const safeName = (blob.name || "music")
-      .toLowerCase()
-      .replace(/[^a-z0-9.]+/g, "-")
-      .replace(/^-+|-+$/g, "");
-    const ext = path.extname(safeName) || ".mp3";
-    const base = path.basename(safeName, ext) || "music";
-    const fileName = `${base}-${Date.now()}${ext}`;
-    const filePath = path.join(uploadsDir, fileName);
+    const result = await put(`music/${Date.now()}-${safeName}`, blob, {
+      access: "public",
+      contentType: blob.type || "audio/mpeg",
+      addRandomSuffix: true,
+      token: process.env.BLOB_READ_WRITE_TOKEN_READ_WRITE_TOKEN,
+    });
 
-    fs.writeFileSync(filePath, buffer);
-
-    return NextResponse.json({ ok: true, url: `/uploads/${fileName}` });
+    return NextResponse.json({ ok: true, url: result.url });
   } catch (err: any) {
     console.error("upload-music error:", err);
     return NextResponse.json({ ok: false, error: err.message }, { status: 500 });

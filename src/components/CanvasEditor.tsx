@@ -11,10 +11,13 @@ import React, {
 import type { Canvas as FabricCanvas } from "fabric";
 import { Copy, Trash, Trash2, ClipboardPaste, ArrowUpToLine, ArrowDownToLine, Eye, EyeOff, X, Pencil, Crop, ImageUp, ArrowUp, ArrowDown, Type, Layers, ChevronDown } from "lucide-react";
 import EventFooter from "../components/EventFooter";
+import MusicPlayer from "../components/MusicPlayer";
 import '../app/globals.css'
 import TemplateList from "@/src/components/template-list";
 import { envelopePage } from "@/src/components/template-list/EnvelopeTemplate";
 import { galleryPage } from "@/src/components/template-list/galleryTemplate";
+import { countdownPage } from "@/src/components/template-list/timeBoxTemplate";
+import { guestbookPage } from "@/src/components/template-list/guestbookTemplate";
 import { useEventDataOptional } from "@/src/store/EventDataContext";
 import { useFabricEventSync } from "@/src/hooks/useFabricEventSync";
 import { FONT_GROUPS, loadGoogleFont, collectFontFamilies, preloadFonts } from "@/src/lib/fonts";
@@ -45,6 +48,13 @@ export type BackgroundOptions = {
   flipY?: boolean;
 };
 
+// What the Background panel reads back off the active page so it can mirror the
+// page's current background (image + adjustments, a flat color, or nothing).
+export type BackgroundReadback =
+  | { kind: 'none' }
+  | { kind: 'color'; color: string }
+  | { kind: 'image'; src: string; opts: BackgroundOptions };
+
 export type EditorHandle = {
   undo: () => void;
   redo: () => void;
@@ -65,6 +75,9 @@ export type EditorHandle = {
   sendBack: () => void;
   getActiveObject: () => any | null;
   addShape: (shape: string) => void;
+  // Insert a prebuilt interactive element onto the current page.
+  addCountdown: () => void;
+  addGuestbook: () => void;
   addText: (text?: string, opts?: Record<string, any>) => void;
   enterTextTool: () => void;
   exitTextTool: () => void;
@@ -81,6 +94,8 @@ export type EditorHandle = {
   addBorder: (url: string) => void;
   setBackgroundColor: (color: string, scope?: BackgroundScope) => void;
   setBackgroundImage: (url: string | null, opts?: BackgroundOptions, scope?: BackgroundScope) => void;
+  // Read the active page's current background so the panel can display it.
+  getBackground: () => BackgroundReadback;
   previewAnimation: (type: string) => void;
   getActiveImageSrc: () => string | null;
   replaceActiveImage: (dataUrl: string) => void;
@@ -124,6 +139,12 @@ const FABRIC_EXPORT_PROPS = [
   "isBorder",
   "borderId",
   "locked",
+  // Marks a "Counting Days" value box (day/hour/minute/second) so the ticker —
+  // in both the editor and the published player — can find and update it.
+  "countdownUnit",
+  // Background-picture adjustment metadata, stashed on canvas.backgroundImage so
+  // the Background panel can read back exactly what's applied to each page.
+  "bgMeta",
 ] as const;
 
 // Properties serialized for the lightweight `selected` snapshot handed to the Inspector.
@@ -210,6 +231,9 @@ const CanvasEditor = forwardRef<
     onCanvasChange?: () => void;
     onLayersChange?: () => void;
     onPagesChange?: (count: number, current: number) => void;
+    // Fired after the active page's content is (re)loaded — page switch, undo/redo,
+    // template load. Lets panels re-read page-scoped state like the background.
+    onContentReplaced?: () => void;
     initialPages?: any[] | null;
     initialMusicUrl?: string | null;
     contacts: any[];
@@ -278,6 +302,11 @@ const [currentPage, setCurrentPage] = useState(0);
   onLayersChangeRef.current = props.onLayersChange;
   const onPagesChangeRef = useRef(props.onPagesChange);
   onPagesChangeRef.current = props.onPagesChange;
+  const onContentReplacedRef = useRef(props.onContentReplaced);
+  onContentReplacedRef.current = props.onContentReplaced;
+  // The background most recently pushed via "Apply to all pages". New pages
+  // inherit it so an all-pages background also covers pages created later.
+  const globalBgRef = useRef<{ backgroundImage?: any; backgroundColor?: any } | null>(null);
   const toggleFullscreenRef = useRef<() => void>(() => {});
   const textToolRef = useRef(false);
   const textToolStartRef = useRef<{ x: number; y: number } | null>(null);
@@ -313,6 +342,11 @@ const [currentPage, setCurrentPage] = useState(0);
     eventCtx?.debouncedEventData?.calendar?.date ??
     (props.calendar?.date as string | undefined) ??
     null;
+
+  // Mirror of calendarDate for non-reactive readers (startCountdown closures
+  // captured by memoized callbacks) so they always tick towards the latest date.
+  const calendarDateRef = useRef<string | null>(calendarDate);
+  useEffect(() => { calendarDateRef.current = calendarDate; }, [calendarDate]);
 
   const updateOverlayFromActive = useCallback(() => {
     const canvas = fabricRef.current;
@@ -406,6 +440,8 @@ const [currentPage, setCurrentPage] = useState(0);
       // The active page's object list just changed (page switch, undo/redo,
       // template load) — refresh the Layer tab.
       onLayersChangeRef.current?.();
+      // Same triggers let page-scoped panels (e.g. Background) re-read state.
+      onContentReplacedRef.current?.();
       onDone?.();
       // Webfonts referenced by the loaded design may not be ready yet; once they
       // are, repaint so text is measured/rendered against the real face.
@@ -510,6 +546,44 @@ const [currentPage, setCurrentPage] = useState(0);
       canvas.requestRenderAll();
       pushSnapshot();
     }
+  }, []);
+
+  // Drop a prebuilt interactive element (the "Counting Days" countdown or the
+  // "Guestbook") onto the current page. The element is the same object set used
+  // by the full-page templates, so it carries the markers (`countdownUnit`,
+  // `name`) the editor and the published player rely on to drive its behaviour.
+  // Objects are added loose (not grouped) so the countdown ticker can find and
+  // rewrite each value box in place. An optional drop point shifts the whole set.
+  const addElement = useCallback((kind: 'countdown' | 'guestbook', pos?: { x: number; y: number }) => {
+    const canvas = fabricRef.current;
+    const fabric = fabricModuleRef.current;
+    if (!canvas || !fabric) return;
+
+    const source = kind === 'countdown' ? countdownPage.objects : guestbookPage.objects;
+    // Deep-clone the template defs so we never mutate the shared module export.
+    const defs = source.map((o) => ({ ...o }));
+
+    fabric.util.enlivenObjects(defs).then((objs: any[]) => {
+      if (!objs.length) return;
+      // Shift the element so its top-left lands near the drop point (drag) while
+      // keeping the boxes' relative layout intact.
+      let dx = 0, dy = 0;
+      if (pos) {
+        const minLeft = Math.min(...objs.map((o) => o.left ?? 0));
+        const minTop = Math.min(...objs.map((o) => o.top ?? 0));
+        dx = pos.x - minLeft;
+        dy = pos.y - minTop;
+      }
+      objs.forEach((o) => {
+        o.set?.({ left: (o.left ?? 0) + dx, top: (o.top ?? 0) + dy, selectable: true, evented: true });
+        o.setCoords?.();
+        canvas.add(o);
+      });
+      canvas.requestRenderAll();
+      // The countdown boxes only start ticking once they're on the canvas.
+      if (kind === 'countdown') startCountdown(canvas);
+      pushSnapshot();
+    }).catch((e: any) => console.error('Failed to add element', kind, e));
   }, []);
 
   useImperativeHandle(ref, () => ({
@@ -624,6 +698,12 @@ const [currentPage, setCurrentPage] = useState(0);
       // forward to internal helper
       addShape(shape);
     },
+    addCountdown: () => {
+      addElement('countdown');
+    },
+    addGuestbook: () => {
+      addElement('guestbook');
+    },
     addText: (text?: string, opts?: Record<string, any>) => {
       addText(text, opts);
     },
@@ -661,7 +741,9 @@ const [currentPage, setCurrentPage] = useState(0);
       saveCurrentPage(currentPageRef.current);
       // Only spread to the other pages when the caller asked to apply to all.
       if (scope === 'all') {
-        applyBgToOtherPages({ backgroundColor: color, backgroundImage: undefined });
+        const patch = { backgroundColor: color, backgroundImage: undefined };
+        globalBgRef.current = patch;
+        applyBgToOtherPages(patch);
       }
     },
     // Set an uploaded image as the page background. `opts` mirrors the PowerPoint
@@ -682,6 +764,9 @@ const [currentPage, setCurrentPage] = useState(0);
         pushSnapshot();
         saveCurrentPage(currentPageRef.current);
         if (scope === 'all') {
+          // Cancelling the whole-invitation background: clear it everywhere and
+          // forget it so pages created later start blank again.
+          globalBgRef.current = null;
           applyBgToOtherPages({ backgroundImage: undefined, backgroundColor: bgFlatColorRef.current });
         }
         return;
@@ -703,20 +788,25 @@ const [currentPage, setCurrentPage] = useState(0);
       const h = (canvas.height as number) ?? CANVAS_REF_HEIGHT;
       const imgOpts = url.startsWith('data:') ? undefined : { crossOrigin: 'anonymous' };
 
-      fabric.Image.fromURL(url, imgOpts).then(async (img: any) => {
+      fabric.Image.fromURL(url, imgOpts).then((img: any) => {
         const el = img.getElement?.() as HTMLImageElement | null;
         const natW = (el?.naturalWidth ?? 0) > 0 ? el!.naturalWidth : (img.width || 1);
         const natH = (el?.naturalHeight ?? 0) > 0 ? el!.naturalHeight : (img.height || 1);
 
         if (tile) {
-          // Repeat the picture as a texture. Opacity + mirror are baked into the
-          // pattern source (patterns can't carry those props), and scale/offset
-          // ride on patternTransform so a single source serializes cleanly.
-          const source = await bakeImageSource(el ?? img, natW, natH, opacity, flipX, flipY);
+          // Repeat the picture as a texture. The original image stays the pattern
+          // source (so it round-trips by URL and stays re-editable); scale, offset
+          // and mirror are all expressed in patternTransform — a negative scale on
+          // an axis flips that axis — so the settings can be read straight back.
+          const source = (el ?? img) as CanvasImageSource;
           const pattern = new fabric.Pattern({
             source,
             repeat: 'repeat',
-            patternTransform: [uScaleX, 0, 0, uScaleY, offsetX, offsetY],
+            patternTransform: [
+              flipX ? -uScaleX : uScaleX, 0,
+              0, flipY ? -uScaleY : uScaleY,
+              offsetX, offsetY,
+            ],
           });
           canvas.backgroundImage = undefined;
           canvas.backgroundColor = pattern;
@@ -724,7 +814,9 @@ const [currentPage, setCurrentPage] = useState(0);
           pushSnapshot();
           saveCurrentPage(currentPageRef.current);
           if (scope === 'all') {
-            applyBgToOtherPages({ backgroundImage: undefined, backgroundColor: pattern.toObject() });
+            const patch = { backgroundImage: undefined, backgroundColor: pattern.toObject() };
+            globalBgRef.current = patch;
+            applyBgToOtherPages(patch);
           }
           return;
         }
@@ -749,6 +841,13 @@ const [currentPage, setCurrentPage] = useState(0);
           scaleX: baseX * uScaleX, scaleY: baseY * uScaleY,
           opacity, flipX, flipY,
         });
+        // Stash the panel-facing settings so getBackground can read them back
+        // exactly (the raw fabric transform alone can't tell us the chosen fit).
+        img.bgMeta = {
+          fit, tile: false,
+          scaleX: uScaleX, scaleY: uScaleY,
+          offsetX, offsetY, opacity, flipX, flipY,
+        } as BackgroundOptions;
         canvas.backgroundImage = img;
         // Keep the flat color behind the picture so 'contain' shows a backdrop.
         canvas.backgroundColor = bgFlatColorRef.current;
@@ -756,9 +855,59 @@ const [currentPage, setCurrentPage] = useState(0);
         pushSnapshot();
         saveCurrentPage(currentPageRef.current);
         if (scope === 'all') {
-          applyBgToOtherPages({ backgroundImage: img.toObject(), backgroundColor: bgFlatColorRef.current });
+          const patch = {
+            backgroundImage: img.toObject([...FABRIC_EXPORT_PROPS]),
+            backgroundColor: bgFlatColorRef.current,
+          };
+          globalBgRef.current = patch;
+          applyBgToOtherPages(patch);
         }
       }).catch((err: any) => console.error('Failed to load background image', err));
+    },
+    getBackground: (): BackgroundReadback => {
+      const canvas = fabricRef.current;
+      if (!canvas) return { kind: 'none' };
+
+      // A single picture lives on backgroundImage and carries its panel settings
+      // in bgMeta (serialized via FABRIC_EXPORT_PROPS, so it survives reloads).
+      const bgImg = canvas.backgroundImage as any;
+      if (bgImg) {
+        const src = bgImg.getSrc?.() ?? bgImg._element?.src ?? null;
+        if (src) {
+          const meta = (bgImg.bgMeta ?? {}) as BackgroundOptions;
+          return { kind: 'image', src, opts: { ...meta, tile: false } };
+        }
+      }
+
+      const bgColor = canvas.backgroundColor as any;
+      // A tiled picture lives on backgroundColor as a Pattern; scale/offset/mirror
+      // are read straight off its transform matrix [a,b,c,d,e,f].
+      if (bgColor && typeof bgColor === 'object') {
+        const el = bgColor.source as any;
+        const src = el?.src ?? el?.currentSrc ?? null;
+        if (src) {
+          const pt = bgColor.patternTransform ?? [1, 0, 0, 1, 0, 0];
+          const a = pt[0] ?? 1;
+          const d = pt[3] ?? 1;
+          return {
+            kind: 'image',
+            src,
+            opts: {
+              tile: true,
+              scaleX: Math.abs(a) || 1,
+              scaleY: Math.abs(d) || 1,
+              offsetX: pt[4] ?? 0,
+              offsetY: pt[5] ?? 0,
+              flipX: a < 0,
+              flipY: d < 0,
+              opacity: 1,
+            },
+          };
+        }
+      }
+
+      if (typeof bgColor === 'string' && bgColor) return { kind: 'color', color: bgColor };
+      return { kind: 'none' };
     },
     previewAnimation: (type: string) => {
       previewAnimation(type);
@@ -1606,6 +1755,8 @@ const [currentPage, setCurrentPage] = useState(0);
           addShape(data.shape);
           const active = fabricRef.current?.getActiveObject();
           if (active) { active.set({ left: x, top: y }); canvas.requestRenderAll(); pushSnapshot(); }
+        } else if (data.type === 'element' && (data.element === 'countdown' || data.element === 'guestbook')) {
+          addElement(data.element, { x, y });
         } else if (data.type === 'text' && data.text) {
           addText(data.text, { ...(data.opts || {}), left: x, top: y });
         } else if (data.type === 'image-url' && data.url) {
@@ -2227,37 +2378,6 @@ const applyBgToOtherPages = (patch: { backgroundImage?: any; backgroundColor?: a
   );
 };
 
-// Bake opacity + mirror into a fresh image so it can be used as a tiling pattern
-// source (Fabric patterns carry neither). Returns a load-complete HTMLImageElement
-// backed by a data URL so it serializes cleanly into each page's JSON.
-const bakeImageSource = (
-  source: CanvasImageSource,
-  natW: number,
-  natH: number,
-  opacity: number,
-  flipX: boolean,
-  flipY: boolean,
-): Promise<HTMLImageElement> => {
-  const off = document.createElement('canvas');
-  off.width = Math.max(1, Math.round(natW));
-  off.height = Math.max(1, Math.round(natH));
-  const ctx = off.getContext('2d');
-  if (ctx) {
-    ctx.globalAlpha = Math.max(0, Math.min(1, opacity));
-    ctx.translate(flipX ? off.width : 0, flipY ? off.height : 0);
-    ctx.scale(flipX ? -1 : 1, flipY ? -1 : 1);
-    ctx.drawImage(source, 0, 0, off.width, off.height);
-  }
-  const dataUrl = off.toDataURL('image/png');
-  return new Promise((resolve, reject) => {
-    const img = new Image();
-    img.onload = () => resolve(img);
-    img.onerror = reject;
-    img.src = dataUrl;
-  });
-};
-
-  
   const loadPage = (index: number) => {
     const canvas = fabricRef.current;
     if (!canvas) return;
@@ -2307,13 +2427,15 @@ const bakeImageSource = (
     const currentJSON = serializeCanvas(canvas);
     const newIndex = pages.length; // append semantics — new page's index equals current length
     currentPageRef.current = newIndex;
+    // If a background was applied to all pages, new pages inherit it too.
+    const seed = globalBgRef.current ? { objects: [], ...globalBgRef.current } : null;
     setPages(prev => {
       const updated = [...prev];
       updated[prevIndex] = currentJSON;
-      updated.push(null);
+      updated.push(seed);
       return updated;
     });
-    replaceCanvasContent(null, () => {
+    replaceCanvasContent(seed, () => {
       const h = getPageHistory(newIndex);
       if (h.undo.length === 0) commitSnapshot();
     });
@@ -2617,7 +2739,7 @@ const bakeImageSource = (
   const startCountdown = (canvas: FabricCanvas) => {
     // Refresh the target from the current calendar date and clear any prior
     // interval so we never stack multiple tickers.
-    countdownTargetRef.current = resolveCountdownTarget(calendarDate);
+    countdownTargetRef.current = resolveCountdownTarget(calendarDateRef.current);
     if (countdownIntervalRef.current !== null) {
       clearInterval(countdownIntervalRef.current);
       countdownIntervalRef.current = null;
@@ -3027,13 +3149,9 @@ const bakeImageSource = (
             </div>
           )}
           {musicUrl && (
-            <audio
-              src={musicUrl}
-              autoPlay
-              loop
-              controls
-              className="absolute top-2 right-2 z-40 opacity-0"
-            />
+            <div className="absolute top-2 right-2 z-40">
+              <MusicPlayer url={musicUrl} start />
+            </div>
           )}
 
         </div>

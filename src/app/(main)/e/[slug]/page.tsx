@@ -31,6 +31,7 @@ export default async function Page({ params }: { params: Promise<{ slug: string 
         envelope={data.envelope ?? null}
         musicUrl={data.musicUrl ?? null}
         borderUrl={data.borderUrl ?? null}
+        eventDate={data.calendar?.date ?? null}
       />
       <EventFooter
         contacts={data.contacts ?? []}

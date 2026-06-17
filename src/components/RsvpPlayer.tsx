@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { collectFontFamilies, preloadFonts } from "@/src/lib/fonts";
+import MusicPlayer from "@/src/components/MusicPlayer";
 
 export type EnvPos = {
   left: number;
@@ -66,14 +67,40 @@ export type RsvpPlayerProps = {
   envelope: EnvelopeData | null;
   musicUrl: string | null;
   borderUrl: string | null;
+  // The event date the "Counting Days" element ticks towards (the saved Calendar
+  // date). Bare "YYYY-MM-DD" is treated as local midnight.
+  eventDate?: string | null;
+  // Wishes shown by the on-page "Guestbook" element. Falls back to a sample set.
+  guestMessages?: { message: string; sender: string }[];
 };
 
-export default function RsvpPlayer({ pages, envelope, musicUrl, borderUrl }: RsvpPlayerProps) {
+const DEFAULT_GUEST_MESSAGES = [
+  { message: "Semoga bahagia hingga ke syurga ❤️", sender: "Ali" },
+  { message: "Congrats! Stay strong together 💍", sender: "Siti" },
+  { message: "Love you guys!! 🎉", sender: "Aiman" },
+];
+
+export default function RsvpPlayer({ pages, envelope, musicUrl, borderUrl, eventDate, guestMessages }: RsvpPlayerProps) {
   const rootRef = useRef<HTMLDivElement>(null);
-  const audioRef = useRef<HTMLAudioElement | null>(null);
 
   const [gone, setGone] = useState(!envelope);
   const [animating, setAnimating] = useState(false);
+  // Audible playback can only begin after a user gesture. With an envelope we
+  // wait for the seal click; without one we start right away.
+  const [musicStarted, setMusicStarted] = useState(!envelope);
+
+  // Page-by-page ("play mode") navigation state.
+  const [current, setCurrent] = useState(0);
+  const [scale, setScale] = useState(1);
+  const pagerRef = useRef<HTMLDivElement>(null);
+  const wrappersRef = useRef<HTMLDivElement[]>([]);
+  const currentRef = useRef(0);
+  const goneRef = useRef(!envelope);
+
+  // Keep refs in sync so the imperative (non-React) event handlers below read
+  // the latest values without re-binding on every change.
+  useEffect(() => { currentRef.current = current; }, [current]);
+  useEffect(() => { goneRef.current = gone; }, [gone]);
 
   useEffect(() => {
     if (!envelope) return;
@@ -95,11 +122,88 @@ export default function RsvpPlayer({ pages, envelope, musicUrl, borderUrl }: Rsv
   function handleSealClick() {
     if (animating || gone) return;
     setAnimating(true);
-    if (audioRef.current) audioRef.current.play().catch(() => {});
+    // The click is the user gesture that unlocks audible playback.
+    setMusicStarted(true);
     setTimeout(() => {
       setTimeout(() => setGone(true), 500);
     }, 1000);
   }
+
+  const goTo = (i: number) =>
+    setCurrent(() => Math.max(0, Math.min(pages.length - 1, i)));
+
+  // Fit one full page (396×704) into the available viewport, leaving room at the
+  // bottom for the sticky footer nav bar.
+  useEffect(() => {
+    const FOOTER_RESERVE = 96;
+    const PAD = 16;
+    const calc = () => {
+      const availH = window.innerHeight - FOOTER_RESERVE - PAD;
+      const availW = Math.min(window.innerWidth, 440) - PAD;
+      setScale(Math.min(availW / STAGE_W, availH / STAGE_H, 1));
+    };
+    calc();
+    window.addEventListener("resize", calc);
+    return () => window.removeEventListener("resize", calc);
+  }, []);
+
+  // Slide the active page into view; neighbours sit just off-stage so the
+  // transition animates the page element (not the canvas drawing) on change.
+  useEffect(() => {
+    wrappersRef.current.forEach((w, i) => {
+      if (!w) return;
+      const offset = i - current;
+      w.style.transform = `translateY(${offset * 100}%)`;
+      w.style.opacity = Math.abs(offset) <= 1 ? "1" : "0";
+      w.style.zIndex = offset === 0 ? "2" : "1";
+    });
+  }, [current, pages]);
+
+  // Swipe / scroll / keyboard navigation between pages.
+  useEffect(() => {
+    const el = pagerRef.current;
+    if (!el) return;
+
+    const next = () => goTo(currentRef.current + 1);
+    const prev = () => goTo(currentRef.current - 1);
+    const blocked = () => !goneRef.current || pages.length <= 1;
+
+    let lastWheel = 0;
+    const onWheel = (e: WheelEvent) => {
+      if (blocked()) return;
+      e.preventDefault();
+      const now = Date.now();
+      if (now - lastWheel < 600 || Math.abs(e.deltaY) < 15) return;
+      lastWheel = now;
+      e.deltaY > 0 ? next() : prev();
+    };
+
+    let startY = 0;
+    const onTouchStart = (e: TouchEvent) => { startY = e.touches[0].clientY; };
+    const onTouchEnd = (e: TouchEvent) => {
+      if (blocked()) return;
+      const dy = e.changedTouches[0].clientY - startY;
+      if (Math.abs(dy) < 40) return;
+      dy < 0 ? next() : prev();
+    };
+
+    const onKey = (e: KeyboardEvent) => {
+      if (blocked()) return;
+      if (["ArrowDown", "ArrowRight", "PageDown", " "].includes(e.key)) { e.preventDefault(); next(); }
+      else if (["ArrowUp", "ArrowLeft", "PageUp"].includes(e.key)) { e.preventDefault(); prev(); }
+    };
+
+    el.addEventListener("wheel", onWheel, { passive: false });
+    el.addEventListener("touchstart", onTouchStart, { passive: true });
+    el.addEventListener("touchend", onTouchEnd, { passive: true });
+    window.addEventListener("keydown", onKey);
+    return () => {
+      el.removeEventListener("wheel", onWheel);
+      el.removeEventListener("touchstart", onTouchStart);
+      el.removeEventListener("touchend", onTouchEnd);
+      window.removeEventListener("keydown", onKey);
+    };
+  }, [pages.length]);
 
   useEffect(() => {
     if (!rootRef.current) return;
@@ -218,15 +322,94 @@ export default function RsvpPlayer({ pages, envelope, musicUrl, borderUrl }: Rsv
       cancellers.push(() => clearInterval(gid));
     };
 
+    // "Counting Days" countdown: rewrite each value box (tagged with
+    // countdownUnit = day/hour/minute/second) every second towards eventDate.
+    // No-op on pages without a countdown.
+    const startCountdown = (rc: any) => {
+      const boxes = rc
+        .getObjects()
+        .filter((o: any) => o?.type === "textbox" && typeof o?.countdownUnit === "string");
+      if (!boxes.length) return;
+
+      const target = (() => {
+        if (!eventDate) return null;
+        const d = /^\d{4}-\d{2}-\d{2}$/.test(eventDate)
+          ? new Date(`${eventDate}T00:00:00`)
+          : new Date(eventDate);
+        return isNaN(d.getTime()) ? null : d;
+      })();
+
+      const tick = () => {
+        if (cancelled) return;
+        let days = 0, hours = 0, minutes = 0, seconds = 0;
+        if (target) {
+          const diff = target.getTime() - Date.now();
+          if (diff > 0) {
+            days = Math.floor(diff / 86400000);
+            hours = Math.floor((diff / 3600000) % 24);
+            minutes = Math.floor((diff / 60000) % 60);
+            seconds = Math.floor((diff / 1000) % 60);
+          }
+        }
+        const byUnit: Record<string, number> = { day: days, hour: hours, minute: minutes, second: seconds };
+        let touched = false;
+        boxes.forEach((o: any) => {
+          const next = String(byUnit[o.countdownUnit] ?? 0).padStart(2, "0");
+          if (o.text !== next) { o.set("text", next); touched = true; }
+        });
+        if (touched) rc.requestRenderAll();
+      };
+      tick();
+      const cid = setInterval(tick, 1000);
+      cancellers.push(() => clearInterval(cid));
+    };
+
+    // Guestbook: cycle the wishes through the message/sender textboxes (tagged
+    // name = guestMessage / guestSender) every 4s. No-op on pages without one.
+    const startGuestbook = (rc: any) => {
+      const objs = rc.getObjects();
+      const msgBox = objs.find((o: any) => o?.name === "guestMessage");
+      const senderBox = objs.find((o: any) => o?.name === "guestSender");
+      if (!msgBox && !senderBox) return;
+      const list = (guestMessages && guestMessages.length ? guestMessages : DEFAULT_GUEST_MESSAGES);
+      if (!list.length) return;
+      let i = 0;
+      const show = () => {
+        const entry = list[i];
+        msgBox?.set("text", `“${entry.message}”`);
+        senderBox?.set("text", `- ${entry.sender}`);
+        rc.requestRenderAll();
+      };
+      show();
+      if (list.length < 2) return;
+      const wid = setInterval(() => {
+        if (cancelled) return;
+        i = (i + 1) % list.length;
+        show();
+      }, 4000);
+      cancellers.push(() => clearInterval(wid));
+    };
+
     root.innerHTML = "";
+    wrappersRef.current = [];
+    setCurrent(0);
+    currentRef.current = 0;
 
     import("fabric").then((mod: any) => {
       if (cancelled) return;
       const fabric = mod.fabric ?? mod.default ?? mod;
       pages.forEach((pageData: any, index: number) => {
         const wrapper = document.createElement("div");
-        wrapper.style.cssText = `width:${w}px;max-width:100%;line-height:0;margin:0 auto;pointer-events:none;user-select:none;`;
+        // Each page is a full-stage slide stacked vertically; only the active
+        // one sits at translateY(0). Transition animates page-to-page changes.
+        wrapper.style.cssText =
+          `position:absolute;top:0;left:0;width:${w}px;height:${h}px;line-height:0;` +
+          `pointer-events:none;user-select:none;will-change:transform,opacity;` +
+          `transition:transform 0.55s cubic-bezier(0.22,1,0.36,1),opacity 0.4s ease;` +
+          `transform:translateY(${index * 100}%);opacity:${index <= 1 ? 1 : 0};` +
+          `z-index:${index === 0 ? 2 : 1};`;
         wrapper.id = "page-" + index;
+        wrappersRef.current[index] = wrapper;
 
         const canvasEl = document.createElement("canvas");
         canvasEl.id = "canvas-" + index;
@@ -265,6 +448,8 @@ export default function RsvpPlayer({ pages, envelope, musicUrl, borderUrl }: Rsv
             toRemove.forEach((o) => rc.remove(o));
             startAnimations(rc);
             startGallerySlideshow(rc);
+            startCountdown(rc);
+            startGuestbook(rc);
             rc.requestRenderAll();
             // Webfonts used by this page may not be ready at first paint; load
             // them, then repaint so text renders with the correct family.
@@ -284,8 +469,9 @@ export default function RsvpPlayer({ pages, envelope, musicUrl, borderUrl }: Rsv
       cancellers.forEach((c) => { try { c(); } catch {} });
       createdCanvases.forEach((c) => { try { c.dispose(); } catch {} });
       root.innerHTML = "";
+      wrappersRef.current = [];
     };
-  }, [pages, borderUrl]);
+  }, [pages, borderUrl, eventDate, guestMessages]);
 
   return (
     <>
@@ -449,16 +635,74 @@ export default function RsvpPlayer({ pages, envelope, musicUrl, borderUrl }: Rsv
         </>
       )}
 
+      {/* Flow spacer: gives <main> a full viewport of height so the sticky
+          footer nav bar pins to the bottom over the fixed pager below. */}
+      <div aria-hidden style={{ height: "100dvh", pointerEvents: "none" }} />
+
+      {/* Paginated "play mode" stage — one page at a time. */}
       <div
-        ref={rootRef}
+        ref={pagerRef}
         style={{
+          position: "fixed",
+          inset: 0,
+          zIndex: 1,
           display: "flex",
-          flexDirection: "column",
           alignItems: "center",
-          position: "relative",
-          zIndex: 100,
+          justifyContent: "center",
+          paddingBottom: 96,
+          overflow: "hidden",
+          touchAction: "none",
         }}
-      />
+      >
+        <div
+          ref={rootRef}
+          style={{
+            width: STAGE_W,
+            height: STAGE_H,
+            position: "relative",
+            overflow: "hidden",
+            transform: `scale(${scale})`,
+            transformOrigin: "center",
+            flexShrink: 0,
+          }}
+        />
+
+        {/* Page indicator dots */}
+        {pages.length > 1 && (
+          <div
+            style={{
+              position: "absolute",
+              right: 12,
+              top: "50%",
+              transform: "translateY(-50%)",
+              display: "flex",
+              flexDirection: "column",
+              gap: 8,
+              zIndex: 5,
+            }}
+          >
+            {pages.map((_, i) => (
+              <button
+                key={i}
+                aria-label={`Go to page ${i + 1}`}
+                onClick={() => goTo(i)}
+                style={{
+                  width: 8,
+                  height: 8,
+                  padding: 0,
+                  border: "none",
+                  borderRadius: "50%",
+                  cursor: "pointer",
+                  background:
+                    i === current ? "rgba(60,60,60,0.9)" : "rgba(60,60,60,0.25)",
+                  transform: i === current ? "scale(1.35)" : "scale(1)",
+                  transition: "transform 0.25s ease, background 0.25s ease",
+                }}
+              />
+            ))}
+          </div>
+        )}
+      </div>
 
       {borderUrl && (
         <img
@@ -481,11 +725,10 @@ export default function RsvpPlayer({ pages, envelope, musicUrl, borderUrl }: Rsv
       )}
 
       {musicUrl && (
-        <audio
-          ref={audioRef}
-          src={musicUrl}
-          loop
-          controls
+        <MusicPlayer
+          url={musicUrl}
+          start={musicStarted}
+          visible
           style={{ position: "fixed", left: 12, bottom: 80, zIndex: 10 }}
         />
       )}

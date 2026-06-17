@@ -80,6 +80,7 @@ export default function PreviewLocalPage() {
         envelope={data.envelope}
         musicUrl={data.musicUrl}
         borderUrl={data.borderUrl}
+        eventDate={data.calendar?.date ?? null}
       />
       <EventFooter
         contacts={data.contacts}

@@ -76,6 +76,34 @@ const SIDEBAR_ITEMS: { id: Tab; label: string; icon: string; disabled?: boolean 
   // { id: 'wishlist', label: 'Wishlist', icon: '/wishlist.svg' },
 ];
 
+// Interactive elements that can be dropped onto any page. Both are functional:
+// "Counting Days" ticks towards the saved Calendar date; "Guestbook" cycles
+// through wishes in the published invitation.
+const INTERACTIVE_ELEMENTS: { id: 'countdown' | 'guestbook'; label: string; icon: React.ReactNode }[] = [
+  {
+    id: 'countdown',
+    label: 'Counting Days',
+    icon: (
+      <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+        <circle cx="12" cy="13" r="8" />
+        <path d="M12 9v4l2.5 2.5" />
+        <path d="M9 2h6" />
+      </svg>
+    ),
+  },
+  {
+    id: 'guestbook',
+    label: 'Guestbook',
+    icon: (
+      <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+        <path d="M4 4h13a2 2 0 0 1 2 2v14H6a2 2 0 0 1-2-2z" />
+        <path d="M8 4v16" />
+        <path d="M11 9h5M11 13h5" />
+      </svg>
+    ),
+  },
+];
+
 // const PREMIUM_TABS: Tab[] = ['rsvp', 'money', 'wishlist']; // disabled — all tabs unlocked
 
 const TEMPLATE_LIST = [
@@ -332,14 +360,14 @@ function MusicTab({ editorRef }: { editorRef?: React.RefObject<EditorHandle | nu
           <input
             value={url}
             onChange={(e) => setUrl(e.target.value)}
-            placeholder="Music URL"
+            placeholder="Audio URL or YouTube link"
             className="flex-1 px-2 py-1 border rounded"
           />
           <button
             onClick={() => {
               if (!url) return;
               if (editorRef?.current?.addMusicFromUrl) {
-                editorRef.current.addMusicFromUrl(url);
+                editorRef.current.addMusicFromUrl(url.trim());
               }
               setUrl("");
             }}
@@ -348,6 +376,9 @@ function MusicTab({ editorRef }: { editorRef?: React.RefObject<EditorHandle | nu
             Add
           </button>
         </div>
+        <p className="text-[11px] text-gray-400">
+          Paste a direct audio link or a YouTube URL (youtube.com or youtu.be).
+        </p>
       </div>
     </div>
   );
@@ -1021,7 +1052,13 @@ function NumberField({
   );
 }
 
-function BackgroundTab({ editorRef }: { editorRef?: React.RefObject<EditorHandle | null> }) {
+function BackgroundTab({
+  editorRef,
+  readNonce,
+}: {
+  editorRef?: React.RefObject<EditorHandle | null>;
+  readNonce?: number;
+}) {
   const [fillType, setFillType] = useState<'color' | 'picture'>('color');
   const [bgColor, setBgColor] = useState('#ffffff');
   const [src, setSrc] = useState<string | null>(null);
@@ -1034,6 +1071,46 @@ function BackgroundTab({ editorRef }: { editorRef?: React.RefObject<EditorHandle
   const [transparency, setTransparency] = useState(0);
   const [mirror, setMirror] = useState<BgMirror>('none');
   const fileRef = React.useRef<HTMLInputElement>(null);
+  // When we pull settings FROM the editor we must not bounce them straight back
+  // (that would push history snapshots on every page switch). This skips the one
+  // apply that the sync's state updates would otherwise trigger.
+  const suppressApplyRef = React.useRef(false);
+
+  // Mirror the active page's background into the panel — on first open and after
+  // every page (re)load. Reads what's actually applied so the panel always shows
+  // the current page's image (or nothing for a blank page).
+  useEffect(() => {
+    const rb = editorRef?.current?.getBackground?.();
+    if (!rb) return;
+    suppressApplyRef.current = true;
+    if (rb.kind === 'image') {
+      const o = rb.opts;
+      setFillType('picture');
+      setSrc(rb.src);
+      setTile(!!o.tile);
+      setFit(o.fit ?? 'cover');
+      setScaleX(Math.round((o.scaleX ?? 1) * 100));
+      setScaleY(Math.round((o.scaleY ?? 1) * 100));
+      setOffsetX(Math.round(o.offsetX ?? 0));
+      setOffsetY(Math.round(o.offsetY ?? 0));
+      setTransparency(Math.round((1 - (o.opacity ?? 1)) * 100));
+      setMirror(
+        o.flipX && o.flipY ? 'both' : o.flipX ? 'horizontal' : o.flipY ? 'vertical' : 'none',
+      );
+    } else if (rb.kind === 'color') {
+      setFillType('color');
+      setBgColor(rb.color);
+      setSrc(null);
+    } else {
+      // Blank page — clear the picture but leave the fill mode as-is so the user
+      // can drop a new image straight in.
+      setSrc(null);
+    }
+    // Clear the guard after the apply effect has had its chance to run-and-skip.
+    const id = setTimeout(() => { suppressApplyRef.current = false; }, 0);
+    return () => clearTimeout(id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [readNonce]);
 
   // The current adjustment controls packaged for the editor API.
   const buildOpts = () => ({
@@ -1070,6 +1147,8 @@ function BackgroundTab({ editorRef }: { editorRef?: React.RefObject<EditorHandle
   const applyKey = `${src}|${tile}|${fit}|${scaleX}|${scaleY}|${offsetX}|${offsetY}|${transparency}|${mirror}`;
   useEffect(() => {
     if (fillType !== 'picture' || !src) return;
+    // Don't echo a sync-from-editor change back to the canvas.
+    if (suppressApplyRef.current) { suppressApplyRef.current = false; return; }
     const id = setTimeout(() => {
       editorRef?.current?.setBackgroundImage?.(src, buildOpts());
     }, 60);
@@ -1097,9 +1176,8 @@ function BackgroundTab({ editorRef }: { editorRef?: React.RefObject<EditorHandle
     input.value = '';
   };
 
-  // Cancel the background effect on the active page and clear the panel back to
-  // its starting state. Wired to both the picture "Remove" and "Reset" buttons.
-  const resetAdjustments = () => {
+  // Clear the panel controls back to their starting state.
+  const clearPanelState = () => {
     setTile(false);
     setFit('cover');
     setScaleX(100);
@@ -1109,7 +1187,19 @@ function BackgroundTab({ editorRef }: { editorRef?: React.RefObject<EditorHandle
     setTransparency(0);
     setMirror('none');
     setSrc(null);
+  };
+
+  // "Remove" on the picture preview: drop the background from THIS page only.
+  const removeCurrent = () => {
+    clearPanelState();
     editorRef?.current?.setBackgroundImage?.(null);
+  };
+
+  // "Reset adjustments": cancel the whole "Apply to all pages" effect — clears the
+  // background from every page and stops newly created pages from inheriting it.
+  const resetAdjustments = () => {
+    clearPanelState();
+    editorRef?.current?.setBackgroundImage?.(null, undefined, 'all');
   };
 
   const fillTabCls = (active: boolean) =>
@@ -1203,7 +1293,8 @@ function BackgroundTab({ editorRef }: { editorRef?: React.RefObject<EditorHandle
                 </button>
                 <button
                   type="button"
-                  onClick={resetAdjustments}
+                  onClick={removeCurrent}
+                  title="Remove background from this page"
                   className="px-2 py-0.5 rounded bg-white/90 text-[10px] font-semibold text-red-500 border border-red-200 hover:bg-red-50 transition"
                 >
                   Remove
@@ -1250,21 +1341,23 @@ function BackgroundTab({ editorRef }: { editorRef?: React.RefObject<EditorHandle
                 </label>
               )}
 
-              {/* Transparency */}
-              <label className="flex flex-col gap-1">
-                <div className="flex items-center justify-between">
-                  <span className="text-[11px] text-[#7D5B5980] font-[600]">Transparency</span>
-                  <span className="text-[11px] text-[#7D5B59] font-[600]">{transparency}%</span>
-                </div>
-                <input
-                  type="range"
-                  min={0}
-                  max={100}
-                  value={transparency}
-                  onChange={(e) => setTransparency(Number(e.target.value))}
-                  className="w-full accent-[#8C6B6B]"
-                />
-              </label>
+              {/* Transparency — not applied to tiled textures */}
+              {!tile && (
+                <label className="flex flex-col gap-1">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[11px] text-[#7D5B5980] font-[600]">Transparency</span>
+                    <span className="text-[11px] text-[#7D5B59] font-[600]">{transparency}%</span>
+                  </div>
+                  <input
+                    type="range"
+                    min={0}
+                    max={100}
+                    value={transparency}
+                    onChange={(e) => setTransparency(Number(e.target.value))}
+                    className="w-full accent-[#8C6B6B]"
+                  />
+                </label>
+              )}
 
               {/* Scale */}
               <div className="grid grid-cols-2 gap-2">
@@ -1304,6 +1397,7 @@ function BackgroundTab({ editorRef }: { editorRef?: React.RefObject<EditorHandle
                 <button
                   type="button"
                   onClick={resetAdjustments}
+                  title="Remove the background from all pages (cancels Apply to all)"
                   className="py-2 rounded-md border border-[#EDE2DE] text-[12px] font-[600] text-[#7D5B59] hover:bg-[#F2E8E6B2] transition"
                 >
                   Reset adjustments
@@ -1347,10 +1441,14 @@ export default function Sidebar({
   editorRef,
   isPhonePreview = false,
   onEditImage,
+  bgReadNonce,
 }: {
   editorRef?: React.RefObject<EditorHandle | null>;
   isPhonePreview?: boolean;
   onEditImage?: (src: string, onReplace: (dataUrl: string) => void) => void;
+  // Bumped by the parent whenever the active page reloads, so the Background
+  // panel can re-read and display that page's background.
+  bgReadNonce?: number;
 }) {
   const [active, setActive] = useState<Tab | null>(null);
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
@@ -1481,6 +1579,37 @@ export default function Sidebar({
       {active === 'elements' ? (
         <div>
           <div className="flex flex-col gap-4">
+            {/* Interactive elements — drop a fully-functional countdown or
+                guestbook onto the current page (click or drag). */}
+            <div className="mb-3">
+              <div className="text-[#191212] text-[17px] font-bold mb-2">Interactive</div>
+              <div className="grid grid-cols-2 gap-2">
+                {INTERACTIVE_ELEMENTS.map((el) => (
+                  <button
+                    key={el.id}
+                    draggable
+                    onDragStart={(e) => {
+                      const payload = JSON.stringify({ type: 'element', element: el.id });
+                      try { e.dataTransfer.setData('application/json', payload); e.dataTransfer.effectAllowed = 'copy'; } catch (err) { }
+                    }}
+                    onClick={() => {
+                      if (el.id === 'countdown') editorRef?.current?.addCountdown?.();
+                      else editorRef?.current?.addGuestbook?.();
+                    }}
+                    title={`Add ${el.label} to canvas`}
+                    aria-label={`Add ${el.label} to canvas`}
+                    className="h-24 bg-gray-100 rounded flex flex-col items-center justify-center gap-2 text-[12px] font-semibold text-[#7D5B59] hover:bg-gray-200 transition"
+                  >
+                    {el.icon}
+                    <span>{el.label}</span>
+                  </button>
+                ))}
+              </div>
+              <div className="text-[11px] text-gray-400 text-center mt-2">
+                Click to add · drag onto the page to place.
+              </div>
+            </div>
+
             {['Shapes', 'Graphics', 'Stickers', 'Color'].map((cat) => (
               <div key={cat} className="mb-3">
                 <div className="flex items-center justify-between">
@@ -1576,7 +1705,7 @@ export default function Sidebar({
           </div>
         </div>
       ) : active === 'background' ? (
-        <BackgroundTab editorRef={editorRef} />
+        <BackgroundTab editorRef={editorRef} readNonce={bgReadNonce} />
       ) : active === 'photo' ? (
         <PhotoTab editorRef={editorRef} onEditImage={onEditImage} />
       ) : active === 'music' ? (
