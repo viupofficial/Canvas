@@ -147,15 +147,15 @@ export default function RsvpPlayer({ pages, envelope, musicUrl, borderUrl, event
     return () => window.removeEventListener("resize", calc);
   }, []);
 
-  // Slide the active page into view; neighbours sit just off-stage so the
-  // transition animates the page element (not the canvas drawing) on change.
+  // Page change is a pure opacity crossfade: the active page fades to opacity 1,
+  // the rest fade out. The canvas itself never scales, moves, or resizes — the
+  // design stays visually stable; only the stacked pages' opacity changes.
   useEffect(() => {
     wrappersRef.current.forEach((w, i) => {
       if (!w) return;
-      const offset = i - current;
-      w.style.transform = `translateY(${offset * 100}%)`;
-      w.style.opacity = Math.abs(offset) <= 1 ? "1" : "0";
-      w.style.zIndex = offset === 0 ? "2" : "1";
+      const active = i === current;
+      w.style.opacity = active ? "1" : "0";
+      w.style.zIndex = active ? "2" : "1";
     });
   }, [current, pages]);
 
@@ -400,13 +400,14 @@ export default function RsvpPlayer({ pages, envelope, musicUrl, borderUrl, event
       const fabric = mod.fabric ?? mod.default ?? mod;
       pages.forEach((pageData: any, index: number) => {
         const wrapper = document.createElement("div");
-        // Each page is a full-stage slide stacked vertically; only the active
-        // one sits at translateY(0). Transition animates page-to-page changes.
+        // Every page is stacked in the same spot and stays there — the canvas
+        // never moves or scales. Only the active page is visible; page changes
+        // crossfade opacity so the design stays visually stable.
         wrapper.style.cssText =
           `position:absolute;top:0;left:0;width:${w}px;height:${h}px;line-height:0;` +
-          `pointer-events:none;user-select:none;will-change:transform,opacity;` +
-          `transition:transform 0.55s cubic-bezier(0.22,1,0.36,1),opacity 0.4s ease;` +
-          `transform:translateY(${index * 100}%);opacity:${index <= 1 ? 1 : 0};` +
+          `pointer-events:none;user-select:none;will-change:opacity;` +
+          `transition:opacity 0.4s ease;` +
+          `opacity:${index === 0 ? 1 : 0};` +
           `z-index:${index === 0 ? 2 : 1};`;
         wrapper.id = "page-" + index;
         wrappersRef.current[index] = wrapper;
@@ -666,42 +667,6 @@ export default function RsvpPlayer({ pages, envelope, musicUrl, borderUrl, event
             flexShrink: 0,
           }}
         />
-
-        {/* Page indicator dots */}
-        {pages.length > 1 && (
-          <div
-            style={{
-              position: "absolute",
-              right: 12,
-              top: "50%",
-              transform: "translateY(-50%)",
-              display: "flex",
-              flexDirection: "column",
-              gap: 8,
-              zIndex: 5,
-            }}
-          >
-            {pages.map((_, i) => (
-              <button
-                key={i}
-                aria-label={`Go to page ${i + 1}`}
-                onClick={() => goTo(i)}
-                style={{
-                  width: 8,
-                  height: 8,
-                  padding: 0,
-                  border: "none",
-                  borderRadius: "50%",
-                  cursor: "pointer",
-                  background:
-                    i === current ? "rgba(60,60,60,0.9)" : "rgba(60,60,60,0.25)",
-                  transform: i === current ? "scale(1.35)" : "scale(1)",
-                  transition: "transform 0.25s ease, background 0.25s ease",
-                }}
-              />
-            ))}
-          </div>
-        )}
       </div>
 
       {borderUrl && (

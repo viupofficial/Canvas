@@ -4,7 +4,7 @@
 
 import { Upload, LogIn, Link2, FileText, Check, Loader2 } from 'lucide-react';
 import { RefObject, useState, useRef, useEffect } from "react";
-import { useRouter } from "next/navigation"; // ✅ ADD THIS
+import { useRouter, usePathname } from "next/navigation"; // ✅ ADD THIS
 import { EditorHandle } from "@/src/components/CanvasEditor";
 import {
   getCanvasUser,
@@ -52,6 +52,13 @@ export default function EditorHeader(props: {
   onEventNameChange?: (name: string) => void;
 }) {
   const router = useRouter();
+  const pathname = usePathname();
+
+  // ── HOME LINK GATE ───────────────────────────────────────────────────────
+  // Rule: only the /designer route may navigate back to the main page (the
+  // new-project / filing system at "/"). From any other directory (e.g.
+  // /editor, /teaser, the demo routes) the logo is decorative only.
+  const canGoHome = !!pathname && pathname.startsWith("/designer");
 
   // ── PROFILE DROPDOWN ─────────────────────────────────────────────────────
   // Reads the session that the /[userId] login-landing route stored in
@@ -75,6 +82,12 @@ export default function EditorHeader(props: {
   const shareRef = useRef<HTMLDivElement>(null);
   const [shareStatus, setShareStatus] = useState<"idle" | "link" | "copied" | "pdf">("idle");
 
+  // ── PREVIEW DROPDOWN ─────────────────────────────────────────────────────
+  // The preview button opens a menu: "Live" publishes/uploads then opens the
+  // hosted /e/{slug} page; "Local" previews in-place without uploading.
+  const [previewOpen, setPreviewOpen] = useState(false);
+  const previewRef = useRef<HTMLDivElement>(null);
+
   // Close dropdowns when clicking outside
   useEffect(() => {
     function handleOutsideClick(e: MouseEvent) {
@@ -83,6 +96,9 @@ export default function EditorHeader(props: {
       }
       if (shareRef.current && !shareRef.current.contains(e.target as Node)) {
         setShareOpen(false);
+      }
+      if (previewRef.current && !previewRef.current.contains(e.target as Node)) {
+        setPreviewOpen(false);
       }
     }
     document.addEventListener("mousedown", handleOutsideClick);
@@ -132,11 +148,21 @@ export default function EditorHeader(props: {
   };
 
   /**
-   * Handle the click event for the preview button
+   * "Live" preview: publish/upload the pages and open the hosted page.
    */
-  const handlePreviewClick = () => {
+  const handlePreviewLive = () => {
+    setPreviewOpen(false);
     if (onPreview) return onPreview();
-    console.log('Preview action triggered');
+    console.log('Preview (live) action triggered');
+  };
+
+  /**
+   * "Local" preview: render the invitation in-place without uploading.
+   */
+  const handlePreviewLocal = () => {
+    setPreviewOpen(false);
+    if (props.onPreviewLocal) return props.onPreviewLocal();
+    console.log('Preview (local) action triggered');
   };
 
   // Upgrade button disabled — kept for reference
@@ -229,8 +255,9 @@ export default function EditorHeader(props: {
   return (
     <header className="grid grid-cols-[1fr_auto_1fr] h-[111px] w-full items-center gap-4 bg-[#EDE2DE]">
       <div className="flex items-center justify-start pl-[106px]">
-        {teaser ? (
-          // Teaser mode: logo is decorative only — no link to the homepage filing system.
+        {teaser || !canGoHome ? (
+          // Teaser mode, or any route other than /designer: the logo is
+          // decorative only — no link back to the homepage filing system.
           <div className="flex items-center justify-center gap-4 my-9 mr-[20px]">
             <img src="/Vi-Up Submark.png" alt="Vi-Up" className="h-[40px] w-[40px]" />
           </div>
@@ -270,17 +297,62 @@ export default function EditorHeader(props: {
       </div>
 
       <div className="flex items-center justify-end gap-4 mr-[130px]">
-        <button onClick={handlePreviewClick} className=" rounded-full text-white p-2">
-          <img src="/preview.svg" alt="Preview" className="h-[45px] w-[45px]" />
-        </button>
+        <div className="relative" ref={previewRef}>
+          <button
+            onClick={() => setPreviewOpen((o) => !o)}
+            aria-haspopup="true"
+            aria-expanded={previewOpen}
+            title="Preview"
+            className=" rounded-full text-white p-2"
+          >
+            <img src="/preview.svg" alt="Preview" className="h-[45px] w-[45px]" />
+          </button>
 
-        {/* <button
-          onClick={() => props.onPreviewLocal?.()}
-          title="Preview locally (no upload)"
-          className="px-3 py-1 rounded-full border border-[#7D5B59] text-[#7D5B59] text-xs font-bold hover:bg-[#7D5B59] hover:text-white transition"
-        >
-          Local
-        </button> */}
+          {/* Preview dropdown: Live vs Local */}
+          <nav
+            role="menu"
+            className={[
+              "absolute right-0 top-[calc(100%+8px)] min-w-[271px] bg-white rounded-[25px]",
+              "shadow-[0_10px_30px_rgba(0,0,0,0.12)] p-[10px] z-[1000]",
+              "transition-all duration-150 ease-in-out",
+              previewOpen
+                ? "opacity-100 translate-y-0 pointer-events-auto"
+                : "opacity-0 -translate-y-1.5 pointer-events-none",
+            ].join(" ")}
+          >
+            {/* Live preview */}
+            <button
+              type="button"
+              role="menuitem"
+              onClick={handlePreviewLive}
+              className="w-full flex items-center gap-[10px] px-3 py-[10px] text-[#7D5B59] font-semibold font-[Montserrat] rounded-[10px] hover:bg-[#f7f2f1] text-left"
+            >
+              <Link2 className="w-[22px] flex-shrink-0" />
+              <span className="flex flex-col items-start min-w-0">
+                <span>Live Preview</span>
+                <span className="text-[12px] font-normal text-[#7D5B59]/60">
+                  Publish and open the hosted page
+                </span>
+              </span>
+            </button>
+
+            {/* Local preview */}
+            <button
+              type="button"
+              role="menuitem"
+              onClick={handlePreviewLocal}
+              className="w-full flex items-center gap-[10px] px-3 py-[10px] text-[#7D5B59] font-semibold font-[Montserrat] rounded-[10px] hover:bg-[#f7f2f1] text-left"
+            >
+              <FileText className="w-[22px] flex-shrink-0" />
+              <span className="flex flex-col items-start min-w-0">
+                <span>Local Preview</span>
+                <span className="text-[12px] font-normal text-[#7D5B59]/60">
+                  Preview in-place without uploading
+                </span>
+              </span>
+            </button>
+          </nav>
+        </div>
 
         {/* Unlock Package button — disabled for now
         <button onClick={handleUpgradeClick} className="border-3 rounded-[100px] px-[22px] py-[12px] flex items-center gap-2 h-[45px] text-[18px] font-bold">

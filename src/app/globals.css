@@ -1553,8 +1553,86 @@ star-fly-in {
 
 }
 
+/* ──────────────────────────────────────────────────────────────────────────
+   Local preview canvas containment
+   /preview-local renders inside a fixed 396px "canvas" column that is centred
+   in the viewport (see preview-local/page.tsx). On desktop the viewport is far
+   wider than the canvas, so the footer (wide desktop padding) and the
+   position:fixed overlays would otherwise spill across the whole screen.
+   These rules keep the footer bar and every popup card pinned to the canvas.
+   ────────────────────────────────────────────────────────────────────────── */
+.preview-local {
+  overflow-x: clip;
+}
+
+/* Footer bar — undo the wide desktop padding and hold it to the canvas width. */
+.preview-local .footer-container {
+  width: 100%;
+  max-width: 396px;
+  margin: 0 auto;
+  padding: 8px 20px;
+  box-sizing: border-box;
+}
+
+/* Contact / Money Gift / Info / RSVP cards (sticky) — confine to the canvas. */
+.preview-local .contact-card,
+.preview-local .moneygift-card,
+.preview-local .info-popup {
+  width: 100%;
+  max-width: 396px;
+  margin: 0 auto;
+  box-sizing: border-box;
+}
+
+/* Guestbook overlay is position:fixed (viewport-wide by default) — re-anchor it
+   to the centred canvas column instead of the full screen. */
 .preview-local .guestbook-overlay {
   top: -8vh;
+  left: 50%;
+  width: 100%;
+  max-width: 396px;
+  transform: translateX(-50%);
+  box-sizing: border-box;
+}
+
+/* ──────────────────────────────────────────────────────────────────────────
+   Preview UI fade in / out
+   Animates ONLY the preview controls — the footer nav bar and its popup panels
+   (Contact, Money Gift, Info, Guestbook, RSVP). The canvas/design is never
+   touched. Opacity-only on panels so it can't disturb a panel's own positioning
+   transform; the footer gets a subtle 4px lift on entry. No layout reflow.
+   ────────────────────────────────────────────────────────────────────────── */
+@keyframes previewUiFadeIn  { from { opacity: 0; } to { opacity: 1; } }
+@keyframes previewUiFadeOut { from { opacity: 1; } to { opacity: 0; } }
+
+/* Popup panels: fade in on open. */
+.preview-fade {
+  animation: previewUiFadeIn 280ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+/* Popup panels: fade out just before unmount (see closeCard in EventFooter). */
+.preview-fade.is-closing {
+  animation: previewUiFadeOut 240ms ease-out both;
+  pointer-events: none;
+}
+
+@keyframes previewFooterIn {
+  from { opacity: 0; transform: translateY(4px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* Footer nav bar: fades + lifts in when the preview mounts. */
+.preview-footer-enter {
+  animation: previewFooterIn 320ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+/* Respect reduced-motion: keep the controls, drop the movement. */
+@media (prefers-reduced-motion: reduce) {
+  .preview-fade,
+  .preview-fade.is-closing,
+  .preview-footer-enter {
+    animation-duration: 1ms;
+  }
 }
 
 .guestbook-overlay.show {

@@ -95,7 +95,7 @@ export default function HomePage() {
       });
       const data = await res.json();
       if (data.design_id) {
-        router.push(`/editor/${data.design_id}`);
+        router.push(`/designer/${data.design_id}`);
       } else {
         console.error("[home] create_design failed", data);
       }
@@ -106,7 +106,7 @@ export default function HomePage() {
 
   const handleOpen = (id: number) => {
     if (renamingId) return;
-    router.push(`/editor/${id}`);
+    router.push(`/designer/${id}`);
   };
 
   const handleDuplicate = async (id: number) => {

@@ -49,6 +49,10 @@ export default function EventFooter({
   const [activeCard, setActiveCard] = useState<string | null>(null);
   const [rsvpStatus, setRsvpStatus] = useState<null | "accept" | "decline">(null);
   const [copied, setCopied] = useState(false);
+  // While a panel is fading out it stays mounted with the `is-closing` class so
+  // the fade-out can play, then unmounts. Keep this in sync with the CSS
+  // `previewUiFadeOut` duration in globals.css (240ms).
+  const [closing, setClosing] = useState(false);
 
   const handleCopyAccount = async () => {
     const accountNumber = String(moneyGift?.account || "154080219940");
@@ -68,12 +72,23 @@ export default function EventFooter({
     }
   };
 
-  // Reset RSVP sub-state whenever the card is closed
-  const toggleCard = (card: string) => {
-    if (activeCard === card) {
+  // Fade the active panel out, then unmount it (and reset RSVP sub-state).
+  const closeCard = () => {
+    if (!activeCard) return;
+    setClosing(true);
+    setTimeout(() => {
       setActiveCard(null);
       setRsvpStatus(null);
+      setClosing(false);
+    }, 240);
+  };
+
+  const toggleCard = (card: string) => {
+    if (activeCard === card) {
+      closeCard();
     } else {
+      // Switch straight to the new panel; it fades in via `.preview-fade`.
+      setClosing(false);
       setActiveCard(card);
     }
   };
@@ -148,13 +163,17 @@ const formatEmbedDate = (dateStr: string) => {
 };
     console.log("FOOTER contacts:", contacts);
     const [infoTab, setInfoTab] = useState(null)
+    // Fade class shared by every popup panel: fades in on open, fades out (via
+    // `is-closing`) just before unmount. Opacity-only, so it never disturbs a
+    // panel's own positioning transform.
+    const fadeCls = closing ? "preview-fade is-closing" : "preview-fade";
     return (
 
         <>
             {/* CONTACT CARD */}
             {activeCard === "contact" && (
 
-                <div className="contact-card contact-popup">
+                <div className={`contact-card contact-popup ${fadeCls}`}>
                     <h3 className="center">Contact</h3>
 
                     {contacts.length > 0 ? (
@@ -199,7 +218,7 @@ const formatEmbedDate = (dateStr: string) => {
             {/* MONEY GIFT */}
             {activeCard === "gift" && (
 
-                <div className="moneygift-card">
+                <div className={`moneygift-card ${fadeCls}`}>
                     <h3>Money Gift</h3>
 
                   <div className="bank-info">
@@ -240,7 +259,7 @@ const formatEmbedDate = (dateStr: string) => {
             {/* RSVP CARD */}
             {activeCard === "rsvp" && (
 
-                <div className="contact-card rsvp-popup">
+                <div className={`contact-card rsvp-popup ${fadeCls}`}>
 
                     <h2
                         style={{
@@ -293,8 +312,7 @@ const formatEmbedDate = (dateStr: string) => {
                             onSubmit={(e) => {
                                 e.preventDefault();
                                 alert(rsvpStatus === "accept" ? "RSVP submitted! See you there 🎉" : "Thank you for letting us know.");
-                                setRsvpStatus(null);
-                                setActiveCard(null);
+                                closeCard();
                             }}
                         >
                             <input type="hidden" name="status" value={rsvpStatus === "accept" ? "Attending" : "Not Attending"} />
@@ -346,7 +364,7 @@ const formatEmbedDate = (dateStr: string) => {
             {/* GUESTBOOK POPUP */}
             {activeCard === "guestbook" && (
 
-                <div className="guestbook-overlay">
+                <div className={`guestbook-overlay ${fadeCls}`}>
 
                     <div className="guestbook-modal">
 
@@ -393,7 +411,7 @@ const formatEmbedDate = (dateStr: string) => {
                             <button
                                 type="button"
                                 style={{ fontFamily: "Montserrat" }}
-                                onClick={() => setActiveCard(null)}
+                                onClick={closeCard}
                             >
                                 Close
                             </button>
@@ -408,7 +426,7 @@ const formatEmbedDate = (dateStr: string) => {
             {/* INFO CARD */}
             {activeCard === "info" && (
 
-                <div className="info-popup">
+                <div className={`info-popup ${fadeCls}`}>
 
                     <div id="info-buttons">
 
@@ -610,7 +628,7 @@ const formatEmbedDate = (dateStr: string) => {
             )}
 
             {/* FOOTER */}
-            <div className="footer-container" style={{ background: footerBg }}>
+            <div className="footer-container preview-footer-enter" style={{ background: footerBg }}>
                 <div className="footer-rsvp-wrapper">
                     <div className="footer-rsvp" style={{ backgroundColor: rsvpCircleBg }} onClick={() => toggleCard("rsvp")}>RSVP</div>
                 </div>
