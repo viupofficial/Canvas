@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import RsvpPlayer from "@/src/components/RsvpPlayer";
 import EventFooter from "@/src/components/EventFooter";
 import { extractEnvelope } from "@/src/lib/extract-envelope";
+import { loadLocalPreview } from "@/src/lib/localPreview";
 import "../../globals.css";
 
 export default function PreviewLocalPage() {
@@ -11,13 +12,28 @@ export default function PreviewLocalPage() {
   const [missing, setMissing] = useState(false);
 
   useEffect(() => {
+    let cancelled = false;
+
+    // The editor opens this tab before its async IndexedDB write completes, so
+    // poll briefly until the payload lands instead of giving up immediately.
+    const fetchPayload = async () => {
+      for (let attempt = 0; attempt < 20; attempt++) {
+        const payload = await loadLocalPreview<any>();
+        if (cancelled) return null;
+        if (payload) return payload;
+        await new Promise((r) => setTimeout(r, 150));
+      }
+      return null;
+    };
+
+    (async () => {
     try {
-      const raw = sessionStorage.getItem("viup_local_preview");
-      if (!raw) {
+      const payload = await fetchPayload();
+      if (cancelled) return;
+      if (!payload) {
         setMissing(true);
         return;
       }
-      const payload = JSON.parse(raw);
       const env = extractEnvelope(payload.pages ?? []);
       const borderList = Array.isArray(payload.borders) ? payload.borders : [];
       const borderUrl = borderList.length > 0 ? borderList[0].url : null;
@@ -56,8 +72,13 @@ export default function PreviewLocalPage() {
       });
     } catch (e) {
       console.error("[preview-local] failed to parse", e);
-      setMissing(true);
+      if (!cancelled) setMissing(true);
     }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   if (missing) {
@@ -81,6 +102,7 @@ export default function PreviewLocalPage() {
         musicUrl={data.musicUrl}
         borderUrl={data.borderUrl}
         eventDate={data.calendar?.date ?? null}
+        fillMode="cover"
       />
       <EventFooter
         contacts={data.contacts}

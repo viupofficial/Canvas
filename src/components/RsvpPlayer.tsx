@@ -72,6 +72,12 @@ export type RsvpPlayerProps = {
   eventDate?: string | null;
   // Wishes shown by the on-page "Guestbook" element. Falls back to a sample set.
   guestMessages?: { message: string; sender: string }[];
+  // How the fixed 396×704 stage fits the viewport:
+  //  - "fit"   (default): contain — never cropped, never enlarged past 1×. Used
+  //            by the live invite so the design is always fully visible.
+  //  - "cover": fill the whole frame edge-to-edge (scaled up, edges cropped).
+  //            Used by the in-app preview so it looks full-bleed on a phone.
+  fillMode?: "fit" | "cover";
 };
 
 const DEFAULT_GUEST_MESSAGES = [
@@ -80,7 +86,7 @@ const DEFAULT_GUEST_MESSAGES = [
   { message: "Love you guys!! 🎉", sender: "Aiman" },
 ];
 
-export default function RsvpPlayer({ pages, envelope, musicUrl, borderUrl, eventDate, guestMessages }: RsvpPlayerProps) {
+export default function RsvpPlayer({ pages, envelope, musicUrl, borderUrl, eventDate, guestMessages, fillMode = "fit" }: RsvpPlayerProps) {
   const rootRef = useRef<HTMLDivElement>(null);
 
   const [gone, setGone] = useState(!envelope);
@@ -92,10 +98,24 @@ export default function RsvpPlayer({ pages, envelope, musicUrl, borderUrl, event
   // Page-by-page ("play mode") navigation state.
   const [current, setCurrent] = useState(0);
   const [scale, setScale] = useState(1);
+  // Uniform scale for the full-screen envelope cover. The cover card lives in a
+  // fixed 396×704 coordinate space; we shrink the *whole* card to fit the screen
+  // so every element keeps its exact relative position (no per-element drift).
+  const [coverScale, setCoverScale] = useState(1);
   const pagerRef = useRef<HTMLDivElement>(null);
   const wrappersRef = useRef<HTMLDivElement[]>([]);
   const currentRef = useRef(0);
   const goneRef = useRef(!envelope);
+
+  // Per-page background transition: we keep each page's background on its own
+  // canvas, but when navigating we animate the incoming page's background
+  // transform from the page we left to its own resting values — so a background
+  // that differs in scale/position appears to smoothly zoom/pan between pages.
+  const pageCanvasesRef = useRef<any[]>([]);
+  // Resting background transform of each page, captured after it loads.
+  const bgHomeRef = useRef<Array<{ scaleX: number; scaleY: number; left: number; top: number; opacity: number; src: string | null } | null>>([]);
+  const bgAnimRef = useRef<number | null>(null);
+  const prevCurrentRef = useRef(0);
 
   // Keep refs in sync so the imperative (non-React) event handlers below read
   // the latest values without re-binding on every change.
@@ -138,25 +158,97 @@ export default function RsvpPlayer({ pages, envelope, musicUrl, borderUrl, event
     const FOOTER_RESERVE = 96;
     const PAD = 16;
     const calc = () => {
+      if (fillMode === "cover") {
+        // Fill the whole frame edge-to-edge (uniform scale, edges cropped by the
+        // pager's overflow:hidden). The "cover" of the design over the viewport.
+        const s = Math.max(window.innerWidth / STAGE_W, window.innerHeight / STAGE_H);
+        setScale(s);
+        setCoverScale(s);
+        return;
+      }
       const availH = window.innerHeight - FOOTER_RESERVE - PAD;
       const availW = Math.min(window.innerWidth, 440) - PAD;
       setScale(Math.min(availW / STAGE_W, availH / STAGE_H, 1));
+      // The envelope cover is full-bleed (no footer/pad to reserve): fit the whole
+      // card into the raw viewport, never enlarging past its native size.
+      setCoverScale(Math.min(window.innerWidth / STAGE_W, window.innerHeight / STAGE_H, 1));
     };
     calc();
     window.addEventListener("resize", calc);
     return () => window.removeEventListener("resize", calc);
-  }, []);
+  }, [fillMode]);
 
-  // Page change is a pure opacity crossfade: the active page fades to opacity 1,
-  // the rest fade out. The canvas itself never scales, moves, or resizes — the
-  // design stays visually stable; only the stacked pages' opacity changes.
+  // Page change is an instant opacity switch: the active page goes to opacity 1,
+  // the rest to 0. The canvas itself never scales, moves, or resizes — the design
+  // stays visually stable, and a hard cut avoids the foreground appearing to morph.
+  // The background, however, animates: the incoming page's background starts at
+  // the background transform of the page we just left and eases to its own, so a
+  // 100%→120% scale (or a position change) plays out as a smooth zoom/pan.
   useEffect(() => {
+    const prev = prevCurrentRef.current;
+    prevCurrentRef.current = current;
+
     wrappersRef.current.forEach((w, i) => {
       if (!w) return;
       const active = i === current;
       w.style.opacity = active ? "1" : "0";
       w.style.zIndex = active ? "2" : "1";
     });
+
+    if (bgAnimRef.current != null) {
+      cancelAnimationFrame(bgAnimRef.current);
+      bgAnimRef.current = null;
+    }
+    if (prev === current) return;
+
+    const rc = pageCanvasesRef.current[current];
+    const img = rc?.backgroundImage;
+    const home = bgHomeRef.current[current];
+    const from = bgHomeRef.current[prev];
+    // Only tween when both pages carry the same background image — otherwise the
+    // two transforms describe different pictures and morphing between them is
+    // meaningless, so the page just shows its own resting background.
+    if (!img || !home || !from || !from.src || from.src !== home.src) {
+      if (img && home) {
+        img.set({ scaleX: home.scaleX, scaleY: home.scaleY, left: home.left, top: home.top, opacity: home.opacity });
+        img.setCoords?.();
+        rc?.requestRenderAll();
+      }
+      return;
+    }
+
+    const DURATION = 600;
+    const easeOut = (p: number) => 1 - Math.pow(1 - p, 3);
+    const lerp = (a: number, b: number, t: number) => a + (b - a) * t;
+    // Snap to the starting (previous-page) transform synchronously so the freshly
+    // shown page doesn't flash its own resting background for one frame.
+    img.set({ scaleX: from.scaleX, scaleY: from.scaleY, left: from.left, top: from.top, opacity: from.opacity });
+    img.setCoords?.();
+    rc.requestRenderAll();
+    const start = performance.now();
+    const step = (now: number) => {
+      const p = Math.min(1, (now - start) / DURATION);
+      const e = easeOut(p);
+      img.set({
+        scaleX: lerp(from.scaleX, home.scaleX, e),
+        scaleY: lerp(from.scaleY, home.scaleY, e),
+        left: lerp(from.left, home.left, e),
+        top: lerp(from.top, home.top, e),
+        opacity: lerp(from.opacity, home.opacity, e),
+      });
+      img.setCoords?.();
+      rc.requestRenderAll();
+      if (p < 1) bgAnimRef.current = requestAnimationFrame(step);
+      else bgAnimRef.current = null;
+    };
+    bgAnimRef.current = requestAnimationFrame(step);
+
+    return () => {
+      if (bgAnimRef.current != null) {
+        cancelAnimationFrame(bgAnimRef.current);
+        bgAnimRef.current = null;
+      }
+    };
   }, [current, pages]);
 
   // Swipe / scroll / keyboard navigation between pages.
@@ -392,6 +484,9 @@ export default function RsvpPlayer({ pages, envelope, musicUrl, borderUrl, event
 
     root.innerHTML = "";
     wrappersRef.current = [];
+    pageCanvasesRef.current = [];
+    bgHomeRef.current = [];
+    prevCurrentRef.current = 0;
     setCurrent(0);
     currentRef.current = 0;
 
@@ -401,12 +496,13 @@ export default function RsvpPlayer({ pages, envelope, musicUrl, borderUrl, event
       pages.forEach((pageData: any, index: number) => {
         const wrapper = document.createElement("div");
         // Every page is stacked in the same spot and stays there — the canvas
-        // never moves or scales. Only the active page is visible; page changes
-        // crossfade opacity so the design stays visually stable.
+        // never moves or scales. The foreground switches instantly (no opacity
+        // crossfade, so text/elements never appear to morph between pages); the
+        // background is animated separately in the page-change effect, easing
+        // from the previous page's transform to this page's own.
         wrapper.style.cssText =
           `position:absolute;top:0;left:0;width:${w}px;height:${h}px;line-height:0;` +
-          `pointer-events:none;user-select:none;will-change:opacity;` +
-          `transition:opacity 0.4s ease;` +
+          `pointer-events:none;user-select:none;` +
           `opacity:${index === 0 ? 1 : 0};` +
           `z-index:${index === 0 ? 2 : 1};`;
         wrapper.id = "page-" + index;
@@ -426,10 +522,30 @@ export default function RsvpPlayer({ pages, envelope, musicUrl, borderUrl, event
         rc.setDimensions({ width: w, height: h });
         rc.backgroundColor = "#ffffff";
         createdCanvases.push(rc);
+        pageCanvasesRef.current[index] = rc;
 
         if (pageData) {
-          rc.loadFromJSON(pageData, () => {
+          // fabric v7: loadFromJSON(json, reviver) returns a Promise and the 2nd
+          // arg is a per-object reviver, NOT a completion callback. We need to run
+          // this once *after* the page (including its background image) has fully
+          // loaded, so use the promise — otherwise rc.backgroundImage is still
+          // unset and the background transition below never arms.
+          rc.loadFromJSON(pageData).then(() => {
+            if (cancelled) return;
             rc.discardActiveObject();
+            // Capture this page's resting background transform so navigation can
+            // animate the incoming background from the page we left to here.
+            const bi = rc.backgroundImage as any;
+            bgHomeRef.current[index] = bi
+              ? {
+                  scaleX: bi.scaleX ?? 1,
+                  scaleY: bi.scaleY ?? 1,
+                  left: bi.left ?? w / 2,
+                  top: bi.top ?? h / 2,
+                  opacity: bi.opacity ?? 1,
+                  src: bi.getSrc?.() ?? bi._element?.src ?? null,
+                }
+              : null;
             const toRemove: any[] = [];
             rc.forEachObject((obj: any) => {
               if (obj?.isBorder) {
@@ -489,13 +605,15 @@ export default function RsvpPlayer({ pages, envelope, musicUrl, borderUrl, event
             }
             .env-cover.env-fading { opacity: 0; pointer-events: none; }
             .env-part { transition: transform 1s ease, opacity 1s ease; }
-            .env-move-up   { transform: translateY(-110vh) !important; opacity: 0 !important; }
-            .env-move-down { transform: translateY(110vh)  !important; opacity: 0 !important; }
+            /* Exit translate is card-relative (the card is 704px tall), not vh, so
+               the open animation behaves identically at any cover scale. */
+            .env-move-up   { transform: translateY(-820px) !important; opacity: 0 !important; }
+            .env-move-down { transform: translateY(820px)  !important; opacity: 0 !important; }
 
             .env-head {
               position: absolute !important;
               left: 0 !important;
-              top: 0 !important;
+              top: -80px !important;
               width: 100% !important;
               height: auto !important;
               transform-origin: left top;
@@ -506,9 +624,9 @@ export default function RsvpPlayer({ pages, envelope, musicUrl, borderUrl, event
             .env-seal {
               position: absolute !important;
               left: 140px !important;
-              top: 280px !important;
-              width: 100px !important;
-              height: 100px !important;
+              top: 205px !important;
+              width: 120px !important;
+              height: 120px !important;
               transform-origin: left top;
               z-index: 4;
               cursor: pointer;
@@ -531,11 +649,6 @@ export default function RsvpPlayer({ pages, envelope, musicUrl, borderUrl, event
               width: 52.7832px !important;
               height: 93.79px !important;
             }
-            @media (max-width: 375px) {
-              .env-press {
-                top: 380px !important;
-              }
-            }
           `}</style>
 
           <div className={`env-cover${animating ? " env-fading" : ""}`}>
@@ -544,7 +657,12 @@ export default function RsvpPlayer({ pages, envelope, musicUrl, borderUrl, event
                 position: "relative",
                 width: STAGE_W,
                 height: STAGE_H,
-                maxWidth: "100%",
+                // Scale the entire card as one unit so every absolutely-positioned
+                // element keeps its exact relative position — no element-by-element
+                // drift when the preview is smaller than the native 396×704 stage.
+                transform: `scale(${coverScale})`,
+                transformOrigin: "center",
+                flexShrink: 0,
               }}
             >
               <span
@@ -650,7 +768,8 @@ export default function RsvpPlayer({ pages, envelope, musicUrl, borderUrl, event
           display: "flex",
           alignItems: "center",
           justifyContent: "center",
-          paddingBottom: 96,
+          // "fit" reserves room for the sticky footer nav; "cover" fills edge-to-edge.
+          paddingBottom: fillMode === "cover" ? 0 : 96,
           overflow: "hidden",
           touchAction: "none",
         }}

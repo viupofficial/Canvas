@@ -22,6 +22,7 @@ import { useEventDataOptional } from "@/src/store/EventDataContext";
 import { useFabricEventSync } from "@/src/hooks/useFabricEventSync";
 import { FONT_GROUPS, loadGoogleFont, collectFontFamilies, preloadFonts } from "@/src/lib/fonts";
 import { downscaleImageFile } from "@/src/lib/imageDownscale";
+import { saveLocalPreview } from "@/src/lib/localPreview";
 
 // Which pages a background change touches: just the active page (default) or
 // the whole invitation (PowerPoint's "Apply to All").
@@ -614,13 +615,14 @@ const [currentPage, setCurrentPage] = useState(0);
         rsvpConfig: props.rsvpConfig ?? null,
         borders: globalBordersRef.current,
       };
-      try {
-        sessionStorage.setItem("viup_local_preview", JSON.stringify(payload));
-        window.open("/preview-local", "_blank");
-      } catch (e) {
+      // Open the tab synchronously so the browser keeps it tied to the user's
+      // click (avoids popup blocking); the preview page waits for IndexedDB.
+      const win = window.open("/preview-local", "_blank");
+      saveLocalPreview(payload).catch((e) => {
         console.error("[previewLocal] failed", e);
+        win?.close();
         alert("Local preview failed: " + (e as Error).message);
-      }
+      });
     },
     zoomIn,
     zoomOut,
