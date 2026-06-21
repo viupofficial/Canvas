@@ -48,6 +48,19 @@ export default function EditorHeader(props: {
    * - The Share button becomes a Login button.
    */
   teaser?: boolean;
+  /**
+   * Experience mode for the new split editor/designer flows.
+   * - "editor": locked to one event — no dashboard/back navigation.
+   * - "designer" / "designer-event": full designer navigation allowed.
+   * Legacy callers omit this and rely on the path-based home gate below.
+   */
+  mode?: "editor" | "designer" | "designer-event";
+  /**
+   * Explicit destination for the logo. When provided it overrides the
+   * path-based gate: a value makes the logo a link, `null`/`undefined` (with a
+   * mode set) makes it decorative.
+   */
+  homeHref?: string | null;
   eventName?: string;
   onEventNameChange?: (name: string) => void;
 }) {
@@ -55,10 +68,14 @@ export default function EditorHeader(props: {
   const pathname = usePathname();
 
   // ── HOME LINK GATE ───────────────────────────────────────────────────────
-  // Rule: only the /designer route may navigate back to the main page (the
-  // new-project / filing system at "/"). From any other directory (e.g.
-  // /editor, /teaser, the demo routes) the logo is decorative only.
-  const canGoHome = !!pathname && pathname.startsWith("/designer");
+  // New split flows pass an explicit `mode` + `homeHref`. Editor mode is locked
+  // to its event, so the logo never navigates back into the app. Otherwise fall
+  // back to the legacy rule: only /designer may return to the filing system.
+  const { mode, homeHref } = props;
+  const canGoHome = mode
+    ? mode !== "editor" && !!homeHref
+    : !!pathname && pathname.startsWith("/designer");
+  const resolvedHomeHref = mode ? homeHref ?? "/" : "/";
 
   // ── PROFILE DROPDOWN ─────────────────────────────────────────────────────
   // Reads the session that the /[userId] login-landing route stored in
@@ -262,7 +279,7 @@ export default function EditorHeader(props: {
             <img src="/Vi-Up Submark.png" alt="Vi-Up" className="h-[40px] w-[40px]" />
           </div>
         ) : (
-          <a href="/" className="flex items-center justify-center gap-4 my-9 mr-[20px] ">
+          <a href={resolvedHomeHref} className="flex items-center justify-center gap-4 my-9 mr-[20px] ">
             <img src="/Vi-Up Submark.png" alt="Vi-Up" className="h-[40px] w-[40px]" />
           </a>
         )}

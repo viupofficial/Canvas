@@ -8,11 +8,20 @@ import EditorHeader from "@/src/components/canvas-editor/editor-header";
 import ImageEditorModal from "@/src/components/canvas-editor/ImageEditorModal";
 import "@/src/app/globals.css";
 import { useRouter } from "next/navigation";
-import { EventDataProvider, useEventData } from "@/src/store/EventDataContext";
+import { EventDataProvider, useEventData, type EventData } from "@/src/store/EventDataContext";
 import { ensureProject, saveProject } from "@/src/lib/projectStorage";
 import { getCanvasUser } from "@/src/lib/userSession";
+import { updateDesign, getCanvasName, num, type ViupEvent, type ViupDesign } from "@/src/lib/viupApi";
+import type { CanvasUser } from "@/src/lib/userSession";
 
 const API_BASE = "https://vi-up.com/api";
+
+// Editor experiences:
+//  - "editor"         → staff/client editing one purchased event. Locked to the
+//                       event: no dashboard/back/create. Logo → vi-up.com/MyEvent.
+//  - "designer"       → legacy free editor (localStorage / project-id flows).
+//  - "designer-event" → designer editing a specific event, but keeps dashboard nav.
+export type EditorMode = "editor" | "designer" | "designer-event";
 
 // Where an Apply from the image editor should write the edited result back to.
 type ApplyTarget =
@@ -21,70 +30,141 @@ type ApplyTarget =
 
 type SaveStatus = "idle" | "saving" | "saved";
 
-export default function ProjectEditor({
-  projectId,
-  teaser,
-}: {
+export type ProjectEditorProps = {
+  // Legacy project-id flow (localStorage + best-effort DB mirror).
   projectId?: string;
   teaser?: boolean;
-}) {
+
+  // Event-based flow (editor / designer-event). When `mode` is set and an
+  // eventId is present, the canvas is bound to a single DB design record.
+  mode?: EditorMode;
+  userId?: number;
+  eventId?: number;
+  designId?: number;
+  templateId?: number | null;
+  user?: CanvasUser | null;
+  event?: ViupEvent | null;
+  design?: ViupDesign | null;
+  // Decoded json_data from the design record: { version, eventData, canvas }.
+  initialDesignJson?: any;
+};
+
+export default function ProjectEditor(props: ProjectEditorProps) {
+  const { projectId, mode, designId, initialDesignJson } = props;
+  // Event-based flows seed the event data from the DB record instead of
+  // localStorage.
+  const seededEventData: Partial<EventData> | null =
+    mode && mode !== "designer"
+      ? (initialDesignJson?.eventData ?? null)
+      : null;
+
+  // Remount the whole editor when the underlying record changes so the canvas
+  // fully re-initialises (per-project or per-design).
+  const remountKey = designId != null ? `design-${designId}` : projectId ?? "legacy";
+
   return (
-    <EventDataProvider>
-      {/* Keyed by project so switching projects fully remounts the canvas. */}
-      <ProjectEditorInner key={projectId ?? "legacy"} projectId={projectId} teaser={teaser} />
+    <EventDataProvider initialEventData={seededEventData}>
+      <ProjectEditorInner key={remountKey} {...props} />
     </EventDataProvider>
   );
 }
 
-function ProjectEditorInner({ projectId, teaser }: { projectId?: string; teaser?: boolean }) {
+function ProjectEditorInner({
+  projectId,
+  teaser,
+  mode,
+  userId,
+  eventId,
+  designId,
+  templateId,
+  event,
+  initialDesignJson,
+}: ProjectEditorProps) {
   const editorRef = useRef<EditorHandle | null>(null);
-  // const [isPremium, setIsPremium] = useState(false); // disabled — all tabs unlocked
   const [previewMode, setPreviewMode] = useState<"desktop" | "phone">("desktop");
   // Bumped whenever the active page's content is (re)loaded — the Background panel
   // watches this to re-read and display the current page's background.
   const [bgReadNonce, setBgReadNonce] = useState(0);
-  const [eventName, setEventName] = useState("Bride & Groom");
   const router = useRouter();
 
   const { eventData } = useEventData();
 
-  // ── Project load ────────────────────────────────────────────────────────────
-  // Read on the client only (localStorage) to avoid hydration mismatch; gate the
-  // canvas render until we have the saved data.
-  const [loaded, setLoaded] = useState(!projectId);
-  const [initialCanvasJson, setInitialCanvasJson] = useState<any | null>(null);
+  // Is this canvas bound to a single DB event/design?
+  const isEventMode = !!mode && mode !== "designer" && designId != null && eventId != null;
+
+  const initialEventName =
+    (isEventMode
+      ? initialDesignJson?.canvas?.eventName || getCanvasName(event)
+      : undefined) ?? "Bride & Groom";
+  const [eventName, setEventName] = useState(initialEventName);
+
+  // ── Initial canvas data ──────────────────────────────────────────────────
+  // Event mode hydrates from the DB record; legacy project-id flow reads the
+  // localStorage copy on the client (gated to avoid hydration mismatch).
+  const [loaded, setLoaded] = useState(isEventMode || !projectId);
+  const [initialCanvasJson, setInitialCanvasJson] = useState<any | null>(
+    isEventMode ? (initialDesignJson?.canvas ?? null) : null,
+  );
 
   useEffect(() => {
-    if (!projectId) return;
+    if (isEventMode || !projectId) return;
     const project = ensureProject(projectId);
     const cj = project.canvasJson ?? null;
     setInitialCanvasJson(cj);
     if (cj?.eventName) setEventName(cj.eventName);
     setLoaded(true);
-  }, [projectId]);
+  }, [projectId, isEventMode]);
 
-  // ── Project save (manual + debounced autosave) ──────────────────────────────
+  // ── Save (manual + debounced autosave) ───────────────────────────────────
   const [saveStatus, setSaveStatus] = useState<SaveStatus>("idle");
   const savedTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const autosaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const persist = useCallback(() => {
+    const data = editorRef.current?.getProjectData?.();
+    const thumbnail = editorRef.current?.getThumbnail?.() ?? "";
+
+    // ── Event-bound save → always scoped to this event/design ──────────────
+    if (isEventMode) {
+      if (!data) return;
+      setSaveStatus("saving");
+      const json_data = {
+        version: 1,
+        eventData,
+        canvas: { ...data, eventName },
+      };
+      updateDesign({
+        user_id: num(userId),
+        event_id: num(eventId),
+        design_id: num(designId),
+        name: eventName || getCanvasName(event),
+        json_data,
+        preview_url: thumbnail || null,
+        status: "draft",
+      })
+        .then(() => {
+          setSaveStatus("saved");
+          if (savedTimerRef.current) clearTimeout(savedTimerRef.current);
+          savedTimerRef.current = setTimeout(() => setSaveStatus("idle"), 1500);
+        })
+        .catch((e) => {
+          console.error("[ProjectEditor] event save failed", e);
+          setSaveStatus("idle");
+        });
+      return;
+    }
+
+    // ── Legacy ephemeral editor (no project id) ────────────────────────────
     if (!projectId) {
-      // Legacy / ephemeral editor: keep the old localStorage behaviour.
       editorRef.current?.save();
       return;
     }
-    const data = editorRef.current?.getProjectData?.();
-    if (!data) return;
-    const thumbnail = editorRef.current?.getThumbnail?.() ?? "";
-    setSaveStatus("saving");
 
-    // Local copy first: the editor still loads from localStorage on mount.
+    // ── Legacy project-id flow: localStorage + best-effort DB mirror ───────
+    if (!data) return;
+    setSaveStatus("saving");
     try {
-      saveProject(projectId, {
-        canvasJson: { ...data, eventName },
-        thumbnail,
-      });
+      saveProject(projectId, { canvasJson: { ...data, eventName }, thumbnail });
     } catch (e) {
       console.error("[ProjectEditor] local save failed", e);
     }
@@ -96,25 +176,14 @@ function ProjectEditorInner({ projectId, teaser }: { projectId?: string; teaser?
       return;
     }
 
-    const json_data = {
-      version: 1,
-      eventData,
-      canvas: { ...data, eventName },
-    };
-    console.log("Saving to DB json_data:", json_data);
-
+    const json_data = { version: 1, eventData, canvas: { ...data, eventName } };
     fetch(`${API_BASE}/update_design.php`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        design_id: Number(projectId),
-        user_id: user.id,
-        json_data,
-      }),
+      body: JSON.stringify({ design_id: Number(projectId), user_id: user.id, json_data }),
     })
       .then((res) => res.json())
-      .then((resp) => {
-        console.log("[ProjectEditor] update_design response:", resp);
+      .then(() => {
         setSaveStatus("saved");
         if (savedTimerRef.current) clearTimeout(savedTimerRef.current);
         savedTimerRef.current = setTimeout(() => setSaveStatus("idle"), 1500);
@@ -123,17 +192,19 @@ function ProjectEditorInner({ projectId, teaser }: { projectId?: string; teaser?
         console.error("[ProjectEditor] DB save failed", e);
         setSaveStatus("idle");
       });
-  }, [projectId, eventName, eventData]);
+  }, [isEventMode, projectId, eventName, eventData, userId, eventId, designId, event]);
 
   // Always call the freshest persist from the debounced timer.
   const persistRef = useRef(persist);
   persistRef.current = persist;
 
+  // Autosave applies to any record-backed canvas (event or project id).
+  const autosaveEnabled = isEventMode || !!projectId;
   const handleCanvasChange = useCallback(() => {
-    if (!projectId) return;
+    if (!autosaveEnabled) return;
     if (autosaveTimerRef.current) clearTimeout(autosaveTimerRef.current);
     autosaveTimerRef.current = setTimeout(() => persistRef.current(), 1000);
-  }, [projectId]);
+  }, [autosaveEnabled]);
 
   useEffect(() => {
     return () => {
@@ -188,14 +259,31 @@ function ProjectEditorInner({ projectId, teaser }: { projectId?: string; teaser?
     );
   }
 
-  const initialPages = projectId ? (initialCanvasJson?.pages ?? [null]) : undefined;
-  const initialMusicUrl = projectId ? (initialCanvasJson?.musicUrl ?? null) : null;
+  // Logo / "home" target depends on the experience:
+  //  - editor: locked out of the app — return to the My Event page on vi-up.com.
+  //  - designer / designer-event: back to the designer dashboard.
+  //  - legacy: let EditorHeader's own path-based rule decide.
+  const homeHref =
+    mode === "editor"
+      ? "https://vi-up.com/MyEvent"
+      : mode === "designer" || mode === "designer-event"
+      ? userId != null
+        ? `/designer?user_id=${userId}`
+        : "/"
+      : undefined;
+
+  const showRecordSaveStatus = isEventMode || !!projectId;
+
+  const initialPages = isEventMode || projectId ? (initialCanvasJson?.pages ?? [null]) : undefined;
+  const initialMusicUrl = isEventMode || projectId ? (initialCanvasJson?.musicUrl ?? null) : null;
 
   return (
     <main className="h-screen overflow-hidden bg-brand-cream">
       <div className="w-full max-w-full mx-auto h-full flex flex-col">
         <EditorHeader
           editorRef={editorRef as React.RefObject<EditorHandle>}
+          mode={mode}
+          homeHref={homeHref}
           onUndo={() => editorRef.current?.undo()}
           onRedo={() => editorRef.current?.redo()}
           onSave={persist}
@@ -203,7 +291,6 @@ function ProjectEditorInner({ projectId, teaser }: { projectId?: string; teaser?
             editorRef.current?.exportHTML(eventName).then((slug) => router.push(`/e/${slug}`));
           }}
           onPreviewLocal={() => editorRef.current?.previewLocal(eventName)}
-          // onUpgrade={() => setIsPremium(true)}
           teaser={teaser}
           onLogin={() => { window.location.href = "https://vi-up.com/login"; }}
           eventName={eventName}
@@ -238,7 +325,7 @@ function ProjectEditorInner({ projectId, teaser }: { projectId?: string; teaser?
         </div>
       </div>
 
-      {projectId && saveStatus !== "idle" && (
+      {showRecordSaveStatus && saveStatus !== "idle" && (
         <div className="fixed bottom-4 right-4 z-[90] rounded-full bg-white/90 border border-[#EDE2DE] px-4 py-1.5 text-[12px] font-semibold text-[#7D5B59] shadow">
           {saveStatus === "saving" ? "Saving…" : "Saved ✓"}
         </div>

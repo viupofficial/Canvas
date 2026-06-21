@@ -101,7 +101,7 @@ export default function UserMenu() {
 
         {/* My Account */}
         <a
-          href="/account"
+          href="https://vi-up.com/User-Account"
           role="menuitem"
           className="flex items-center gap-[10px] px-3 py-[10px] text-[#7D5B59] font-semibold font-[Montserrat] rounded-[10px] no-underline hover:bg-[#f7f2f1]"
           onClick={() => setProfileOpen(false)}
@@ -114,7 +114,7 @@ export default function UserMenu() {
 
         {/* My Events */}
         <a
-          href="/my-events"
+          href="https://vi-up.com/MyEvent"
           role="menuitem"
           className="flex items-center gap-[10px] px-3 py-[10px] text-[#7D5B59] font-semibold font-[Montserrat] rounded-[10px] no-underline hover:bg-[#f7f2f1]"
           onClick={() => setProfileOpen(false)}

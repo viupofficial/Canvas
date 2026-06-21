@@ -184,7 +184,8 @@ body {
   top: -1.2rem;
   left: 52%;
   transform: translateX(-50%);
-  transition: left 1s ease 1s, transform 1s ease 1s;
+  /* Snappy slide when moving to/from the Info slot (prototype used 600ms). */
+  transition: left 0.6s ease, transform 0.6s ease;
   width: 53px;
   height: 53px;
   z-index: 2;
@@ -214,7 +215,9 @@ body {
     border-radius: 12px;
   }
 .footer-rsvp-wrapper.move-right {
-  left: 74.5%;
+  /* Shifted left of the Info anchor (74.5%) so the moved circle centers on the
+     floating star, which sits left of the Info icon's center. */
+  left: 68%;
   transform: translateX(-50%);
 }
 
@@ -235,7 +238,8 @@ body {
 }
 
 .footer-container.bump-shift::before {
-  left: 74.5%;
+  /* Keep the white notch under the moved RSVP circle (see .move-right). */
+  left: 68%;
 }
 
 .footer-buttons {
@@ -326,19 +330,10 @@ body {
   overflow: hidden;
 }
 
+/* The circle's "RSVP" label is rendered once by .footer-rsvp-text (see
+   EventFooter); this pseudo-element previously duplicated it, so it's disabled. */
 .footer-rsvp::after {
-  content: 'RSVP';
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
-  transition: transform 0.8s ease, opacity 0.8s ease;
-  opacity: 1;
-}
-
-.footer-rsvp.animate-text::after {
-  transform: translate(-50%, 60px);
-  opacity: 0;
+  content: none;
 }
 
 star-fly-in {
@@ -377,7 +372,8 @@ star-fly-in {
   opacity: 1;
   transition: all 0.6s ease;
   font-size: 24px;
-  color: white;
+  /* Follow the "Text and Icon" color from the parent <a> (defaults to white). */
+  color: inherit;
 
   z-index: 10;
 }
@@ -1327,15 +1323,15 @@ star-fly-in {
 .floating-btn {
   background-color: #000;
   color: white;
-  width: 40px;
-  height: 40px;
+  width: 58px;
+  height: 58px;
   border-radius: 50%;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
   font-family: 'Poppins', sans-serif;
-  font-size: 0.55rem;
+  font-size: 0.6rem;
   cursor: pointer;
   box-shadow: 0 4px 10px rgba(0, 0, 0, 0.15);
   transition: transform 0.2s ease, background-color 0.3s ease;
@@ -1353,8 +1349,8 @@ star-fly-in {
 }
 
 .floating-btn i {
-  font-size: 0.9rem;
-  margin-bottom: 0.1rem;
+  font-size: 1.2rem;
+  margin-bottom: 0.15rem;
 }
 
 .floating-btn:hover {
@@ -1363,7 +1359,7 @@ star-fly-in {
 }
 
 .floating-btn span {
-  font-size: 0.5rem;
+  font-size: 0.55rem;
   margin-top: 1px;
 }
 
@@ -1375,7 +1371,7 @@ star-fly-in {
   transform: translateX(-50%);
   display: flex;
   flex-direction: row;
-  gap: 0.5rem;
+  gap: 1.4rem;
   z-index: 1000;
   pointer-events: auto;
 }
@@ -1565,21 +1561,57 @@ star-fly-in {
   overflow-x: clip;
 }
 
-/* Footer bar — undo the wide desktop padding and hold it to the canvas width. */
+/* Footer bar — span the full preview width so it reaches the borders like the
+   full-bleed (cover) canvas, instead of capping at 396px and leaving side gaps on
+   wider phones (≥400px). Its items are anchored to the borders below. */
 .preview-local .footer-container {
   width: 100%;
-  max-width: 396px;
+  max-width: none;
   margin: 0 auto;
   padding: 8px 20px;
   box-sizing: border-box;
 }
 
-/* Contact / Money Gift / Info / RSVP cards (sticky) — confine to the canvas. */
+/* The base footer pins the two icon groups toward the centre with fixed offsets
+   (left group anchored by `right`, right group by `left`), so they cluster in the
+   middle and leave gaps at the borders. In the preview we re-anchor each group to
+   its own border instead — keeping them absolutely positioned so the floating
+   star / info-open animation (which is positioned relative to .footer-side.right)
+   still works — so the items reach the edges and end up evenly spread, with the
+   centre left clear for the RSVP circle. */
+.preview-local .footer-side.left,
+.preview-local .footer-side.right {
+  gap: 1.6rem;
+}
+
+.preview-local .footer-side.left {
+  left: 0.75rem;
+  right: auto;
+}
+
+.preview-local .footer-side.right {
+  right: 0.75rem;
+  left: auto;
+}
+
+.preview-local .footer-side.right a:nth-child(1) {
+  margin-right: 0;
+}
+
+/* Contact / Money Gift cards (sticky) — confine to a centered card. */
 .preview-local .contact-card,
-.preview-local .moneygift-card,
-.preview-local .info-popup {
+.preview-local .moneygift-card {
   width: 100%;
   max-width: 396px;
+  margin: 0 auto;
+  box-sizing: border-box;
+}
+
+/* Info popup spans the full width so its Calendar/Location bubbles (positioned by
+   percentage) stay aligned with the now-full-width footer's Info slot. */
+.preview-local .info-popup {
+  width: 100%;
+  max-width: none;
   margin: 0 auto;
   box-sizing: border-box;
 }
@@ -2080,8 +2112,25 @@ img[alt="Mayaxasyraff"],
 
 .footer-label {
   font-size: 0.65rem;
-  color: white;
+  /* Inherit from the nav item's color so the RSVP "Text and Icon" picker
+     (applied as inline color on the parent <a>/<button>) tints the label. */
+  color: inherit;
   margin-top: 4px;
+}
+
+/* Footer nav icons are silhouette PNGs tinted via mask + currentColor so they
+   follow the same "Text and Icon" color as their label. */
+.footer-icon {
+  width: 23px;
+  height: 23px;
+  display: inline-block;
+  background-color: currentColor;
+  -webkit-mask-repeat: no-repeat;
+  mask-repeat: no-repeat;
+  -webkit-mask-position: center;
+  mask-position: center;
+  -webkit-mask-size: contain;
+  mask-size: contain;
 }
 
 #music-btn {

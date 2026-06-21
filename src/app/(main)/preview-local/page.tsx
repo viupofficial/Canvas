@@ -95,7 +95,7 @@ export default function PreviewLocalPage() {
   if (!data) return null;
 
   return (
-    <main className="preview-local" style={{ maxWidth: 396, margin: "0 auto", position: "relative" }}>
+    <main className="preview-local" style={{ width: "100%", position: "relative" }}>
       <RsvpPlayer
         pages={data.pages}
         envelope={data.envelope}

@@ -91,7 +91,15 @@ function loadFromStorage(): EventData {
   }
 }
 
-export function EventDataProvider({ children }: { children: React.ReactNode }) {
+export function EventDataProvider({
+  children,
+  initialEventData,
+}: {
+  children: React.ReactNode;
+  // When provided (event-based editor/designer flows), the event data comes from
+  // the design record in the DB rather than localStorage. Takes precedence.
+  initialEventData?: Partial<EventData> | null;
+}) {
   const [eventData, setEventData] = useState<EventData>(DEFAULT_EVENT_DATA);
   const [debouncedEventData, setDebouncedEventData] = useState<EventData>(DEFAULT_EVENT_DATA);
   const [lastUpdatedSection, setLastUpdatedSection] = useState<EventSection | null>(null);
@@ -101,23 +109,30 @@ export function EventDataProvider({ children }: { children: React.ReactNode }) {
   const pulseRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const hydratedRef = useRef(false);
 
-  // Hydrate from localStorage once (client-only).
+  // Hydrate once (client-only). Seed from the DB record when an event design was
+  // passed in; otherwise fall back to the legacy localStorage draft.
   useEffect(() => {
-    const initial = loadFromStorage();
+    const initial = initialEventData
+      ? { ...DEFAULT_EVENT_DATA, ...initialEventData }
+      : loadFromStorage();
     setEventData(initial);
     setDebouncedEventData(initial);
     hydratedRef.current = true;
+    // Only seed on mount — subsequent edits flow through updateEventData.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Persist immediately (the localStorage write itself is cheap).
+  // Persist immediately (the localStorage write itself is cheap). Skipped for
+  // event-based flows — that data is owned by the DB design record, not the
+  // shared localStorage draft.
   useEffect(() => {
-    if (!hydratedRef.current) return;
+    if (!hydratedRef.current || initialEventData) return;
     try {
       window.localStorage.setItem(STORAGE_KEY, JSON.stringify(eventData));
     } catch {
       /* quota/private-mode — ignore */
     }
-  }, [eventData]);
+  }, [eventData, initialEventData]);
 
   const triggerPulse = useCallback((section: EventSection) => {
     setLastUpdatedSection(section);

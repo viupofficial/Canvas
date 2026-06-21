@@ -371,7 +371,7 @@ function MusicTab({ editorRef }: { editorRef?: React.RefObject<EditorHandle | nu
               }
               setUrl("");
             }}
-            className="px-3 py-1 bg-brand-accent text-white rounded"
+            className="px-3 py-1 bg-brand-accent text-[#5a2d2d] rounded"
           >
             Add
           </button>

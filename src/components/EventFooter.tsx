@@ -103,6 +103,22 @@ export default function EventFooter({
   const labelColor = rsvpConfig?.textColor ?? "white";
   const labelOpacity = (rsvpConfig?.textOpacity ?? 100) / 100;
   const labelStyle: React.CSSProperties = { color: labelColor, opacity: labelOpacity };
+  // Silhouette PNG icons are tinted via CSS mask: the shape comes from the image's
+  // alpha and the fill is `currentColor`, which inherits labelColor from the parent.
+  const iconMaskStyle = (src: string): React.CSSProperties => ({
+    WebkitMaskImage: `url(${src})`,
+    maskImage: `url(${src})`,
+  });
+  // Calendar/Location bubbles: circle follows the Navigation Bar color, while the
+  // icon+label (which inherit the button's `color`) follow Text and Icon. Opacity
+  // is left to the inner glyph so it doesn't fade the circle.
+  const bubbleStyle: React.CSSProperties = { backgroundColor: rsvpCircleBg, color: labelColor };
+  const bubbleGlyphStyle: React.CSSProperties = { opacity: labelOpacity };
+  // When the Info panel is open we run the prototype's choreography: the RSVP
+  // circle slides over to the Info slot (move-right), the white bump follows it
+  // (bump-shift), the RSVP label drops down into the bar (drop), and the Info
+  // star scales up onto the moved circle (visible).
+  const infoActive = activeCard === "info";
   const maxPax = rsvpConfig?.maxGuest ?? 3;
     const formatDate = (dateStr: string) => {
   const date = new Date(dateStr);
@@ -432,18 +448,20 @@ const formatEmbedDate = (dateStr: string) => {
 
                         <button
                             className="floating-btn"
+                            style={bubbleStyle}
                             onClick={() => setInfoTab("calendar")}
                         >
-                            <i className="fa-regular fa-calendar-days"></i>
-                            <span>Calendar</span>
+                            <i className="fa-regular fa-calendar-days" style={bubbleGlyphStyle}></i>
+                            <span style={bubbleGlyphStyle}>Calendar</span>
                         </button>
 
                         <button
                             className="floating-btn"
+                            style={bubbleStyle}
                             onClick={() => setInfoTab("location")}
                         >
-                            <i className="fa-solid fa-location-dot"></i>
-                            <span>Location</span>
+                            <i className="fa-solid fa-location-dot" style={bubbleGlyphStyle}></i>
+                            <span style={bubbleGlyphStyle}>Location</span>
                         </button>
 
                     </div>
@@ -628,34 +646,37 @@ const formatEmbedDate = (dateStr: string) => {
             )}
 
             {/* FOOTER */}
-            <div className="footer-container preview-footer-enter" style={{ background: footerBg }}>
-                <div className="footer-rsvp-wrapper">
-                    <div className="footer-rsvp" style={{ backgroundColor: rsvpCircleBg }} onClick={() => toggleCard("rsvp")}>RSVP</div>
+            <div className={`footer-container preview-footer-enter${infoActive ? " bump-shift" : ""}`} style={{ background: footerBg }}>
+                <div className={`footer-rsvp-wrapper${infoActive ? " move-right" : ""}`}>
+                    {/* Circle is just the colored bubble; the single "RSVP" label
+                        is rendered once by .footer-rsvp-text below (which also
+                        follows the Text and Icon color picker). */}
+                    <div className="footer-rsvp" style={{ backgroundColor: rsvpCircleBg }} onClick={() => toggleCard("rsvp")} />
                 </div>
 
-                <div className="footer-rsvp-text" style={labelStyle}>RSVP</div>
+                <div className={`footer-rsvp-text${infoActive ? " drop" : ""}`} style={labelStyle}>RSVP</div>
 
                 <div className="footer-buttons">
                     <div className="footer-side left">
                         <a className="footer-guestbook" style={labelStyle} onClick={() => toggleCard("guestbook")}>
-                            <img id="guestbook-icon" src="/Guestbook.png" />
+                            <span id="guestbook-icon" className="footer-icon" style={iconMaskStyle("/Guestbook.png")} />
                             <span className="footer-label">Guestbook</span>
                         </a>
 
                         <a className="moneygift-toggle" style={labelStyle} onClick={() => toggleCard("gift")}>
-                            <img id="moneygift-icon" src="/MONEYGIFT.png" />
+                            <span id="moneygift-icon" className="footer-icon" style={iconMaskStyle("/MONEYGIFT.png")} />
                             <span className="footer-label">Gift</span>
                         </a>
                     </div>
 
                     <div className="footer-side right">
                         <a className="footer-info" style={labelStyle} onClick={() => toggleCard("info")}>
-                            <i className="fa-regular fa-star floating-star"></i>
+                            <i className={`${infoActive ? "fa-solid" : "fa-regular"} fa-star floating-star${infoActive ? " visible" : ""}`}></i>
                             <span className="footer-label" style={{ marginTop: "27px" }}>Info</span>
                         </a>
 
                         <button className="contact-toggle" style={{ background: "none", border: "none", ...labelStyle }} onClick={() => toggleCard("contact")}>
-                            <img id="contact-icon" src="/Contact.png" />
+                            <span id="contact-icon" className="footer-icon" style={iconMaskStyle("/Contact.png")} />
                             <span className="footer-label">Contact</span>
                         </button>
                     </div>
