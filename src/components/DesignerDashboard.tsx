@@ -9,6 +9,7 @@ import {
   getDesigns,
   getDesign,
   createDesign,
+  createProjectEvent,
   updateDesign,
   deleteDesign,
   extractDesigns,
@@ -43,6 +44,8 @@ export default function DesignerDashboard({ user }: { user: CanvasUser }) {
   const [menuId, setMenuId] = useState<number | null>(null);
   const [renamingId, setRenamingId] = useState<number | null>(null);
   const [renameValue, setRenameValue] = useState("");
+  const [creatingProject, setCreatingProject] = useState(false);
+  const [createError, setCreateError] = useState("");
   const userRef = useRef<CanvasUser>(user);
   userRef.current = user;
 
@@ -69,22 +72,44 @@ export default function DesignerDashboard({ user }: { user: CanvasUser }) {
     return () => window.removeEventListener("mousedown", close);
   }, [menuId]);
 
-  const handleCreate = async () => {
-    try {
-      const data = await createDesign({
-        user_id: num(userRef.current.id),
-        name: "Untitled Design",
-        json_data: {},
-      });
-      const newId = data?.design_id ?? data?.id;
-      if (newId) {
-        router.push(`/designer/${newId}`);
-      } else {
-        console.error("[dashboard] create_design failed", data);
-      }
-    } catch (e) {
-      console.error("[dashboard] failed to create design", e);
+  // "Create New Project" — creates a REAL event in PHP (events row + user_event
+  // slug + designs row tied to the event), then opens the new event canvas.
+  // Designer-only: the route already gates role 3, but we re-check defensively.
+  const handleCreateNewProject = async () => {
+    const u = userRef.current;
+    if (!u?.id) {
+      setCreateError("Missing user information.");
+      return;
     }
+    if (Number(u.is_admin) !== 3) {
+      setCreateError("Designer access only.");
+      return;
+    }
+
+    try {
+      setCreatingProject(true);
+      setCreateError("");
+
+      const data = await createProjectEvent({
+        userId: u.id,
+        title: "Untitled",
+        templateId: null,
+        hasSeating: 0,
+      });
+
+      if (!data.success || !data.canvas_url) {
+        throw new Error(data.message || "Failed to create project.");
+      }
+
+      // PHP returns the full canvas_url (canvas.vi-up.com/designer/e/{slug}?…).
+      window.location.href = data.canvas_url;
+    } catch (err) {
+      console.error("[dashboard] failed to create project", err);
+      setCreateError((err as Error)?.message || "Failed to create project.");
+      setCreatingProject(false);
+    }
+    // On success we navigate away, so we intentionally leave creatingProject
+    // true to keep the button disabled until the redirect completes.
   };
 
   const handleOpen = (id: number) => {
@@ -153,16 +178,26 @@ export default function DesignerDashboard({ user }: { user: CanvasUser }) {
         </div>
         <div className="flex items-center gap-5 mr-[90px]">
           <button
-            onClick={handleCreate}
-            className="flex items-center gap-2 bg-[#5a2d2d] text-white px-5 py-2.5 rounded-full text-[15px] font-bold hover:opacity-90 transition"
+            onClick={handleCreateNewProject}
+            disabled={creatingProject}
+            className="flex items-center gap-2 bg-[#5a2d2d] text-white px-5 py-2.5 rounded-full text-[15px] font-bold hover:opacity-90 transition disabled:opacity-60 disabled:cursor-not-allowed"
           >
-            <Plus size={18} /> Create New Project
+            <Plus size={18} /> {creatingProject ? "Creating…" : "Create New Project"}
           </button>
           <UserMenu />
         </div>
       </header>
 
       <main className="max-w-6xl mx-auto px-8 py-10">
+        {createError && (
+          <div
+            role="alert"
+            className="mb-5 rounded-lg bg-[#FDECEC] border border-[#F3B6B6] px-4 py-2.5 text-[13px] font-semibold text-[#B23B3B]"
+          >
+            {createError}
+          </div>
+        )}
+
         <h1 className="text-[20px] font-bold text-[#7D5B59] mb-5">Recent Projects</h1>
 
         {!mounted ? null : projects.length === 0 ? (
@@ -176,21 +211,23 @@ export default function DesignerDashboard({ user }: { user: CanvasUser }) {
               Create your first design to get started.
             </p>
             <button
-              onClick={handleCreate}
-              className="flex items-center  gap-2 bg-[#5a2d2d] text-white px-5 py-2.5 rounded-full text-[15px] font-bold hover:opacity-90 transition "
+              onClick={handleCreateNewProject}
+              disabled={creatingProject}
+              className="flex items-center  gap-2 bg-[#5a2d2d] text-white px-5 py-2.5 rounded-full text-[15px] font-bold hover:opacity-90 transition disabled:opacity-60 disabled:cursor-not-allowed"
             >
-              <Plus size={18} /> Create New Project
+              <Plus size={18} /> {creatingProject ? "Creating…" : "Create New Project"}
             </button>
           </div>
         ) : (
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-5">
             {/* Create-new card */}
             <button
-              onClick={handleCreate}
-              className="flex flex-col items-center justify-center gap-2 aspect-[3/4] rounded-2xl border-2 border-dashed border-[#D9C7C2] bg-white/40 text-[#7D5B59] hover:bg-white/70 transition"
+              onClick={handleCreateNewProject}
+              disabled={creatingProject}
+              className="flex flex-col items-center justify-center gap-2 aspect-[3/4] rounded-2xl border-2 border-dashed border-[#D9C7C2] bg-white/40 text-[#7D5B59] hover:bg-white/70 transition disabled:opacity-60 disabled:cursor-not-allowed"
             >
               <Plus size={32} />
-              <span className="text-[14px] font-semibold">New Project</span>
+              <span className="text-[14px] font-semibold">{creatingProject ? "Creating…" : "New Project"}</span>
             </button>
 
             {projects.map((p) => (

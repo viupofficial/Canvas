@@ -115,6 +115,41 @@ export async function createDesign(payload: Record<string, any>): Promise<any> {
   });
 }
 
+// Designer "Create New Project": PHP creates the events row, the user_event slug
+// AND a designs row tied to the new event_id in one shot, then returns the ids,
+// slug and a ready-to-open canvas_url. Designer-only (PHP also enforces role).
+export type CreateProjectEventResponse = {
+  success?: boolean;
+  message?: string;
+  event_id?: number;
+  design_id?: number;
+  event_slug?: string;
+  title?: string;
+  canvas_url?: string;
+};
+
+export async function createProjectEvent({
+  userId,
+  title = "Untitled",
+  templateId = null,
+  hasSeating = 0,
+}: {
+  userId: string | number;
+  title?: string;
+  templateId?: string | number | null;
+  hasSeating?: number;
+}): Promise<CreateProjectEventResponse> {
+  return fetchJson<CreateProjectEventResponse>(`${API_BASE}/create_project_event.php`, {
+    method: "POST",
+    body: JSON.stringify({
+      user_id: Number(userId),
+      title,
+      template_id: templateId ? Number(templateId) : null,
+      has_seating: Number(hasSeating) === 1 ? 1 : 0,
+    }),
+  });
+}
+
 export async function updateDesign(payload: Record<string, any>): Promise<any> {
   return fetchJson(`${API_BASE}/update_design.php`, {
     method: "POST",

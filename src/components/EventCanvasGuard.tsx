@@ -7,6 +7,8 @@ import { LoadingState, ErrorState } from "@/src/components/canvas-states";
 import { setCanvasUser, type CanvasUser } from "@/src/lib/userSession";
 import {
   getUser,
+  getDesign,
+  extractDesign,
   loadOrCreateEventDesign,
   parseJsonData,
   canAccessEditor,
@@ -27,6 +29,9 @@ export default function EventCanvasGuard({ mode }: { mode: EditorMode }) {
   const searchParams = useSearchParams();
   const userId = searchParams.get("user_id");
   const eventId = searchParams.get("event_id");
+  // Optional: a freshly created project links straight to its design. When
+  // present we load it directly; otherwise we fall back to the event's design.
+  const designIdParam = searchParams.get("design_id");
 
   const [status, setStatus] = useState<"loading" | "ready" | "error">("loading");
   const [error, setError] = useState<{ title: string; message: string }>({
@@ -91,13 +96,29 @@ export default function EventCanvasGuard({ mode }: { mode: EditorMode }) {
         // Cache the verified session so shared UI (header/profile) works.
         setCanvasUser(data.user);
 
-        // ── Load or create the design tied to this event ─────────────────────
-        const record = await loadOrCreateEventDesign({
-          userId,
-          eventId,
-          event: data.event,
-        });
+        // ── Load the design tied to this event ───────────────────────────────
+        // Prefer the explicit design_id from the URL (get_design.php); fall back
+        // to loading-or-creating the event's design (get_designs.php). The slug is
+        // display-only — saving always uses event_id + design_id, never the slug.
+        let record: ViupDesign | null = null;
+        if (designIdParam) {
+          record = extractDesign(await getDesign(userId, designIdParam, eventId));
+          if (cancelled) return;
+        }
+        if (!record) {
+          record = await loadOrCreateEventDesign({
+            userId,
+            eventId,
+            event: data.event,
+          });
+        }
         if (cancelled) return;
+        if (!record) {
+          return fail(
+            "Failed to load design",
+            "We could not open the design for this event.",
+          );
+        }
 
         setUser(data.user);
         setEvent(data.event);
@@ -117,7 +138,7 @@ export default function EventCanvasGuard({ mode }: { mode: EditorMode }) {
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [userId, eventId, isEditor]);
+  }, [userId, eventId, designIdParam, isEditor]);
 
   if (status === "loading") {
     return <LoadingState label="Loading your canvas…" />;
