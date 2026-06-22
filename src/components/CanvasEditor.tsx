@@ -25,18 +25,20 @@ import { downscaleImageFile } from "@/src/lib/imageDownscale";
 import { saveLocalPreview } from "@/src/lib/localPreview";
 import {
   ENABLE_SMART_SNAPPING,
-  SMART_GUIDE_THRESHOLD,
-  MAX_GAP_MEASUREMENT,
-  CANVAS_EDGE_THRESHOLD,
+  ENABLE_RESIZE_SNAPPING,
+  MIN_ELEMENT_WIDTH,
+  MIN_ELEMENT_HEIGHT,
   getElementBox,
   getCanvasBox,
-  getOtherBoxes,
-  calculateAlignmentGuides,
-  calculateCanvasDistanceGuides,
-  calculateGapMeasurements,
-  applySmartSnapping,
+  getReferenceBoxes,
+  computeMoveGuides,
+  computeResizeGuides,
+  distributeBoxesHorizontally,
+  distributeBoxesVertically,
   drawSmartGuides,
   type SmartGuide,
+  type SnapCandidate,
+  type Box,
 } from "@/src/lib/smartGuides";
 
 // Which pages a background change touches: just the active page (default) or
@@ -133,6 +135,11 @@ export type EditorHandle = {
   toggleLayerLock: (id: string) => void;
   renameLayer: (id: string, name: string) => void;
   deleteLayer: (id: string) => void;
+  // ── Distribute (active multi-selection of ≥3 objects) ────────────────────────
+  // Equalises the gaps between selected elements; first/last stay fixed. No-op
+  // for fewer than 3 selected. Wire these to toolbar buttons if desired.
+  distributeHorizontally: () => void;
+  distributeVertically: () => void;
 }
 const MAX_HISTORY = 50;
 const HISTORY_DEBOUNCE_MS = 120;
@@ -333,10 +340,17 @@ const [currentPage, setCurrentPage] = useState(0);
   // previewed object back to its captured base values when the preview ends/cancels.
   const previewRafRef = useRef<number | null>(null);
   const previewRestoreRef = useRef<(() => void) | null>(null);
-  // Smart guides (alignment / canvas-distance / gap) computed live during a drag.
-  // Held in a ref (not state) so dragging never triggers React re-renders; the
-  // lines are painted directly onto the Fabric canvas in `after:render`.
+  // Smart guides (alignment / canvas-distance / gap / equal-spacing) computed
+  // live during a drag/resize. Held in a ref (not state) so interacting never
+  // triggers React re-renders; the lines are painted directly onto the Fabric
+  // canvas in `after:render`.
   const smartGuidesRef = useRef<SmartGuide[]>([]);
+  // Per-drag cache of the OTHER reference boxes, keyed by the object being moved,
+  // so we don't re-scan the page on every mouse-move (smooth with many objects).
+  const refBoxesCacheRef = useRef<{ owner: any; boxes: Box[] } | null>(null);
+  // Previously chosen snap per axis — drives hysteresis so snaps don't flicker.
+  const prevSnapXRef = useRef<SnapCandidate | undefined>(undefined);
+  const prevSnapYRef = useRef<SnapCandidate | undefined>(undefined);
 
   // Live-preview sync: when eventData changes, find any Fabric objects that
   // opted in via `eventBinding` and update them in place (no full reload).
@@ -606,11 +620,55 @@ const [currentPage, setCurrentPage] = useState(0);
     }).catch((e: any) => console.error('Failed to add element', kind, e));
   }, []);
 
+  // Distribute the active multi-selection so gaps are equal (Figma "distribute").
+  // Works in scene coordinates: we discard the ActiveSelection first so each
+  // child reports absolute coords, reposition the middle items, then re-select.
+  function distributeSelection(axis: 'x' | 'y') {
+    const canvas = fabricRef.current;
+    const fabric = fabricModuleRef.current;
+    if (!canvas || !fabric) return;
+    const active = canvas.getActiveObject() as any;
+    if (!active || active.type !== 'activeselection') return;
+    const objs: any[] = [...(active.getObjects?.() ?? [])];
+    if (objs.length < 3) return;
+
+    canvas.discardActiveObject();
+    objs.forEach((o) => o.setCoords?.());
+    const items = objs
+      .map((o) => ({ obj: o, box: getElementBox(o) }))
+      .filter((i): i is { obj: any; box: Box } => !!i.box && !!i.box.id);
+
+    if (axis === 'x') {
+      const result = distributeBoxesHorizontally(items.map((i) => i.box));
+      const byId = new Map(result.map((r) => [r.id, r.left]));
+      for (const { obj, box } of items) {
+        const left = byId.get(box.id!);
+        if (left != null) { obj.set('left', (obj.left ?? 0) + (left - box.left)); obj.setCoords?.(); }
+      }
+    } else {
+      const result = distributeBoxesVertically(items.map((i) => i.box));
+      const byId = new Map(result.map((r) => [r.id, r.top]));
+      for (const { obj, box } of items) {
+        const top = byId.get(box.id!);
+        if (top != null) { obj.set('top', (obj.top ?? 0) + (top - box.top)); obj.setCoords?.(); }
+      }
+    }
+
+    // Re-select the same objects so the user keeps their multi-selection.
+    const sel = new fabric.ActiveSelection(objs, { canvas });
+    canvas.setActiveObject(sel);
+    canvas.requestRenderAll();
+    pushSnapshot();
+    saveCurrentPage(currentPageRef.current);
+  }
+
   useImperativeHandle(ref, () => ({
     undo,
     redo,
     canUndo,
     canRedo,
+    distributeHorizontally: () => distributeSelection('x'),
+    distributeVertically: () => distributeSelection('y'),
     save: saveLocal,
     
     exportPNG,
@@ -1439,58 +1497,101 @@ const [currentPage, setCurrentPage] = useState(0);
           if (altCloneDone) { altCloneDone = false; schedulePush(); }
         });
 
-        // ── Smart guides (alignment / canvas-distance / gap) ─────────────────
-        // While a single element is dragged we: (1) optionally snap it to the
-        // nearest alignment, (2) compute the guide lines for the snapped box, and
-        // (3) stash them in a ref. They're painted in `after:render` below and
-        // cleared the moment the drag ends. Multi-selection is intentionally
-        // skipped in this first version.
+        // ── Smart guides (advanced) ──────────────────────────────────────────
+        // During a drag or resize we compute alignment / gap / equal-spacing /
+        // canvas-center guides (with snapping + hysteresis) and stash them in a
+        // ref; they're painted in `after:render` and cleared when the gesture
+        // ends. Works for single objects, groups (one box) and multi-selections
+        // (the ActiveSelection box). Hold Alt to suspend snapping (guides still
+        // show). See src/lib/smartGuides.ts for all the tunable constants.
         const clearSmartGuides = () => {
           if (smartGuidesRef.current.length) {
             smartGuidesRef.current = [];
             canvas.requestRenderAll();
           }
         };
+        // Drop the snap memory + reference-box cache at the end of a gesture or
+        // whenever the set of objects / selection changes.
+        const resetSmartGuideMemory = () => {
+          prevSnapXRef.current = undefined;
+          prevSnapYRef.current = undefined;
+          refBoxesCacheRef.current = null;
+        };
+        // Reference boxes for the current gesture, cached per moved object so a
+        // 100-element page isn't re-scanned on every mouse-move.
+        const refBoxesFor = (obj: any): Box[] => {
+          const cache = refBoxesCacheRef.current;
+          if (cache && cache.owner === obj) return cache.boxes;
+          const fresh = { owner: obj, boxes: getReferenceBoxes(canvas, obj) };
+          refBoxesCacheRef.current = fresh;
+          return fresh.boxes;
+        };
 
         canvas.on('object:moving', (opt: any) => {
           const obj = opt?.target;
-          // Skip multi-selection and anything we can't measure.
-          if (!obj || obj.type === 'activeselection' || obj.type === 'activeSelection') {
-            smartGuidesRef.current = [];
-            return;
-          }
+          if (!obj) { smartGuidesRef.current = []; return; }
           obj.setCoords?.();
-          let movingBox = getElementBox(obj);
+          const movingBox = getElementBox(obj);
           if (!movingBox) { smartGuidesRef.current = []; return; }
 
-          const others = getOtherBoxes(canvas, obj);
+          const altDown = !!opt?.e?.altKey; // DISABLE_SNAPPING_MODIFIER
+          const res = computeMoveGuides({
+            moving: movingBox,
+            others: refBoxesFor(obj),
+            canvasBox: getCanvasBox(canvas),
+            enableSnapping: ENABLE_SMART_SNAPPING && !altDown,
+            prev: { x: prevSnapXRef.current, y: prevSnapYRef.current },
+          });
 
-          // Snap first, then measure from the snapped position so guide lines and
-          // labels reflect exactly where the element lands.
-          if (ENABLE_SMART_SNAPPING && others.length) {
-            const { dx, dy } = applySmartSnapping(movingBox, others, SMART_GUIDE_THRESHOLD);
-            if (dx || dy) {
-              if (dx) obj.left = (obj.left ?? 0) + dx;
-              if (dy) obj.top = (obj.top ?? 0) + dy;
-              obj.setCoords?.();
-              movingBox = getElementBox(obj) ?? movingBox;
-            }
+          // Apply the snap delta to the moved object (for an ActiveSelection this
+          // shifts the whole group, preserving members' relative layout).
+          if (res.dx) obj.left = (obj.left ?? 0) + res.dx;
+          if (res.dy) obj.top = (obj.top ?? 0) + res.dy;
+          if (res.dx || res.dy) obj.setCoords?.();
+          prevSnapXRef.current = res.snap.x;
+          prevSnapYRef.current = res.snap.y;
+          smartGuidesRef.current = res.guides;
+        });
+
+        canvas.on('object:scaling', (opt: any) => {
+          const obj = opt?.target;
+          // Resize guides for single objects only (multi-select resize stays free).
+          if (!obj || obj.type === 'activeselection' || obj.type === 'activeSelection') { smartGuidesRef.current = []; return; }
+          obj.setCoords?.();
+          const box = getElementBox(obj);
+          if (!box) { smartGuidesRef.current = []; return; }
+
+          const altDown = !!opt?.e?.altKey;
+          const corner = String(opt?.transform?.corner ?? '');
+          const res = computeResizeGuides({
+            box,
+            corner,
+            others: refBoxesFor(obj),
+            canvasBox: getCanvasBox(canvas),
+          });
+
+          // Snap the resized edges only when it's safe to map them onto scale:
+          // snapping on, not Alt, axis-aligned, default origin, not flipped.
+          const canSnap =
+            ENABLE_RESIZE_SNAPPING && ENABLE_SMART_SNAPPING && !altDown &&
+            Math.abs((obj.angle ?? 0) % 360) < 0.001 &&
+            (obj.originX ?? 'left') === 'left' && (obj.originY ?? 'top') === 'top' &&
+            obj.flipX !== true && obj.flipY !== true;
+          if (canSnap) {
+            const baseW = (obj.width ?? 0) || 1;
+            const baseH = (obj.height ?? 0) || 1;
+            const t = res.targets;
+            if (t.right != null) { const w = Math.max(MIN_ELEMENT_WIDTH, t.right - box.left); obj.scaleX = w / baseW; }
+            if (t.left != null) { const w = Math.max(MIN_ELEMENT_WIDTH, box.right - t.left); obj.scaleX = w / baseW; obj.left = box.right - w; }
+            if (t.bottom != null) { const h = Math.max(MIN_ELEMENT_HEIGHT, t.bottom - box.top); obj.scaleY = h / baseH; }
+            if (t.top != null) { const h = Math.max(MIN_ELEMENT_HEIGHT, box.bottom - t.top); obj.scaleY = h / baseH; obj.top = box.bottom - h; }
+            obj.setCoords?.();
           }
-
-          const alignment = calculateAlignmentGuides(movingBox, others, SMART_GUIDE_THRESHOLD);
-          const gaps = calculateGapMeasurements(movingBox, others, MAX_GAP_MEASUREMENT);
-          // A gap label on an axis is more useful than the canvas-edge label, so
-          // suppress the edge distance on whichever axis already shows a gap.
-          const hasHGap = gaps.some((g) => g.type === 'horizontal');
-          const hasVGap = gaps.some((g) => g.type === 'vertical');
-          const distance = calculateCanvasDistanceGuides(movingBox, getCanvasBox(canvas), CANVAS_EDGE_THRESHOLD)
-            .filter((g) => (g.type === 'horizontal' ? !hasHGap : !hasVGap));
-
-          smartGuidesRef.current = [...alignment, ...gaps, ...distance];
+          smartGuidesRef.current = res.guides;
         });
 
         // Paint the guides on top of the rendered objects. Runs every frame while
-        // dragging (Fabric re-renders on each move); a no-op when there are none.
+        // interacting (Fabric re-renders each move/scale); a no-op when empty.
         canvas.on('after:render', (opt: any) => {
           const guides = smartGuidesRef.current;
           if (!guides.length) return;
@@ -1499,12 +1600,16 @@ const [currentPage, setCurrentPage] = useState(0);
           drawSmartGuides(ctx, guides, canvas.viewportTransform as number[]);
         });
 
-        // Guides only exist during an active drag — clear on release, when the
-        // selection goes away, or when another transform (scale/rotate) begins.
-        canvas.on('mouse:up', clearSmartGuides);
-        canvas.on('selection:cleared', clearSmartGuides);
-        canvas.on('object:scaling', clearSmartGuides);
+        // Guides exist only during an active gesture.
+        canvas.on('mouse:up', () => { clearSmartGuides(); resetSmartGuideMemory(); });
+        canvas.on('object:modified', clearSmartGuides);
         canvas.on('object:rotating', clearSmartGuides);
+        // Selection / object-set changes invalidate the snap memory + box cache.
+        canvas.on('selection:cleared', () => { clearSmartGuides(); resetSmartGuideMemory(); });
+        canvas.on('selection:created', resetSmartGuideMemory);
+        canvas.on('selection:updated', resetSmartGuideMemory);
+        canvas.on('object:added', resetSmartGuideMemory);
+        canvas.on('object:removed', resetSmartGuideMemory);
 
         // Text tool: click to add text at default size, drag to add textbox with that width.
         const getScenePoint = (e: any) => {

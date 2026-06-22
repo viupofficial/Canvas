@@ -153,6 +153,33 @@ export async function updateEventTitle({
   });
 }
 
+// Combined title sync: updates BOTH designs.name AND events.event_name in one
+// call, scoped to a single user_id + event_id + design_id. This is the path the
+// canvas uses to keep the MyEvent card title and the design title in lock-step.
+// All four fields are required — PHP keys on user_id + event_id + design_id, so
+// never call this without an event_id and design_id (e.g. free designs).
+export async function syncCanvasTitle({
+  userId,
+  eventId,
+  designId,
+  title,
+}: {
+  userId: string | number;
+  eventId: string | number;
+  designId: string | number;
+  title: string;
+}): Promise<any> {
+  return fetchJson(`${API_BASE}/sync_canvas_title.php`, {
+    method: "POST",
+    body: JSON.stringify({
+      user_id: Number(userId),
+      event_id: Number(eventId),
+      design_id: Number(designId),
+      title: String(title || "").trim(),
+    }),
+  });
+}
+
 // ── Role guards ──────────────────────────────────────────────────────────────
 // is_admin: 0 = customer, 1 = admin dashboard, 2 = editor, 3 = designer.
 export function canAccessEditor(user?: { is_admin?: number | string | null } | null): boolean {

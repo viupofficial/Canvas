@@ -2,7 +2,7 @@
 
 'use client';
 
-import { Upload, LogIn, Link2, FileText, Check, Loader2 } from 'lucide-react';
+import { Upload, LogIn, Link2, FileText, Check, Loader2, AlertCircle } from 'lucide-react';
 import { RefObject, useState, useRef, useEffect } from "react";
 import { useRouter, usePathname } from "next/navigation"; // ✅ ADD THIS
 import { EditorHandle } from "@/src/components/CanvasEditor";
@@ -63,6 +63,13 @@ export default function EditorHeader(props: {
   homeHref?: string | null;
   eventName?: string;
   onEventNameChange?: (name: string) => void;
+  /**
+   * Status of the debounced title autosync (event-bound canvases). Drives the
+   * small icon next to the title input so the user sees when their title edit is
+   * being saved to PHP, has saved, or failed. Omitted/"idle" shows nothing.
+   */
+  titleSyncStatus?: "idle" | "saving" | "saved" | "error";
+  titleSyncError?: string;
 }) {
   const router = useRouter();
   const pathname = usePathname();
@@ -307,6 +314,22 @@ export default function EditorHeader(props: {
           className="font-bold text-[18px] text-right bg-transparent border-none outline-none w-[140px]"
           aria-label="Event name"
         />
+
+        {/* Title autosync status — saving / saved / failed (event-bound canvases). */}
+        <span className="flex w-4 items-center justify-center" aria-live="polite">
+          {props.titleSyncStatus === "saving" && (
+            <Loader2 className="w-4 h-4 animate-spin text-[#7D5B59]" aria-label="Saving title" />
+          )}
+          {props.titleSyncStatus === "saved" && (
+            <Check className="w-4 h-4 text-green-600" aria-label="Title saved" />
+          )}
+          {props.titleSyncStatus === "error" && (
+            <AlertCircle
+              className="w-4 h-4 text-[#B23B3B]"
+              aria-label={props.titleSyncError || "Title sync failed"}
+            />
+          )}
+        </span>
 
         <button onClick={handleSaveClick} className="rounded-full text-white flex items-center justify-center">
           <img src="/cloud-save.svg" className="h-[23px] w-[33px]" />

@@ -11,7 +11,7 @@ import { useRouter } from "next/navigation";
 import { EventDataProvider, useEventData, type EventData } from "@/src/store/EventDataContext";
 import { ensureProject, saveProject } from "@/src/lib/projectStorage";
 import { getCanvasUser } from "@/src/lib/userSession";
-import { updateDesign, updateEventTitle, getCanvasName, num, type ViupEvent, type ViupDesign } from "@/src/lib/viupApi";
+import { updateDesign, syncCanvasTitle, getCanvasName, num, type ViupEvent, type ViupDesign } from "@/src/lib/viupApi";
 import type { CanvasUser } from "@/src/lib/userSession";
 
 const API_BASE = "https://vi-up.com/api";
@@ -98,6 +98,19 @@ function ProjectEditorInner({
       : undefined) ?? "Bride & Groom";
   const [eventName, setEventName] = useState(initialEventName);
 
+  // ── Title autosync (debounced) ────────────────────────────────────────────
+  // Event-bound canvases push title edits to PHP automatically via
+  // sync_canvas_title.php, which updates BOTH designs.name and events.event_name
+  // (the MyEvent card) for this exact user/event/design. Seed the "last synced"
+  // ref with the title loaded from PHP so we never fire a redundant sync on load
+  // — only an actual user edit triggers a request.
+  const [titleSaving, setTitleSaving] = useState(false);
+  const [titleSaved, setTitleSaved] = useState(false);
+  const [titleError, setTitleError] = useState("");
+  const lastSyncedTitleRef = useRef(String(initialEventName || "").trim());
+  // Guards against out-of-order responses: only the latest sync may commit.
+  const titleSyncSeqRef = useRef(0);
+
   // ── Initial canvas data ──────────────────────────────────────────────────
   // Event mode hydrates from the DB record; legacy project-id flow reads the
   // localStorage copy on the client (gated to avoid hydration mismatch).
@@ -151,14 +164,26 @@ function ProjectEditorInner({
         canvas: { ...data, eventName: cleanTitle || eventName },
       };
 
-      // Save the event title first (manual save only), then the design. We must
-      // send BOTH user_id and event_id — never update the title by user_id alone.
+      // Flush the title to PHP first (manual save only) so events.event_name +
+      // designs.name are guaranteed in sync even if the debounced autosync hasn't
+      // fired yet. Only when the title actually changed — and only with the full
+      // user/event/design key (never title-only). Then save the design itself.
       const titleStep =
-        syncTitle && eventId != null && userId != null
-          ? updateEventTitle({ userId, eventId, title: cleanTitle }).catch((e) => {
-              console.error("[ProjectEditor] event title update failed", e);
-              throw new Error("Failed to update event title.");
-            })
+        syncTitle &&
+        cleanTitle !== lastSyncedTitleRef.current &&
+        eventId != null &&
+        userId != null &&
+        designId != null
+          ? syncCanvasTitle({ userId, eventId, designId, title: cleanTitle })
+              .then(() => {
+                lastSyncedTitleRef.current = cleanTitle;
+                // A pending autosync for the same edit is now redundant.
+                titleSyncSeqRef.current++;
+              })
+              .catch((e) => {
+                console.error("[ProjectEditor] title sync failed", e);
+                throw new Error("Failed to sync title.");
+              })
           : Promise.resolve();
 
       titleStep
@@ -256,6 +281,41 @@ function ProjectEditorInner({
     };
   }, []);
 
+  // Debounced title autosync — event-bound canvases only. Fires ~1s after the
+  // user stops typing; skips empty / over-long / unchanged titles; never runs in
+  // free-design mode (no event_id/design_id). The cleanup cancels the pending
+  // request on every keystroke so only the final title is sent.
+  useEffect(() => {
+    if (!isEventMode || userId == null || eventId == null || designId == null) return;
+    const cleanTitle = String(eventName || "").trim();
+    if (!cleanTitle || cleanTitle.length > 120) return;
+    if (cleanTitle === lastSyncedTitleRef.current) return;
+
+    const timer = setTimeout(() => {
+      const seq = ++titleSyncSeqRef.current;
+      setTitleSaving(true);
+      setTitleSaved(false);
+      setTitleError("");
+      syncCanvasTitle({ userId, eventId, designId, title: cleanTitle })
+        .then(() => {
+          if (seq !== titleSyncSeqRef.current) return; // superseded by a newer edit
+          lastSyncedTitleRef.current = cleanTitle;
+          setTitleSaved(true);
+        })
+        .catch((e) => {
+          if (seq !== titleSyncSeqRef.current) return;
+          console.error("[ProjectEditor] title sync failed", e);
+          setTitleError((e as Error)?.message || "Failed to sync title.");
+        })
+        .finally(() => {
+          if (seq !== titleSyncSeqRef.current) return;
+          setTitleSaving(false);
+        });
+    }, 1000);
+
+    return () => clearTimeout(timer);
+  }, [eventName, isEventMode, userId, eventId, designId]);
+
   // ── Image editor state ──────────────────────────────────────────────────────
   const [imageEditorOpen, setImageEditorOpen] = useState(false);
   const [selectedImageForEditing, setSelectedImageForEditing] = useState<string | null>(null);
@@ -338,11 +398,18 @@ function ProjectEditorInner({
           onLogin={() => { window.location.href = "https://vi-up.com/login"; }}
           eventName={eventName}
           onEventNameChange={(name: string) => {
-            // Update local state immediately; the title is only pushed to PHP on
-            // a manual Save, so just clear any stale error here.
+            // Update local state immediately (canvas editing is never blocked);
+            // the debounced effect handles the PHP sync. Reset the per-edit sync
+            // indicators so a fresh "saving → saved" cycle can show.
             setEventName(name);
             if (saveError) setSaveError("");
+            if (titleError) setTitleError("");
+            if (titleSaved) setTitleSaved(false);
           }}
+          titleSyncStatus={
+            titleError ? "error" : titleSaving ? "saving" : titleSaved ? "saved" : "idle"
+          }
+          titleSyncError={titleError}
         />
 
         <div className="flex w-full gap-6 flex-1 min-h-0 overflow-hidden">
