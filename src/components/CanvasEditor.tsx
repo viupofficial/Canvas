@@ -23,6 +23,21 @@ import { useFabricEventSync } from "@/src/hooks/useFabricEventSync";
 import { FONT_GROUPS, loadGoogleFont, collectFontFamilies, preloadFonts } from "@/src/lib/fonts";
 import { downscaleImageFile } from "@/src/lib/imageDownscale";
 import { saveLocalPreview } from "@/src/lib/localPreview";
+import {
+  ENABLE_SMART_SNAPPING,
+  SMART_GUIDE_THRESHOLD,
+  MAX_GAP_MEASUREMENT,
+  CANVAS_EDGE_THRESHOLD,
+  getElementBox,
+  getCanvasBox,
+  getOtherBoxes,
+  calculateAlignmentGuides,
+  calculateCanvasDistanceGuides,
+  calculateGapMeasurements,
+  applySmartSnapping,
+  drawSmartGuides,
+  type SmartGuide,
+} from "@/src/lib/smartGuides";
 
 // Which pages a background change touches: just the active page (default) or
 // the whole invitation (PowerPoint's "Apply to All").
@@ -318,6 +333,10 @@ const [currentPage, setCurrentPage] = useState(0);
   // previewed object back to its captured base values when the preview ends/cancels.
   const previewRafRef = useRef<number | null>(null);
   const previewRestoreRef = useRef<(() => void) | null>(null);
+  // Smart guides (alignment / canvas-distance / gap) computed live during a drag.
+  // Held in a ref (not state) so dragging never triggers React re-renders; the
+  // lines are painted directly onto the Fabric canvas in `after:render`.
+  const smartGuidesRef = useRef<SmartGuide[]>([]);
 
   // Live-preview sync: when eventData changes, find any Fabric objects that
   // opted in via `eventBinding` and update them in place (no full reload).
@@ -1419,6 +1438,73 @@ const [currentPage, setCurrentPage] = useState(0);
         canvas.on('mouse:up', () => {
           if (altCloneDone) { altCloneDone = false; schedulePush(); }
         });
+
+        // ── Smart guides (alignment / canvas-distance / gap) ─────────────────
+        // While a single element is dragged we: (1) optionally snap it to the
+        // nearest alignment, (2) compute the guide lines for the snapped box, and
+        // (3) stash them in a ref. They're painted in `after:render` below and
+        // cleared the moment the drag ends. Multi-selection is intentionally
+        // skipped in this first version.
+        const clearSmartGuides = () => {
+          if (smartGuidesRef.current.length) {
+            smartGuidesRef.current = [];
+            canvas.requestRenderAll();
+          }
+        };
+
+        canvas.on('object:moving', (opt: any) => {
+          const obj = opt?.target;
+          // Skip multi-selection and anything we can't measure.
+          if (!obj || obj.type === 'activeselection' || obj.type === 'activeSelection') {
+            smartGuidesRef.current = [];
+            return;
+          }
+          obj.setCoords?.();
+          let movingBox = getElementBox(obj);
+          if (!movingBox) { smartGuidesRef.current = []; return; }
+
+          const others = getOtherBoxes(canvas, obj);
+
+          // Snap first, then measure from the snapped position so guide lines and
+          // labels reflect exactly where the element lands.
+          if (ENABLE_SMART_SNAPPING && others.length) {
+            const { dx, dy } = applySmartSnapping(movingBox, others, SMART_GUIDE_THRESHOLD);
+            if (dx || dy) {
+              if (dx) obj.left = (obj.left ?? 0) + dx;
+              if (dy) obj.top = (obj.top ?? 0) + dy;
+              obj.setCoords?.();
+              movingBox = getElementBox(obj) ?? movingBox;
+            }
+          }
+
+          const alignment = calculateAlignmentGuides(movingBox, others, SMART_GUIDE_THRESHOLD);
+          const gaps = calculateGapMeasurements(movingBox, others, MAX_GAP_MEASUREMENT);
+          // A gap label on an axis is more useful than the canvas-edge label, so
+          // suppress the edge distance on whichever axis already shows a gap.
+          const hasHGap = gaps.some((g) => g.type === 'horizontal');
+          const hasVGap = gaps.some((g) => g.type === 'vertical');
+          const distance = calculateCanvasDistanceGuides(movingBox, getCanvasBox(canvas), CANVAS_EDGE_THRESHOLD)
+            .filter((g) => (g.type === 'horizontal' ? !hasHGap : !hasVGap));
+
+          smartGuidesRef.current = [...alignment, ...gaps, ...distance];
+        });
+
+        // Paint the guides on top of the rendered objects. Runs every frame while
+        // dragging (Fabric re-renders on each move); a no-op when there are none.
+        canvas.on('after:render', (opt: any) => {
+          const guides = smartGuidesRef.current;
+          if (!guides.length) return;
+          const ctx = (opt?.ctx ?? (canvas as any).contextContainer) as CanvasRenderingContext2D | undefined;
+          if (!ctx) return;
+          drawSmartGuides(ctx, guides, canvas.viewportTransform as number[]);
+        });
+
+        // Guides only exist during an active drag — clear on release, when the
+        // selection goes away, or when another transform (scale/rotate) begins.
+        canvas.on('mouse:up', clearSmartGuides);
+        canvas.on('selection:cleared', clearSmartGuides);
+        canvas.on('object:scaling', clearSmartGuides);
+        canvas.on('object:rotating', clearSmartGuides);
 
         // Text tool: click to add text at default size, drag to add textbox with that width.
         const getScenePoint = (e: any) => {

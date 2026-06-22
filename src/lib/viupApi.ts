@@ -129,6 +129,30 @@ export async function deleteDesign(payload: Record<string, any>): Promise<any> {
   });
 }
 
+// ── Event title ───────────────────────────────────────────────────────────────
+// Updates events.event_name (the MyEvent card title) for ONE event only:
+// PHP runs WHERE event_id = ? AND user_id = ?, so BOTH ids are required. Only
+// call this for an event-bound canvas (editor / designer-event) — never in free
+// designer/dashboard mode where there is no event_id.
+export async function updateEventTitle({
+  userId,
+  eventId,
+  title,
+}: {
+  userId: string | number;
+  eventId: string | number;
+  title: string;
+}): Promise<any> {
+  return fetchJson(`${API_BASE}/update_event_title.php`, {
+    method: "POST",
+    body: JSON.stringify({
+      user_id: Number(userId),
+      event_id: Number(eventId),
+      title: String(title || "").trim(),
+    }),
+  });
+}
+
 // ── Role guards ──────────────────────────────────────────────────────────────
 // is_admin: 0 = customer, 1 = admin dashboard, 2 = editor, 3 = designer.
 export function canAccessEditor(user?: { is_admin?: number | string | null } | null): boolean {

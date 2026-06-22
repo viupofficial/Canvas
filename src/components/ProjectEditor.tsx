@@ -11,7 +11,7 @@ import { useRouter } from "next/navigation";
 import { EventDataProvider, useEventData, type EventData } from "@/src/store/EventDataContext";
 import { ensureProject, saveProject } from "@/src/lib/projectStorage";
 import { getCanvasUser } from "@/src/lib/userSession";
-import { updateDesign, getCanvasName, num, type ViupEvent, type ViupDesign } from "@/src/lib/viupApi";
+import { updateDesign, updateEventTitle, getCanvasName, num, type ViupEvent, type ViupDesign } from "@/src/lib/viupApi";
 import type { CanvasUser } from "@/src/lib/userSession";
 
 const API_BASE = "https://vi-up.com/api";
@@ -117,32 +117,72 @@ function ProjectEditorInner({
 
   // ── Save (manual + debounced autosave) ───────────────────────────────────
   const [saveStatus, setSaveStatus] = useState<SaveStatus>("idle");
+  const [saveError, setSaveError] = useState("");
   const savedTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const autosaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const persist = useCallback(() => {
+  // `syncTitle` is only true for a manual Save: that's when we push the canvas
+  // title back to events.event_name (the MyEvent card). Autosave never touches
+  // the event title — it would fire on every canvas edit.
+  const persist = useCallback(
+    (opts?: { syncTitle?: boolean }) => {
+    const syncTitle = !!opts?.syncTitle;
     const data = editorRef.current?.getProjectData?.();
     const thumbnail = editorRef.current?.getThumbnail?.() ?? "";
 
     // ── Event-bound save → always scoped to this event/design ──────────────
     if (isEventMode) {
       if (!data) return;
+
+      const cleanTitle = String(eventName || "").trim();
+
+      // Manual save validation — designId/eventId are guaranteed by isEventMode,
+      // but the title must not be blank when we're syncing it to MyEvent.
+      if (syncTitle && !cleanTitle) {
+        setSaveError("Title cannot be empty.");
+        return;
+      }
+
+      setSaveError("");
       setSaveStatus("saving");
       const json_data = {
         version: 1,
         eventData,
-        canvas: { ...data, eventName },
+        canvas: { ...data, eventName: cleanTitle || eventName },
       };
-      updateDesign({
-        user_id: num(userId),
-        event_id: num(eventId),
-        design_id: num(designId),
-        name: eventName || getCanvasName(event),
-        json_data,
-        preview_url: thumbnail || null,
-        status: "draft",
-      })
+
+      // Save the event title first (manual save only), then the design. We must
+      // send BOTH user_id and event_id — never update the title by user_id alone.
+      const titleStep =
+        syncTitle && eventId != null && userId != null
+          ? updateEventTitle({ userId, eventId, title: cleanTitle }).catch((e) => {
+              console.error("[ProjectEditor] event title update failed", e);
+              throw new Error("Failed to update event title.");
+            })
+          : Promise.resolve();
+
+      titleStep
+        .then(() =>
+          updateDesign({
+            user_id: num(userId),
+            event_id: num(eventId),
+            design_id: num(designId),
+            name: cleanTitle || getCanvasName(event),
+            json_data,
+            preview_url: thumbnail || null,
+            status: "draft",
+          }).catch((e) => {
+            console.error("[ProjectEditor] design save failed", e);
+            // The title may already have been updated — be explicit about it.
+            throw new Error(
+              syncTitle
+                ? "Title updated, but design save failed. Please save again."
+                : (e as Error)?.message || "Failed to save.",
+            );
+          }),
+        )
         .then(() => {
+          if (syncTitle) setEventName(cleanTitle);
           setSaveStatus("saved");
           if (savedTimerRef.current) clearTimeout(savedTimerRef.current);
           savedTimerRef.current = setTimeout(() => setSaveStatus("idle"), 1500);
@@ -150,6 +190,7 @@ function ProjectEditorInner({
         .catch((e) => {
           console.error("[ProjectEditor] event save failed", e);
           setSaveStatus("idle");
+          setSaveError((e as Error)?.message || "Failed to save.");
         });
       return;
     }
@@ -192,7 +233,9 @@ function ProjectEditorInner({
         console.error("[ProjectEditor] DB save failed", e);
         setSaveStatus("idle");
       });
-  }, [isEventMode, projectId, eventName, eventData, userId, eventId, designId, event]);
+    },
+    [isEventMode, projectId, eventName, eventData, userId, eventId, designId, event],
+  );
 
   // Always call the freshest persist from the debounced timer.
   const persistRef = useRef(persist);
@@ -286,7 +329,7 @@ function ProjectEditorInner({
           homeHref={homeHref}
           onUndo={() => editorRef.current?.undo()}
           onRedo={() => editorRef.current?.redo()}
-          onSave={persist}
+          onSave={() => persist({ syncTitle: true })}
           onPreview={() => {
             editorRef.current?.exportHTML(eventName).then((slug) => router.push(`/e/${slug}`));
           }}
@@ -294,7 +337,12 @@ function ProjectEditorInner({
           teaser={teaser}
           onLogin={() => { window.location.href = "https://vi-up.com/login"; }}
           eventName={eventName}
-          onEventNameChange={setEventName}
+          onEventNameChange={(name: string) => {
+            // Update local state immediately; the title is only pushed to PHP on
+            // a manual Save, so just clear any stale error here.
+            setEventName(name);
+            if (saveError) setSaveError("");
+          }}
         />
 
         <div className="flex w-full gap-6 flex-1 min-h-0 overflow-hidden">
@@ -328,6 +376,15 @@ function ProjectEditorInner({
       {showRecordSaveStatus && saveStatus !== "idle" && (
         <div className="fixed bottom-4 right-4 z-[90] rounded-full bg-white/90 border border-[#EDE2DE] px-4 py-1.5 text-[12px] font-semibold text-[#7D5B59] shadow">
           {saveStatus === "saving" ? "Saving…" : "Saved ✓"}
+        </div>
+      )}
+
+      {saveError && (
+        <div
+          role="alert"
+          className="fixed bottom-4 right-4 z-[90] max-w-xs rounded-lg bg-[#FDECEC] border border-[#F3B6B6] px-4 py-2 text-[12px] font-semibold text-[#B23B3B] shadow"
+        >
+          {saveError}
         </div>
       )}
 
