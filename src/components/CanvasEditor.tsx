@@ -269,6 +269,8 @@ const CanvasEditor = forwardRef<
       textColor: string;
       textOpacity: number;
     };
+    userId?: string | number | null;
+    eventId?: string | number | null;
   }
 >((props, ref) => {
   const canvasEl = useRef<HTMLCanvasElement | null>(null);
@@ -691,6 +693,8 @@ const [currentPage, setCurrentPage] = useState(0);
         location: props.location,
         rsvpConfig: props.rsvpConfig ?? null,
         borders: globalBordersRef.current,
+        userId: props.userId ?? null,
+        eventId: props.eventId ?? null,
       };
       // Open the tab synchronously so the browser keeps it tied to the user's
       // click (avoids popup blocking); the preview page waits for IndexedDB.
@@ -2444,6 +2448,8 @@ const [currentPage, setCurrentPage] = useState(0);
       location: props.location,
       rsvpConfig: props.rsvpConfig ?? null,
       borders: globalBordersRef.current,
+      userId: props.userId ?? null,
+      eventId: props.eventId ?? null,
     }),
   });
 
@@ -3198,7 +3204,7 @@ const applyBgToOtherPages = (patch: { backgroundImage?: any; backgroundColor?: a
                   pointerEvents: 'auto',
                 }}
               >
-                <EventFooter contacts={props.contacts} moneyGift={props.moneyGift} calendar={props.calendar} location={props.location} rsvpConfig={props.rsvpConfig}/>
+                <EventFooter contacts={props.contacts} moneyGift={props.moneyGift} calendar={props.calendar} location={props.location} rsvpConfig={props.rsvpConfig} userId={props.userId} eventId={props.eventId}/>
               </div>
             </div>
           )}

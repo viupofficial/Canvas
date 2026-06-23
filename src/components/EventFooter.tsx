@@ -1,10 +1,11 @@
 "use client"
 
-import React, { useState } from "react"
+import React, { useState, useRef } from "react"
 import { useEventDataOptional } from "@/src/store/EventDataContext"
 import { buildIcs, icsFilename } from "@/src/lib/calendar/icsBuilder"
 import { buildGoogleCalendarLink } from "@/src/lib/calendar/googleCalendarLink"
 import type { CalendarExportInput } from "@/src/lib/calendar/normalizeEvent"
+import { submitCanvasRSVP, submitCanvasGuestbook, getCanvasGuestbook } from "@/src/lib/viupApi"
 
 
 export default function EventFooter({
@@ -13,6 +14,9 @@ export default function EventFooter({
   calendar: calendarProp,
   location: locationProp,
   rsvpConfig: rsvpConfigProp,
+  userId,
+  eventId,
+  onGuestbookUpdate,
 }: {
   contacts?: any[];
   moneyGift?: {
@@ -37,6 +41,9 @@ export default function EventFooter({
     textColor?: string;
     textOpacity?: number;
   } | null;
+  userId?: string | number | null;
+  eventId?: string | number | null;
+  onGuestbookUpdate?: (entries: { message: string; sender: string }[]) => void;
 }) {
   // Prefer the shared store (editor page) — fall back to props (export/SSR).
   const ctx = useEventDataOptional();
@@ -53,6 +60,17 @@ export default function EventFooter({
   // the fade-out can play, then unmounts. Keep this in sync with the CSS
   // `previewUiFadeOut` duration in globals.css (240ms).
   const [closing, setClosing] = useState(false);
+
+  const [rsvpSubmitting, setRsvpSubmitting] = useState(false);
+  const [rsvpMessage, setRsvpMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
+  const [gbSubmitting, setGbSubmitting] = useState(false);
+  const [gbMessage, setGbMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
+  const rsvpNameRef = useRef<HTMLInputElement>(null);
+  const rsvpPhoneRef = useRef<HTMLInputElement>(null);
+  const rsvpPaxRef = useRef<HTMLSelectElement>(null);
+  const gbWishRef = useRef<HTMLTextAreaElement>(null);
+  const gbNameRef = useRef<HTMLInputElement>(null);
+  const hasEventInfo = userId != null && eventId != null && userId !== "" && eventId !== "";
 
   const handleCopyAccount = async () => {
     const accountNumber = String(moneyGift?.account || "154080219940");
@@ -178,7 +196,7 @@ const formatEmbedDate = (dateStr: string) => {
   return `${y}${m}${day}`;
 };
     console.log("FOOTER contacts:", contacts);
-    const [infoTab, setInfoTab] = useState(null)
+    const [infoTab, setInfoTab] = useState<string | null>(null)
     // Fade class shared by every popup panel: fades in on open, fades out (via
     // `is-closing`) just before unmount. Opacity-only, so it never disturbs a
     // panel's own positioning transform.
@@ -322,36 +340,86 @@ const formatEmbedDate = (dateStr: string) => {
                         </div>
                     )}
 
+                    {/* RSVP success/error message */}
+                    {rsvpMessage && (
+                        <p style={{
+                            textAlign: "center",
+                            fontFamily: "Montserrat",
+                            fontSize: "14px",
+                            padding: "10px 0",
+                            color: rsvpMessage.type === "success" ? "#2e7d32" : "#c62828",
+                        }}>
+                            {rsvpMessage.text}
+                        </p>
+                    )}
+
+                    {!hasEventInfo && (
+                        <p style={{
+                            textAlign: "center",
+                            fontFamily: "Montserrat",
+                            fontSize: "13px",
+                            color: "#c62828",
+                            padding: "10px 0",
+                        }}>
+                            Event information is missing.
+                        </p>
+                    )}
+
                     {/* Step 2: Form shown after choosing Accept or Decline */}
-                    {rsvpStatus !== null && (
+                    {rsvpStatus !== null && !rsvpMessage && (
                         <form className="rsvp-form" style={{ display: "flex", marginTop: "1rem" }}
-                            onSubmit={(e) => {
+                            onSubmit={async (e) => {
                                 e.preventDefault();
-                                alert(rsvpStatus === "accept" ? "RSVP submitted! See you there 🎉" : "Thank you for letting us know.");
-                                closeCard();
+                                if (!hasEventInfo) return;
+                                const status = rsvpStatus === "accept" ? "Attending" : "Not Attending";
+                                const name = rsvpNameRef.current?.value?.trim() || "";
+                                const phone = rsvpPhoneRef.current?.value?.trim() || "";
+                                const pax = rsvpStatus === "accept" ? Number(rsvpPaxRef.current?.value || 0) : 0;
+
+                                if (!name) return;
+                                if (rsvpStatus === "accept" && !phone) return;
+                                if (rsvpStatus === "accept" && pax < 1) return;
+
+                                setRsvpSubmitting(true);
+                                setRsvpMessage(null);
+                                try {
+                                    await submitCanvasRSVP({
+                                        userId: userId!,
+                                        eventId: eventId!,
+                                        name,
+                                        phone,
+                                        status,
+                                        pax,
+                                    });
+                                    setRsvpMessage({ type: "success", text: "Thank you for your RSVP!" });
+                                    setTimeout(() => {
+                                        closeCard();
+                                        setRsvpMessage(null);
+                                    }, 2000);
+                                } catch (err: any) {
+                                    setRsvpMessage({ type: "error", text: err?.message || "Failed to submit RSVP." });
+                                } finally {
+                                    setRsvpSubmitting(false);
+                                }
                             }}
                         >
                             <input type="hidden" name="status" value={rsvpStatus === "accept" ? "Attending" : "Not Attending"} />
 
                             <div className="form-group">
                                 <label style={{ paddingBottom: "8px" }}>Name</label>
-                                <input type="text" name="name" required />
+                                <input type="text" name="name" ref={rsvpNameRef} required disabled={rsvpSubmitting} />
                             </div>
-                             <div className="form-group">
-                                        <label style={{ paddingBottom: "8px" }}>Phone No.</label>
-                                        <input type="tel" name="phone" required />
-                                    </div>
+
+                            <div className="form-group">
+                                <label style={{ paddingBottom: "8px" }}>Phone No.</label>
+                                <input type="tel" name="phone" ref={rsvpPhoneRef} required={rsvpStatus === "accept"} disabled={rsvpSubmitting} />
+                            </div>
 
                             {rsvpStatus === "accept" && (
                                 <>
                                     <div className="form-group">
-                                        <label style={{ paddingBottom: "8px" }}>Phone No.</label>
-                                        <input type="tel" name="phone" required />
-                                    </div>
-
-                                    <div className="form-group">
                                         <label style={{ paddingBottom: "8px" }}>Number of Pax</label>
-                                        <select name="pax" required className="styled-select">
+                                        <select name="pax" ref={rsvpPaxRef} required className="styled-select" disabled={rsvpSubmitting}>
                                             <option value="">-- Select --</option>
                                             {Array.from({ length: maxPax }, (_, i) => i + 1).map((n) => (
                                                 <option key={n} value={n}>{n}</option>
@@ -367,8 +435,10 @@ const formatEmbedDate = (dateStr: string) => {
                             )}
 
                             <div className="rsvp-submit-buttons" style={{ display: "flex" }}>
-                                <button type="submit">Submit</button>
-                                <button type="button" onClick={() => setRsvpStatus(null)}>Back</button>
+                                <button type="submit" disabled={rsvpSubmitting || !hasEventInfo}>
+                                    {rsvpSubmitting ? "Submitting..." : "Submit"}
+                                </button>
+                                <button type="button" onClick={() => setRsvpStatus(null)} disabled={rsvpSubmitting}>Back</button>
                             </div>
                         </form>
                     )}
@@ -388,11 +458,37 @@ const formatEmbedDate = (dateStr: string) => {
                             Share Your Wishes
                         </h3>
 
+                        {gbMessage && (
+                            <p style={{
+                                textAlign: "center",
+                                fontFamily: "Montserrat",
+                                fontSize: "13px",
+                                padding: "8px 0",
+                                color: gbMessage.type === "success" ? "#2e7d32" : "#c62828",
+                            }}>
+                                {gbMessage.text}
+                            </p>
+                        )}
+
+                        {!hasEventInfo && (
+                            <p style={{
+                                textAlign: "center",
+                                fontFamily: "Montserrat",
+                                fontSize: "13px",
+                                color: "#c62828",
+                                padding: "8px 0",
+                            }}>
+                                Event information is missing.
+                            </p>
+                        )}
+
                         <div className="form-group">
                             <textarea
                                 id="wish"
+                                ref={gbWishRef}
                                 style={{ paddingBottom: "85px" }}
                                 required
+                                disabled={gbSubmitting}
                             />
                             <label
                                 htmlFor="wish"
@@ -403,7 +499,7 @@ const formatEmbedDate = (dateStr: string) => {
                         </div>
 
                         <div className="form-group">
-                            <input type="text" id="name" required />
+                            <input type="text" id="name" ref={gbNameRef} required disabled={gbSubmitting} />
                             <label
                                 htmlFor="name"
                                 style={{ fontFamily: "Montserrat", color: "#7D5B59" }}
@@ -417,17 +513,53 @@ const formatEmbedDate = (dateStr: string) => {
                             <button
                                 type="button"
                                 style={{ fontFamily: "Montserrat" }}
-                                onClick={() => {
-                                    alert("Wish sent! 💌")
+                                disabled={gbSubmitting || !hasEventInfo}
+                                onClick={async () => {
+                                    const wish = gbWishRef.current?.value?.trim() || "";
+                                    const name = gbNameRef.current?.value?.trim() || "";
+                                    if (!wish || !name || !hasEventInfo) return;
+
+                                    setGbSubmitting(true);
+                                    setGbMessage(null);
+                                    try {
+                                        await submitCanvasGuestbook({
+                                            userId: userId!,
+                                            eventId: eventId!,
+                                            name,
+                                            wish,
+                                        });
+                                        setGbMessage({ type: "success", text: "Wish sent!" });
+                                        if (gbWishRef.current) gbWishRef.current.value = "";
+                                        if (gbNameRef.current) gbNameRef.current.value = "";
+
+                                        try {
+                                            const data = await getCanvasGuestbook({ userId: userId!, eventId: eventId! });
+                                            const entries = (data.entries || []).map((e: any) => ({
+                                                message: e.message || e.wish || "",
+                                                sender: e.sender || e.name || "",
+                                            }));
+                                            onGuestbookUpdate?.(entries);
+                                        } catch {}
+
+                                        setTimeout(() => {
+                                            closeCard();
+                                            setGbMessage(null);
+                                        }, 2000);
+                                    } catch (err: any) {
+                                        setGbMessage({ type: "error", text: err?.message || "Failed to send wish." });
+                                    } finally {
+                                        setGbSubmitting(false);
+                                    }
                                 }}
                             >
-                                Send
+                                {gbSubmitting ? "Sending..." : "Send"}
                             </button>
 
                             <button
                                 type="button"
                                 style={{ fontFamily: "Montserrat" }}
                                 onClick={closeCard}
+                                disabled={gbSubmitting}
                             >
                                 Close
                             </button>

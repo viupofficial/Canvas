@@ -215,6 +215,76 @@ export async function syncCanvasTitle({
   });
 }
 
+// ── Canvas RSVP ─────────────────────────────────────────────────────────────
+export async function submitCanvasRSVP({
+  userId,
+  eventId,
+  name,
+  phone,
+  status,
+  pax,
+  packType = "",
+}: {
+  userId: string | number;
+  eventId: string | number;
+  name: string;
+  phone: string;
+  status: string;
+  pax: number;
+  packType?: string;
+}): Promise<any> {
+  return fetchJson(`${API_BASE}/submit_canvas_rsvp.php`, {
+    method: "POST",
+    body: JSON.stringify({
+      user_id: Number(userId),
+      event_id: Number(eventId),
+      name: String(name || "").trim(),
+      phone: String(phone || "").trim(),
+      status,
+      pax: Number(pax || 0),
+      pack_type: packType || "",
+      website: "",
+    }),
+  });
+}
+
+// ── Canvas Guestbook ────────────────────────────────────────────────────────
+export async function submitCanvasGuestbook({
+  userId,
+  eventId,
+  name,
+  wish,
+}: {
+  userId: string | number;
+  eventId: string | number;
+  name: string;
+  wish: string;
+}): Promise<any> {
+  return fetchJson(`${API_BASE}/submit_canvas_guestbook.php`, {
+    method: "POST",
+    body: JSON.stringify({
+      user_id: Number(userId),
+      event_id: Number(eventId),
+      name: String(name || "").trim(),
+      wish: String(wish || "").trim(),
+      website: "",
+    }),
+  });
+}
+
+export async function getCanvasGuestbook({
+  userId,
+  eventId,
+}: {
+  userId: string | number;
+  eventId: string | number;
+}): Promise<any> {
+  const params = new URLSearchParams();
+  params.set("user_id", String(userId));
+  params.set("event_id", String(eventId));
+  return fetchJson(`${API_BASE}/get_canvas_guestbook.php?${params.toString()}`);
+}
+
 // ── Role guards ──────────────────────────────────────────────────────────────
 // is_admin: 0 = customer, 1 = admin dashboard, 2 = editor, 3 = designer.
 export function canAccessEditor(user?: { is_admin?: number | string | null } | null): boolean {

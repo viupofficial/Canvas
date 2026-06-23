@@ -12,7 +12,7 @@ function toSlug(name: string): string {
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
-    const { pages, musicUrl, eventName, contacts, moneyGift, calendar, location, rsvpConfig, borders } = body;
+    const { pages, musicUrl, eventName, contacts, moneyGift, calendar, location, rsvpConfig, borders, userId, eventId } = body;
     const slug = toSlug(eventName ?? "rsvp");
 
     const env = extractEnvelope(pages ?? []);
@@ -49,6 +49,8 @@ export async function POST(req: NextRequest) {
       calendar: calendar ?? null,
       location: location ?? null,
       rsvpConfig: rsvpConfig ?? null,
+      userId: userId ?? null,
+      eventId: eventId ?? null,
     };
 
     await put(`events/${slug}.json`, JSON.stringify(payload), {

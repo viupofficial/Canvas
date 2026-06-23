@@ -21,6 +21,8 @@ export default function EditorLayoutClient({
   onContentReplaced,
   initialPages,
   initialMusicUrl,
+  userId,
+  eventId,
 }: {
   editorRef?: React.RefObject<EditorHandle | null>,
   contacts: any[];
@@ -35,6 +37,8 @@ export default function EditorLayoutClient({
   onContentReplaced?: () => void;
   initialPages?: any[] | null;
   initialMusicUrl?: string | null;
+  userId?: string | number | null;
+  eventId?: string | number | null;
 }) {
   const internalRef = useRef<EditorHandle | null>(null);
   const editorRef = editorRefProp ?? internalRef;
@@ -81,6 +85,8 @@ export default function EditorLayoutClient({
       moneyGift={moneyGift}
       calendar={calendar}
       location={location}
+      userId={userId}
+      eventId={eventId}
     />
   );
 

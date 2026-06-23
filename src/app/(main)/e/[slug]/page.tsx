@@ -1,7 +1,6 @@
 import { notFound } from "next/navigation";
 import { list } from "@vercel/blob";
-import EventFooter from "@/src/components/EventFooter";
-import RsvpPlayer from "@/src/components/RsvpPlayer";
+import EventPageClient from "@/src/components/EventPageClient";
 import "../../../globals.css";
 
 export const dynamic = "force-dynamic";
@@ -26,20 +25,7 @@ export default async function Page({ params }: { params: Promise<{ slug: string 
 
   return (
     <main>
-      <RsvpPlayer
-        pages={data.pages ?? []}
-        envelope={data.envelope ?? null}
-        musicUrl={data.musicUrl ?? null}
-        borderUrl={data.borderUrl ?? null}
-        eventDate={data.calendar?.date ?? null}
-      />
-      <EventFooter
-        contacts={data.contacts ?? []}
-        moneyGift={data.moneyGift ?? null}
-        calendar={data.calendar ?? null}
-        location={data.location ?? null}
-        rsvpConfig={data.rsvpConfig ?? null}
-      />
+      <EventPageClient data={data} />
     </main>
   );
 }

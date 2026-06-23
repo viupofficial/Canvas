@@ -435,6 +435,8 @@ function ProjectEditorInner({
               onContentReplaced={() => setBgReadNonce((n) => n + 1)}
               initialPages={initialPages}
               initialMusicUrl={initialMusicUrl}
+              userId={userId}
+              eventId={eventId}
             />
           </div>
         </div>
