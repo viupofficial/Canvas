@@ -112,9 +112,20 @@ export default function DesignerDashboard({ user }: { user: CanvasUser }) {
     // true to keep the button disabled until the redirect completes.
   };
 
-  const handleOpen = (id: number) => {
+  const handleOpen = (p: ViupDesign) => {
     if (renamingId) return;
-    router.push(`/designer/${id}`);
+    // Event-bound designs must open through the event route so the canvas gets
+    // user_id + event_id (required for autosave, guestbook and RSVP). The [slug]
+    // is cosmetic — we use event_id, matching the My Event "Canvas" link. Free
+    // designs with no event fall back to the legacy project-id route.
+    const eventId = num(p.event_id);
+    if (eventId != null) {
+      router.push(
+        `/designer/e/${eventId}?user_id=${userRef.current.id}&event_id=${eventId}&design_id=${p.id}`,
+      );
+    } else {
+      router.push(`/designer/${p.id}`);
+    }
   };
 
   const handleDuplicate = async (id: number) => {
@@ -234,7 +245,7 @@ export default function DesignerDashboard({ user }: { user: CanvasUser }) {
               <div
                 key={p.id}
                 className="group relative rounded-2xl bg-white border border-[#EDE2DE] overflow-hidden shadow-sm hover:shadow-md transition cursor-pointer"
-                onClick={() => handleOpen(p.id)}
+                onClick={() => handleOpen(p)}
               >
                 {/* Thumbnail */}
                 <div className="aspect-[3/4] bg-[#F7F2F0] flex items-center justify-center overflow-hidden">

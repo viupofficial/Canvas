@@ -391,9 +391,18 @@ function ProjectEditorInner({
           onRedo={() => editorRef.current?.redo()}
           onSave={() => persist({ syncTitle: true })}
           onPreview={() => {
+            // Persist the design to the DB first (same path as Save/autosave),
+            // then publish + open the hosted page. The save is fire-and-forget:
+            // /e/[slug] reads the uploaded blob, not the designs row.
+            persist();
             editorRef.current?.exportHTML(eventName).then((slug) => router.push(`/e/${slug}`));
           }}
-          onPreviewLocal={() => editorRef.current?.previewLocal(eventName)}
+          onPreviewLocal={() => {
+            // Local preview reads IndexedDB, but still flush the design to the DB
+            // so a preview always leaves a saved record behind.
+            persist();
+            editorRef.current?.previewLocal(eventName);
+          }}
           teaser={teaser}
           onLogin={() => { window.location.href = "https://vi-up.com/login"; }}
           eventName={eventName}
