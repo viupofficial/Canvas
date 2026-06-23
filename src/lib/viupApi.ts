@@ -72,40 +72,6 @@ async function fetchJson<T = any>(url: string, options: RequestInit = {}): Promi
   return data as T;
 }
 
-// Form-encoded POST (application/x-www-form-urlencoded). The PHP submit
-// endpoints read their fields from $_POST (same contract as the original
-// FormData-based invitations), which is only populated for form-encoded /
-// multipart bodies — a JSON body leaves $_POST empty so the row never inserts.
-// This also stays a CORS "simple request" (no preflight). Response is still JSON.
-async function postForm<T = any>(url: string, fields: Record<string, any>): Promise<T> {
-  const body = new URLSearchParams();
-  for (const [k, v] of Object.entries(fields)) {
-    // Objects/arrays (e.g. json_data) go as a JSON string field — PHP stores the
-    // raw string and/or json_decodes it; primitives go as-is. null → "".
-    body.set(k, v == null ? "" : typeof v === "object" ? JSON.stringify(v) : String(v));
-  }
-
-  const res = await fetch(url, {
-    method: "POST",
-    cache: "no-store",
-    headers: { "Content-Type": "application/x-www-form-urlencoded" },
-    body: body.toString(),
-  });
-
-  let data: any = null;
-  try {
-    data = await res.json();
-  } catch {
-    throw new Error("Invalid JSON response from server");
-  }
-
-  if (!res.ok || data?.success === false) {
-    throw new Error(data?.message || data?.error || "Request failed");
-  }
-
-  return data as T;
-}
-
 // ── User + event ─────────────────────────────────────────────────────────────
 // When eventId is provided, PHP verifies the event belongs to the user and
 // returns both `user` and `event`.
@@ -185,9 +151,10 @@ export async function createProjectEvent({
 }
 
 export async function updateDesign(payload: Record<string, any>): Promise<any> {
-  // Form-encoded so PHP's $_POST is populated (a JSON body leaves it empty and
-  // the design row never updates). json_data is sent as a JSON string field.
-  return postForm(`${API_BASE}/update_design.php`, payload);
+  return fetchJson(`${API_BASE}/update_design.php`, {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
 }
 
 export async function deleteDesign(payload: Record<string, any>): Promise<any> {
@@ -266,15 +233,18 @@ export async function submitCanvasRSVP({
   pax: number;
   packType?: string;
 }): Promise<any> {
-  return postForm(`${API_BASE}/submit_canvas_rsvp.php`, {
-    user_id: Number(userId),
-    event_id: Number(eventId),
-    name: String(name || "").trim(),
-    phone: String(phone || "").trim(),
-    status,
-    pax: Number(pax || 0),
-    pack_type: packType || "",
-    website: "",
+  return fetchJson(`${API_BASE}/submit_canvas_rsvp.php`, {
+    method: "POST",
+    body: JSON.stringify({
+      user_id: Number(userId),
+      event_id: Number(eventId),
+      name: String(name || "").trim(),
+      phone: String(phone || "").trim(),
+      status,
+      pax: Number(pax || 0),
+      pack_type: packType || "",
+      website: "",
+    }),
   });
 }
 
@@ -290,12 +260,15 @@ export async function submitCanvasGuestbook({
   name: string;
   wish: string;
 }): Promise<any> {
-  return postForm(`${API_BASE}/submit_canvas_guestbook.php`, {
-    user_id: Number(userId),
-    event_id: Number(eventId),
-    name: String(name || "").trim(),
-    wish: String(wish || "").trim(),
-    website: "",
+  return fetchJson(`${API_BASE}/submit_canvas_guestbook.php`, {
+    method: "POST",
+    body: JSON.stringify({
+      user_id: Number(userId),
+      event_id: Number(eventId),
+      name: String(name || "").trim(),
+      wish: String(wish || "").trim(),
+      website: "",
+    }),
   });
 }
 

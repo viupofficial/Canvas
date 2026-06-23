@@ -51,11 +51,15 @@ export type ProjectEditorProps = {
 
 export default function ProjectEditor(props: ProjectEditorProps) {
   const { projectId, mode, designId, initialDesignJson } = props;
-  // Event-based flows seed the event data from the DB record instead of
-  // localStorage.
+  // Event-based flows seed the event data from THIS design's DB record, never
+  // from the shared localStorage draft. Even when the record has no eventData
+  // yet (json_data is {} / []), pass an empty object — not null — so the provider
+  // treats the data as DB-owned and skips the global localStorage key. Falling
+  // back to null here made every event read/write the same localStorage draft,
+  // so contacts/calendar/location/rsvp/gift leaked across all events.
   const seededEventData: Partial<EventData> | null =
     mode && mode !== "designer"
-      ? (initialDesignJson?.eventData ?? null)
+      ? (initialDesignJson?.eventData ?? {})
       : null;
 
   // Remount the whole editor when the underlying record changes so the canvas
