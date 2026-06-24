@@ -1455,6 +1455,43 @@ export default function Sidebar({
   const [phoneOpen, setPhoneOpen] = useState(false);
   const [bgColor, setBgColor] = useState<string>('#ffffff');
 
+  // User-uploaded Graphics / Stickers for the Elements tab. Kept per-category in
+  // component state; once a thumbnail is added to the canvas it is serialized
+  // into the design JSON (and saved to the DB) like any other image — so these
+  // do not need their own persistence.
+  const [customAssets, setCustomAssets] = useState<{ Graphics: string[]; Stickers: string[] }>({
+    Graphics: [],
+    Stickers: [],
+  });
+  const elementsFileRef = React.useRef<HTMLInputElement>(null);
+  const uploadTargetRef = React.useRef<'Graphics' | 'Stickers'>('Graphics');
+
+  // Downscale each uploaded image (same helper the Photo gallery uses) and append
+  // it to the category that opened the picker. Sequential chain preserves order.
+  const handleElementUpload = (files: FileList | null) => {
+    if (!files) return;
+    const cat = uploadTargetRef.current;
+    let chain: Promise<unknown> = Promise.resolve();
+    Array.from(files).forEach((file) => {
+      if (!file.type.startsWith('image/')) return;
+      chain = chain
+        .then(() => downscaleImageFile(file))
+        .then((dataUrl) => {
+          setCustomAssets((prev) => ({ ...prev, [cat]: [...prev[cat], dataUrl as string] }));
+        });
+    });
+  };
+
+  const openElementUpload = (cat: 'Graphics' | 'Stickers') => {
+    uploadTargetRef.current = cat;
+    if (elementsFileRef.current) elementsFileRef.current.value = '';
+    elementsFileRef.current?.click();
+  };
+
+  const removeCustomAsset = (cat: 'Graphics' | 'Stickers', index: number) => {
+    setCustomAssets((prev) => ({ ...prev, [cat]: prev[cat].filter((_, j) => j !== index) }));
+  };
+
   // Quick background-color swatch used by the Elements tab's "Color" category.
   // Full background controls (image, adjustments) live in the Background tab.
   const applyBackgroundColor = (color: string) => {
@@ -1578,6 +1615,16 @@ export default function Sidebar({
       )}
       {active === 'elements' ? (
         <div>
+          {/* Shared hidden picker for Graphics / Stickers uploads. The target
+              category is set via uploadTargetRef before .click(). */}
+          <input
+            ref={elementsFileRef}
+            type="file"
+            accept="image/*"
+            multiple
+            className="hidden"
+            onChange={(e) => handleElementUpload(e.target.files)}
+          />
           <div className="flex flex-col gap-4">
             {/* Interactive elements — drop a fully-functional countdown or
                 guestbook onto the current page (click or drag). */}
@@ -1634,7 +1681,7 @@ export default function Sidebar({
                       </label>
                     )}
                   </div>
-                  {cat !== 'Color' && (
+                  {cat === 'Shapes' && (
                     <button
                       onClick={() => setExpanded(prev => ({ ...prev, [cat]: !prev[cat] }))}
                       className="text-[#BBA8A7] text-[10px] font-bold"
@@ -1662,7 +1709,7 @@ export default function Sidebar({
                     ))}
                   </div>
                 )}
-                {cat !== 'Color' && (
+                {cat === 'Shapes' && (
                 <div className="mt-2">
                   <div className="grid grid-cols-3 gap-2">
                     {getItemsForCategory(cat).slice(0, expanded[cat] ? undefined : 3).map((item, i) => (
@@ -1671,35 +1718,84 @@ export default function Sidebar({
                         draggable
                         onDragStart={(e) => {
                           const payload = JSON.stringify({
-                            type: cat === 'Shapes' ? 'shape' : 'item',
-                            shape: cat === 'Shapes' ? String(item).toLowerCase() : undefined,
+                            type: 'shape',
+                            shape: String(item).toLowerCase(),
                             label: String(item),
                           });
                           try { e.dataTransfer.setData('application/json', payload); e.dataTransfer.effectAllowed = 'copy'; } catch (err) { }
                         }}
                         onClick={() => {
-                          if (cat === 'Shapes') {
-                            if (editorRef?.current?.addShape) editorRef.current.addShape(String(item).toLowerCase());
-                          } else {
-                            console.log('Add item to canvas (placeholder):', item);
-                          }
+                          if (editorRef?.current?.addShape) editorRef.current.addShape(String(item).toLowerCase());
                         }}
                         title={String(item)}
                         aria-label={String(item)}
                         className="h-20 bg-gray-100 rounded flex items-center justify-center text-xs text-gray-600 hover:bg-gray-200"
                       >
-                        {cat === 'Shapes' ? (
-                          <div className="flex items-center justify-center w-full h-full">
-                            {renderShapeIcon(String(item))}
-                          </div>
-                        ) : (
-                          <div className="text-xs">{item}</div>
-                        )}
+                        <div className="flex items-center justify-center w-full h-full">
+                          {renderShapeIcon(String(item))}
+                        </div>
                       </button>
                     ))}
                   </div>
                 </div>
                 )}
+
+                {/* Graphics / Stickers — user uploads their own images. Each is
+                    downscaled then added to the canvas (double-click or drag),
+                    after which it persists with the design like any other image. */}
+                {(cat === 'Graphics' || cat === 'Stickers') && (() => {
+                  const key = cat as 'Graphics' | 'Stickers';
+                  const assets = customAssets[key];
+                  const noun = cat === 'Graphics' ? 'Graphic' : 'Sticker';
+                  return (
+                    <div className="mt-2">
+                      <button
+                        type="button"
+                        onClick={() => openElementUpload(key)}
+                        className="w-full px-3 py-2 bg-gray-100 rounded text-sm font-medium hover:bg-gray-200 transition mb-2"
+                      >
+                        + Upload {noun}
+                      </button>
+                      {assets.length === 0 ? (
+                        <div className="text-[11px] text-gray-400 text-center py-2">
+                          Upload your own {noun.toLowerCase()}s to use them here.
+                        </div>
+                      ) : (
+                        <>
+                          <div className="text-[11px] text-gray-400 text-center mb-2">
+                            Double-click to add to canvas · drag onto the page.
+                          </div>
+                          <div className="grid grid-cols-3 gap-2">
+                            {assets.map((src, i) => (
+                              <div key={`${key}-${i}`} className="relative group">
+                                <img
+                                  src={src}
+                                  alt={`${noun}-${i}`}
+                                  draggable
+                                  onDoubleClick={() => editorRef?.current?.addImageFromUrl?.(src)}
+                                  onDragStart={(e) => {
+                                    const payload = JSON.stringify({ type: 'image-url', url: src });
+                                    try { e.dataTransfer.setData('application/json', payload); e.dataTransfer.effectAllowed = 'copy'; } catch (err) { }
+                                  }}
+                                  title="Double-click to add to canvas · drag onto the page"
+                                  className="w-full h-20 object-contain rounded border bg-gray-50 p-1 cursor-pointer hover:opacity-80 transition"
+                                />
+                                <button
+                                  type="button"
+                                  onClick={() => removeCustomAsset(key, i)}
+                                  aria-label={`Remove ${noun}`}
+                                  className="absolute -top-1.5 -right-1.5 h-5 w-5 rounded-full bg-white border border-gray-300 text-gray-500 text-[12px] leading-none opacity-0 group-hover:opacity-100 transition flex items-center justify-center hover:bg-gray-100"
+                                >
+                                  ×
+                                </button>
+                              </div>
+                            ))}
+                          </div>
+                        </>
+                      )}
+                    </div>
+                  );
+                })()}
               </div>
             ))}
           </div>
