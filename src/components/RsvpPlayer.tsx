@@ -609,46 +609,6 @@ export default function RsvpPlayer({ pages, envelope, musicUrl, borderUrl, event
                the open animation behaves identically at any cover scale. */
             .env-move-up   { transform: translateY(-820px) !important; opacity: 0 !important; }
             .env-move-down { transform: translateY(820px)  !important; opacity: 0 !important; }
-
-            .env-head {
-              position: absolute !important;
-              left: 0 !important;
-              top: -80px !important;
-              width: 100% !important;
-              height: auto !important;
-              transform-origin: left top;
-              z-index: 3;
-              pointer-events: none;
-            }
-
-            .env-seal {
-              position: absolute !important;
-              left: 140px !important;
-              top: 205px !important;
-              width: 120px !important;
-              height: 120px !important;
-              transform-origin: left top;
-              z-index: 4;
-              cursor: pointer;
-            }
-
-            .env-body {
-              position: absolute !important;
-              left: 0 !important;
-              bottom: -130px !important;
-              width: 110% !important;
-              height: 150% !important;
-              transform-origin: left bottom;
-              z-index: 2;
-              pointer-events: none;
-            }
-
-            .env-press {
-              left: 163.608px !important;
-              top: 400px !important;
-              width: 52.7832px !important;
-              height: 93.79px !important;
-            }
           `}</style>
 
           <div className={`env-cover${animating ? " env-fading" : ""}`}>
@@ -713,7 +673,7 @@ export default function RsvpPlayer({ pages, envelope, musicUrl, borderUrl, event
               )}
 
               <span
-                className={`env-part env-press${animating ? " env-move-down" : ""}`}
+                className={`env-part${animating ? " env-move-down" : ""}`}
                 style={{
                   ...posStyle(envelope.pressPos),
                   zIndex: 5,
@@ -732,22 +692,25 @@ export default function RsvpPlayer({ pages, envelope, musicUrl, borderUrl, event
               </span>
 
               <img
-                className={`env-part env-head${animating ? " env-move-up" : ""}`}
+                className={`env-part${animating ? " env-move-up" : ""}`}
                 src={envelope.headSrc}
                 alt="envelope head"
+                style={{ ...posStyle(envelope.headPos), zIndex: 3, pointerEvents: "none" }}
               />
 
               <img
-                className={`env-part env-seal${animating ? " env-move-up" : ""}`}
+                className={`env-part${animating ? " env-move-up" : ""}`}
                 src={envelope.sealSrc}
                 alt="seal"
                 onClick={handleSealClick}
+                style={{ ...posStyle(envelope.sealPos), zIndex: 4, cursor: "pointer" }}
               />
 
               <img
-                className={`env-part env-body${animating ? " env-move-down" : ""}`}
+                className={`env-part${animating ? " env-move-down" : ""}`}
                 src={envelope.bodySrc}
                 alt="envelope body"
+                style={{ ...posStyle(envelope.bodyPos), zIndex: 2, pointerEvents: "none" }}
               />
             </div>
           </div>

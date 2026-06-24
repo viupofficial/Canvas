@@ -33,6 +33,61 @@ const DEFAULT_FILTERS: FilterValues = {
 const PREVIEW_W = 480;
 const PREVIEW_H = 380;
 
+// Texture presets are painted onto a square offscreen canvas (white background +
+// dark marks), then blended into the image with a "multiply" filter — so the
+// texture only darkens existing pixels and transparent areas stay transparent.
+// The mark opacity is the texture's intensity, baked in so the effect works even
+// if the Fabric build's BlendImage lacks an alpha option.
+const TEXTURE_SIZE = 512;
+const TEXTURE_PRESETS = ["lines", "grid", "dots", "noise"] as const;
+type TexturePreset = (typeof TEXTURE_PRESETS)[number] | "custom";
+
+function paintPreset(ctx: CanvasRenderingContext2D, id: string, alpha: number) {
+  const S = TEXTURE_SIZE;
+  ctx.save();
+  ctx.globalAlpha = alpha;
+  ctx.strokeStyle = "#332626";
+  ctx.fillStyle = "#332626";
+  if (id === "lines") {
+    ctx.lineWidth = 2;
+    for (let x = -S; x < S; x += 12) {
+      ctx.beginPath();
+      ctx.moveTo(x, S);
+      ctx.lineTo(x + S, 0);
+      ctx.stroke();
+    }
+  } else if (id === "grid") {
+    ctx.lineWidth = 1.5;
+    for (let x = 0; x <= S; x += 16) {
+      ctx.beginPath();
+      ctx.moveTo(x, 0);
+      ctx.lineTo(x, S);
+      ctx.stroke();
+    }
+    for (let y = 0; y <= S; y += 16) {
+      ctx.beginPath();
+      ctx.moveTo(0, y);
+      ctx.lineTo(S, y);
+      ctx.stroke();
+    }
+  } else if (id === "dots") {
+    for (let y = 8; y < S; y += 18) {
+      for (let x = 8; x < S; x += 18) {
+        ctx.beginPath();
+        ctx.arc(x, y, 2.2, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+  } else if (id === "noise") {
+    const count = Math.floor(S * S * 0.06);
+    for (let i = 0; i < count; i++) {
+      ctx.globalAlpha = alpha * Math.random();
+      ctx.fillRect(Math.random() * S, Math.random() * S, 1.6, 1.6);
+    }
+  }
+  ctx.restore();
+}
+
 function SliderRow(props: {
   label: string;
   value: number;
@@ -109,6 +164,83 @@ export default function ImageEditorModal({
   const [filterValues, setFilterValues] = useState<FilterValues>(DEFAULT_FILTERS);
   const [cropValues, setCropValues] = useState<CropValues>({ active: false });
   const [busy, setBusy] = useState(false);
+
+  // ── Color (tint) ────────────────────────────────────────────────────────────
+  const [tintColor, setTintColor] = useState<string>("#8c6b6b");
+  const [tintAlpha, setTintAlpha] = useState<number>(0); // 0 = off
+
+  // ── Texture ──────────────────────────────────────────────────────────────────
+  const [textureId, setTextureId] = useState<TexturePreset | null>(null);
+  const [textureAlpha, setTextureAlpha] = useState<number>(0.4);
+  const customTextureSrcRef = useRef<string | null>(null);
+  const textureImgRef = useRef<any>(null);
+  const [textureNonce, setTextureNonce] = useState(0); // bumps when textureImgRef changes
+  const textureFileRef = useRef<HTMLInputElement>(null);
+
+  // Build (or clear) the blend texture whenever the selection or intensity
+  // changes, then bump a nonce so the live-filter effect re-applies it.
+  const buildTexture = useCallback(async () => {
+    const fabric = fabricModuleRef.current;
+    if (!fabric) return;
+    if (!textureId || textureAlpha <= 0) {
+      textureImgRef.current = null;
+      setTextureNonce((n) => n + 1);
+      return;
+    }
+    const off = document.createElement("canvas");
+    off.width = TEXTURE_SIZE;
+    off.height = TEXTURE_SIZE;
+    const ctx = off.getContext("2d");
+    if (!ctx) return;
+    ctx.fillStyle = "#ffffff";
+    ctx.fillRect(0, 0, TEXTURE_SIZE, TEXTURE_SIZE);
+
+    if (textureId === "custom" && customTextureSrcRef.current) {
+      try {
+        const im = new Image();
+        im.crossOrigin = "anonymous";
+        await new Promise<void>((resolve, reject) => {
+          im.onload = () => resolve();
+          im.onerror = reject;
+          im.src = customTextureSrcRef.current as string;
+        });
+        const pat = ctx.createPattern(im, "repeat");
+        if (pat) {
+          ctx.globalAlpha = textureAlpha;
+          ctx.fillStyle = pat;
+          ctx.fillRect(0, 0, TEXTURE_SIZE, TEXTURE_SIZE);
+          ctx.globalAlpha = 1;
+        }
+      } catch {
+        /* bad upload — leave texture white (no effect) */
+      }
+    } else if (textureId !== "custom") {
+      paintPreset(ctx, textureId, textureAlpha);
+    }
+
+    try {
+      textureImgRef.current = await fabric.Image.fromURL(off.toDataURL("image/png"));
+    } catch {
+      textureImgRef.current = null;
+    }
+    setTextureNonce((n) => n + 1);
+  }, [textureId, textureAlpha]);
+
+  useEffect(() => {
+    if (!ready) return;
+    buildTexture();
+  }, [buildTexture, ready]);
+
+  const handleTextureUpload = (file: File | null | undefined) => {
+    if (!file || !file.type.startsWith("image/")) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      customTextureSrcRef.current = String(reader.result || "");
+      setTextureId("custom");
+      if (textureAlpha <= 0) setTextureAlpha(0.4);
+    };
+    reader.readAsDataURL(file);
+  };
 
   // ── Init the preview canvas and load the source image ──────────────────────
   useEffect(() => {
@@ -196,6 +328,14 @@ export default function ImageEditorModal({
     if (filterValues.blur !== 0) filters.push(new F.Blur({ blur: filterValues.blur }));
     if (filterValues.grayscale) filters.push(new F.Grayscale());
     if (filterValues.invert) filters.push(new F.Invert());
+    // Color tint — blends the chosen colour into the image by tintAlpha.
+    if (tintAlpha > 0 && F.BlendColor) {
+      filters.push(new F.BlendColor({ color: tintColor, mode: "tint", alpha: tintAlpha }));
+    }
+    // Texture — multiply the prepared texture onto the image (preserves alpha).
+    if (textureImgRef.current && F.BlendImage) {
+      filters.push(new F.BlendImage({ image: textureImgRef.current, mode: "multiply" }));
+    }
 
     img.filters = filters;
     try {
@@ -205,7 +345,7 @@ export default function ImageEditorModal({
     }
     img.set("opacity", filterValues.opacity);
     canvas.requestRenderAll();
-  }, [filterValues, ready]);
+  }, [filterValues, ready, tintColor, tintAlpha, textureNonce]);
 
   const toggleCrop = useCallback((next: boolean) => {
     const fabric = fabricModuleRef.current;
@@ -251,6 +391,13 @@ export default function ImageEditorModal({
 
   const handleReset = useCallback(() => {
     setFilterValues(DEFAULT_FILTERS);
+    setTintAlpha(0);
+    setTintColor("#8c6b6b");
+    setTextureId(null);
+    setTextureAlpha(0.4);
+    customTextureSrcRef.current = null;
+    textureImgRef.current = null;
+    setTextureNonce((n) => n + 1);
     toggleCrop(false);
   }, [toggleCrop]);
 
@@ -426,6 +573,103 @@ export default function ImageEditorModal({
                 value={filterValues.invert}
                 onChange={(v) => setFilterValues((p) => ({ ...p, invert: v }))}
               />
+            </div>
+
+            {/* Color tint */}
+            <div className="pt-1 border-t border-[#EDE2DE]">
+              <div className="flex items-center justify-between mb-2 mt-2">
+                <label className="text-[11px] text-[#7D5B5980] font-[600]">Color</label>
+                <label
+                  className="relative inline-flex items-center justify-center w-6 h-6 rounded border border-[#EDE2DE] cursor-pointer overflow-hidden"
+                  title="Pick tint color"
+                >
+                  <span aria-hidden className="absolute inset-0" style={{ backgroundColor: tintColor }} />
+                  <input
+                    type="color"
+                    value={tintColor}
+                    onChange={(e) => {
+                      setTintColor(e.target.value);
+                      if (tintAlpha <= 0) setTintAlpha(0.5);
+                    }}
+                    className="absolute inset-0 opacity-0 cursor-pointer"
+                  />
+                </label>
+              </div>
+              <SliderRow
+                label="Tint strength"
+                value={tintAlpha}
+                min={0}
+                max={1}
+                step={0.01}
+                format={(v) => `${Math.round(v * 100)}%`}
+                onChange={(v) => setTintAlpha(v)}
+              />
+            </div>
+
+            {/* Texture */}
+            <div className="pt-2 border-t border-[#EDE2DE]">
+              <label className="text-[11px] text-[#7D5B5980] font-[600]">Texture</label>
+              <input
+                ref={textureFileRef}
+                type="file"
+                accept="image/*"
+                className="hidden"
+                onChange={(e) => handleTextureUpload(e.target.files?.[0])}
+              />
+              <div className="grid grid-cols-3 gap-1.5 mt-2">
+                <button
+                  type="button"
+                  onClick={() => setTextureId(null)}
+                  className={`px-2 py-1.5 rounded-[8px] text-[11px] font-[600] border capitalize transition-colors ${
+                    textureId === null
+                      ? "bg-[#8C6B6B] text-white border-[#8C6B6B]"
+                      : "bg-[#F2E8E6B2] text-[#7D5B59] border-[#EDE2DE] hover:bg-[#EDE2DE]"
+                  }`}
+                >
+                  None
+                </button>
+                {TEXTURE_PRESETS.map((id) => (
+                  <button
+                    key={id}
+                    type="button"
+                    onClick={() => {
+                      setTextureId(id);
+                      if (textureAlpha <= 0) setTextureAlpha(0.4);
+                    }}
+                    className={`px-2 py-1.5 rounded-[8px] text-[11px] font-[600] border capitalize transition-colors ${
+                      textureId === id
+                        ? "bg-[#8C6B6B] text-white border-[#8C6B6B]"
+                        : "bg-[#F2E8E6B2] text-[#7D5B59] border-[#EDE2DE] hover:bg-[#EDE2DE]"
+                    }`}
+                  >
+                    {id}
+                  </button>
+                ))}
+                <button
+                  type="button"
+                  onClick={() => textureFileRef.current?.click()}
+                  className={`px-2 py-1.5 rounded-[8px] text-[11px] font-[600] border transition-colors ${
+                    textureId === "custom"
+                      ? "bg-[#8C6B6B] text-white border-[#8C6B6B]"
+                      : "bg-[#F2E8E6B2] text-[#7D5B59] border-[#EDE2DE] hover:bg-[#EDE2DE]"
+                  }`}
+                >
+                  Upload
+                </button>
+              </div>
+              {textureId && (
+                <div className="mt-2">
+                  <SliderRow
+                    label="Texture strength"
+                    value={textureAlpha}
+                    min={0}
+                    max={1}
+                    step={0.01}
+                    format={(v) => `${Math.round(v * 100)}%`}
+                    onChange={(v) => setTextureAlpha(v)}
+                  />
+                </div>
+              )}
             </div>
           </div>
         </div>

@@ -164,6 +164,30 @@ export async function deleteDesign(payload: Record<string, any>): Promise<any> {
   });
 }
 
+// Event-bound deletion: removes the WHOLE project — events row, design row(s),
+// rsvp + guestbook rows, the user_event slug and safe exported files — via the
+// shared PHP endpoint that MyEvent also calls, keeping both in sync. Use this
+// (NOT delete_design.php) whenever a design has an event_id, or the MyEvent card
+// is left orphaned. Free designs (no event_id) must keep using deleteDesign.
+export async function deleteProjectEvent({
+  userId,
+  eventId,
+  designId,
+}: {
+  userId: string | number;
+  eventId: string | number;
+  designId?: string | number | null;
+}): Promise<any> {
+  return fetchJson(`${API_BASE}/delete_project_event.php`, {
+    method: "POST",
+    body: JSON.stringify({
+      user_id: Number(userId),
+      event_id: Number(eventId),
+      design_id: designId ? Number(designId) : null,
+    }),
+  });
+}
+
 // ── Event title ───────────────────────────────────────────────────────────────
 // Updates events.event_name (the MyEvent card title) for ONE event only:
 // PHP runs WHERE event_id = ? AND user_id = ?, so BOTH ids are required. Only

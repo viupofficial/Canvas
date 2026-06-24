@@ -3164,12 +3164,12 @@ const applyBgToOtherPages = (patch: { backgroundImage?: any; backgroundColor?: a
       />
 
       <div ref={containerRef} className="flex-grow border border-dashed border-[#282828] rounded overflow-hidden flex flex-col min-h-0 min-w-0">
-        <div className="flex justify-center items-center p-4 bg-[#282828]">
+        <div className="flex justify-center items-center p-4 bg-[#FBF7F6]">
           {!isLoaded && <span className="text-neutral-200">Initializing canvas...</span>}
         </div>
 
       <div
-  className={`relative flex justify-center items-center overflow-hidden flex-1 min-h-0 min-w-0 w-full bg-[#282828] ${
+  className={`relative flex justify-center items-center overflow-hidden flex-1 min-h-0 min-w-0 w-full bg-[#FBF7F6] ${
     isDragOver ? 'ring-2 ring-dashed ring-brand-accent' : ''
   }`}
   onDragOver={onDragOver}

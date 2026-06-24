@@ -12,6 +12,7 @@ import {
   createProjectEvent,
   updateDesign,
   deleteDesign,
+  deleteProjectEvent,
   extractDesigns,
   extractDesign,
   num,
@@ -143,16 +144,37 @@ export default function DesignerDashboard({ user }: { user: CanvasUser }) {
     }
   };
 
-  const handleDelete = async (id: number, name: string) => {
+  const handleDelete = async (p: ViupDesign) => {
     setMenuId(null);
-    if (window.confirm(`Delete "${name}"? This cannot be undone.`)) {
-      try {
-        await deleteDesign({ design_id: num(id), user_id: num(userRef.current.id) });
-      } catch (e) {
-        console.error("[dashboard] failed to delete design", e);
+    // Event-bound designs must be deleted through the shared PHP endpoint so the
+    // whole project (event, design, rsvp, guestbook, slug, files) goes — and the
+    // MyEvent card disappears too. Free designs use the design-only endpoint.
+    const eventId = num(p.event_id);
+    const isEventBound = eventId != null;
+    const ok = window.confirm(
+      isEventBound
+        ? `Delete "${p.name}"? This will remove the event, canvas design, RSVP, guestbook, and exported files. This cannot be undone.`
+        : `Delete "${p.name}"? This cannot be undone.`,
+    );
+    if (!ok) return;
+
+    try {
+      if (isEventBound) {
+        await deleteProjectEvent({
+          userId: userRef.current.id,
+          eventId,
+          designId: p.id,
+        });
+      } else {
+        await deleteDesign({ design_id: num(p.id), user_id: num(userRef.current.id) });
       }
-      refresh();
+      // Optimistically drop the card, then refetch to stay in sync with PHP.
+      setProjects((prev) => prev.filter((item) => item.id !== p.id));
+    } catch (e) {
+      console.error("[dashboard] failed to delete project", e);
+      alert((e as Error)?.message || "Failed to delete project.");
     }
+    refresh();
   };
 
   const startRename = (p: ViupDesign) => {
@@ -314,7 +336,7 @@ export default function DesignerDashboard({ user }: { user: CanvasUser }) {
                       <Copy size={14} className="text-neutral-500" /> Duplicate
                     </button>
                     <button
-                      onClick={() => handleDelete(p.id, p.name)}
+                      onClick={() => handleDelete(p)}
                       className="w-full flex items-center gap-2.5 px-3 py-1.5 hover:bg-red-50 text-red-600"
                     >
                       <Trash2 size={14} /> Delete
