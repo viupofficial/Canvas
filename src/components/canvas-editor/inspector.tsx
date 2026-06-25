@@ -359,6 +359,22 @@ export default function Inspector(props: {
                 </svg>
               </button>
             </div>
+
+            {/* Angle / Rotation */}
+            <div>
+              <label className={labelCls}>Angle</label>
+              <div className="flex items-center gap-2">
+                <input
+                  className={inputCls + " flex-1"}
+                  type="number"
+                  min={0}
+                  max={360}
+                  value={Math.round(selected.angle ?? 0)}
+                  onChange={(e) => updateSelected({ angle: Number(e.target.value) % 360 })}
+                />
+                <span className="text-[13px] text-[#B98587] font-[600]">°</span>
+              </div>
+            </div>
           </div>
 
           {/* ── Typography ─────────────────────────────────────── */}

@@ -1480,6 +1480,32 @@ const [currentPage, setCurrentPage] = useState(0);
         canvas.on('object:rotating', () => { onSelectionChange(); updateOverlayFromActive(); });
         canvas.on('object:modified', () => { onSelectionChange(); updateOverlayFromActive(); });
 
+        // Double-click on a textbox: auto-fit the box width to the text content.
+        canvas.on('mouse:dblclick', (opt: any) => {
+          const obj = opt?.target;
+          if (!obj) return;
+          const t = (obj.type ?? '').toLowerCase();
+          if (t !== 'textbox' && t !== 'text' && t !== 'i-text') return;
+          const ctx = (canvas as any).getContext?.() ?? (canvas as any).contextContainer;
+          if (!ctx) return;
+          ctx.font = `${obj.fontWeight ?? 'normal'} ${obj.fontSize ?? 24}px ${obj.fontFamily ?? 'Arial'}`;
+          const lines = (obj.text ?? '').split('\n');
+          let maxW = 0;
+          for (const line of lines) {
+            const w = ctx.measureText(line).width;
+            if (w > maxW) maxW = w;
+          }
+          const padding = (obj.padding ?? 0) * 2;
+          const newWidth = Math.ceil(maxW) + padding + 4;
+          obj.set({ width: newWidth, scaleX: 1 });
+          obj.initDimensions?.();
+          obj.setCoords?.();
+          canvas.requestRenderAll();
+          schedulePush();
+          updateOverlayFromActive();
+          onSelectionChange();
+        });
+
         // Alt + drag to duplicate (Figma-style): clone stays at origin, active object is dragged
         let altCloneDone = false;
         canvas.on('object:moving', (opt: any) => {
@@ -1721,9 +1747,66 @@ const [currentPage, setCurrentPage] = useState(0);
             return;
           }
 
+          if (e.ctrlKey && (e.key === 'v' || e.key === 'V')) {
+            e.preventDefault();
+            if (!clipboardRef.current) return;
+            clipboardRef.current.clone().then((pasted: any) => {
+              pasted.set({ left: (pasted.left ?? 0) + 20, top: (pasted.top ?? 0) + 20 });
+              c.add(pasted);
+              c.setActiveObject(pasted);
+              c.requestRenderAll();
+              schedulePush();
+              updateOverlayFromActive();
+              if (typeof props.onSelectionChange === 'function') {
+                props.onSelectionChange(pasted.toObject([...SELECTION_PROPS]));
+              }
+              clipboardRef.current = pasted;
+            });
+            return;
+          }
+
           const active = c.getActiveObject();
           if (!active) return;
           if ((active as any).isEditing) return;
+
+          if (e.ctrlKey && (e.key === 'c' || e.key === 'C') && !e.shiftKey) {
+            e.preventDefault();
+            active.clone().then((cloned: any) => {
+              clipboardRef.current = cloned;
+            });
+            return;
+          }
+
+          if (e.ctrlKey && (e.key === 'x' || e.key === 'X')) {
+            e.preventDefault();
+            active.clone().then((cloned: any) => {
+              clipboardRef.current = cloned;
+              c.remove(active);
+              c.discardActiveObject();
+              c.requestRenderAll();
+              schedulePush();
+              setOverlay(null);
+              if (typeof props.onSelectionChange === 'function') props.onSelectionChange(null);
+            });
+            return;
+          }
+
+          if (e.ctrlKey && (e.key === 'd' || e.key === 'D')) {
+            e.preventDefault();
+            active.clone().then((cloned: any) => {
+              cloned.set({ left: (cloned.left ?? 0) + 20, top: (cloned.top ?? 0) + 20 });
+              c.add(cloned);
+              c.setActiveObject(cloned);
+              c.requestRenderAll();
+              schedulePush();
+              updateOverlayFromActive();
+              if (typeof props.onSelectionChange === 'function') {
+                props.onSelectionChange(cloned.toObject([...SELECTION_PROPS]));
+              }
+            });
+            return;
+          }
+
           if (e.key === 'Delete' || e.key === 'Backspace') {
             e.preventDefault();
             c.remove(active);
@@ -1732,6 +1815,50 @@ const [currentPage, setCurrentPage] = useState(0);
             schedulePush();
             setOverlay(null);
             if (typeof props.onSelectionChange === 'function') props.onSelectionChange(null);
+            return;
+          }
+
+          const step = e.shiftKey ? 10 : 1;
+          if (e.key === 'ArrowLeft') {
+            e.preventDefault();
+            active.set('left', (active.left ?? 0) - step);
+            active.setCoords?.();
+            c.requestRenderAll();
+            schedulePush();
+            updateOverlayFromActive();
+            if (typeof props.onSelectionChange === 'function') {
+              props.onSelectionChange(active.toObject([...SELECTION_PROPS]));
+            }
+          } else if (e.key === 'ArrowRight') {
+            e.preventDefault();
+            active.set('left', (active.left ?? 0) + step);
+            active.setCoords?.();
+            c.requestRenderAll();
+            schedulePush();
+            updateOverlayFromActive();
+            if (typeof props.onSelectionChange === 'function') {
+              props.onSelectionChange(active.toObject([...SELECTION_PROPS]));
+            }
+          } else if (e.key === 'ArrowUp') {
+            e.preventDefault();
+            active.set('top', (active.top ?? 0) - step);
+            active.setCoords?.();
+            c.requestRenderAll();
+            schedulePush();
+            updateOverlayFromActive();
+            if (typeof props.onSelectionChange === 'function') {
+              props.onSelectionChange(active.toObject([...SELECTION_PROPS]));
+            }
+          } else if (e.key === 'ArrowDown') {
+            e.preventDefault();
+            active.set('top', (active.top ?? 0) + step);
+            active.setCoords?.();
+            c.requestRenderAll();
+            schedulePush();
+            updateOverlayFromActive();
+            if (typeof props.onSelectionChange === 'function') {
+              props.onSelectionChange(active.toObject([...SELECTION_PROPS]));
+            }
           }
         };
         window.addEventListener('keydown', handleKeyDown);
