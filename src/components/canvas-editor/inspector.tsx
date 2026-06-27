@@ -1,5 +1,13 @@
 // updated
 import React from "react";
+import {
+  AlignStartVertical,
+  AlignCenterVertical,
+  AlignEndVertical,
+  AlignStartHorizontal,
+  AlignCenterHorizontal,
+  AlignEndHorizontal,
+} from "lucide-react";
 import { FONT_GROUPS } from "@/src/lib/fonts";
 import LayersPanel from "@/src/components/canvas-editor/LayersPanel";
 import ArtboardPanel from "@/src/components/canvas-editor/ArtboardPanel";
@@ -279,6 +287,34 @@ export default function Inspector(props: {
           {/* ── Position ───────────────────────────────────────── */}
           <div className={sectionCls}>
             <h5 className="font-[600] text-[13px] text-[#7D5B59]">Position</h5>
+
+            {/* Align to frame (object alignment — distinct from text paragraph
+                align in Typography). Moves the selection to an edge/center of the
+                active canvas/artboard via the editor's scene-coordinate logic. */}
+            <div>
+              <label className={labelCls}>Align to frame</label>
+              <div className="flex gap-1">
+                {([
+                  { key: "left", title: "Align left", Icon: AlignStartVertical },
+                  { key: "horizontal-center", title: "Align horizontal center", Icon: AlignCenterVertical },
+                  { key: "right", title: "Align right", Icon: AlignEndVertical },
+                  { key: "top", title: "Align top", Icon: AlignStartHorizontal },
+                  { key: "vertical-center", title: "Align vertical center", Icon: AlignCenterHorizontal },
+                  { key: "bottom", title: "Align bottom", Icon: AlignEndHorizontal },
+                ] as const).map(({ key, title, Icon }) => (
+                  <button
+                    key={key}
+                    type="button"
+                    title={title}
+                    aria-label={title}
+                    onClick={() => editorRef?.current?.alignSelected?.(key)}
+                    className="flex-1 py-[6px] rounded-[8px] border border-[#EDE2DE] bg-[#F2E8E6B2] text-[#7D5B59] hover:bg-[#EDE2DE] flex items-center justify-center transition-colors"
+                  >
+                    <Icon size={15} />
+                  </button>
+                ))}
+              </div>
+            </div>
 
             <div className="grid grid-cols-2 gap-3">
               <div>

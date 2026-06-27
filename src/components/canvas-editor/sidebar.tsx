@@ -1442,6 +1442,7 @@ export default function Sidebar({
   isPhonePreview = false,
   onEditImage,
   bgReadNonce,
+  showRsvpAndMoneyGift = true,
 }: {
   editorRef?: React.RefObject<EditorHandle | null>;
   isPhonePreview?: boolean;
@@ -1449,6 +1450,9 @@ export default function Sidebar({
   // Bumped by the parent whenever the active page reloads, so the Background
   // panel can re-read and display that page's background.
   bgReadNonce?: number;
+  // Package gating (Basic / package_id === 1 hides RSVP + Money Gift). Defaults
+  // to true so non-event usages (free designer canvas) keep both tools visible.
+  showRsvpAndMoneyGift?: boolean;
 }) {
   const [active, setActive] = useState<Tab | null>(null);
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
@@ -1583,7 +1587,9 @@ export default function Sidebar({
   const iconNav = (
     <aside className="bg-brand-cream transition-all duration-200 w-30 h-full overflow-y-auto shrink-0">
       <nav className="flex flex-col gap-2 pt-4">
-        {SIDEBAR_ITEMS.map((it) => {
+        {SIDEBAR_ITEMS.filter(
+          (it) => showRsvpAndMoneyGift || (it.id !== 'rsvp' && it.id !== 'money'),
+        ).map((it) => {
           const isLocked = false; // Premium lock disabled
           return (
             <button

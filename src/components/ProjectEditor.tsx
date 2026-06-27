@@ -358,6 +358,12 @@ function ProjectEditorInner({
     closeImageEditor();
   };
 
+  // Package gating for the sidebar UI only. Package 1 (Basic) hides the RSVP and
+  // Money Gift tools; every other tier — and null/undefined package_id from old
+  // events or an API build that predates the column — keeps both visible. This is
+  // purely cosmetic: it never touches saved canvas JSON or the RSVP/gift APIs.
+  const showRsvpAndMoneyGift = Number(event?.package_id) !== 1;
+
   if (!loaded) {
     return (
       <main className="h-screen flex items-center justify-center bg-brand-cream text-[#7D5B59]">
@@ -431,6 +437,7 @@ function ProjectEditorInner({
             isPhonePreview={previewMode === "phone"}
             onEditImage={handleSidebarEditImage}
             bgReadNonce={bgReadNonce}
+            showRsvpAndMoneyGift={showRsvpAndMoneyGift}
           />
 
           <div className="flex-1 min-w-0">

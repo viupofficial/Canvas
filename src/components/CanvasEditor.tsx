@@ -9,7 +9,7 @@ import React, {
   useState,
 } from "react";
 import type { Canvas as FabricCanvas } from "fabric";
-import { Copy, Trash, Trash2, ClipboardPaste, ArrowUpToLine, ArrowDownToLine, Eye, EyeOff, X, Pencil, Crop, ImageUp, ArrowUp, ArrowDown, Type, Layers, ChevronDown } from "lucide-react";
+import { Copy, Trash, Trash2, ClipboardPaste, ArrowUpToLine, ArrowDownToLine, Eye, EyeOff, X, Pencil, Crop, ImageUp, ArrowUp, ArrowDown, Type, Layers, ChevronDown, Group as GroupIcon, Ungroup as UngroupIcon } from "lucide-react";
 import EventFooter from "../components/EventFooter";
 import MusicPlayer from "../components/MusicPlayer";
 import '../app/globals.css'
@@ -140,6 +140,11 @@ export type EditorHandle = {
   // for fewer than 3 selected. Wire these to toolbar buttons if desired.
   distributeHorizontally: () => void;
   distributeVertically: () => void;
+  // Align the current selection to the active frame/artboard (object alignment,
+  // not text paragraph align). Scene-coordinate based, so zoom-safe.
+  alignSelected: (
+    alignment: 'left' | 'horizontal-center' | 'right' | 'top' | 'vertical-center' | 'bottom'
+  ) => void;
 }
 const MAX_HISTORY = 50;
 const HISTORY_DEBOUNCE_MS = 120;
@@ -306,10 +311,14 @@ const [currentPage, setCurrentPage] = useState(0);
   // Rendered canvas box relative to its wrap (position, display size, fit-scale).
   // Used to anchor the floating event footer to the scaled canvas.
   const [canvasBox, setCanvasBox] = useState<{ left: number; top: number; width: number; height: number; scale: number } | null>(null);
+  // The floating EventFooter overlaps the bottom of the artboard. We measure it
+  // at align time (see alignSelectedToFrame) so object alignment can reserve that
+  // band and keep elements above the footer visible.
+  const footerScaleDivRef = useRef<HTMLDivElement | null>(null);
   const [isDragOver, setIsDragOver] = useState(false);
   const [zoom, setZoom] = useState(1);
   const zoomRef = useRef(1);
-  const [contextMenu, setContextMenu] = useState<{ x: number; y: number; hidden: boolean; isImage: boolean } | null>(null);
+  const [contextMenu, setContextMenu] = useState<{ x: number; y: number; hidden: boolean; isImage: boolean; canGroup: boolean; isGroup: boolean } | null>(null);
   const clipboardRef = useRef<any>(null);
   // The image object currently being edited/replaced. Held in a ref so the edit
   // survives selection changes while the editor modal is open.
@@ -664,6 +673,86 @@ const [currentPage, setCurrentPage] = useState(0);
     saveCurrentPage(currentPageRef.current);
   }
 
+  // Align the current selection to the active frame/artboard (Figma-style object
+  // alignment — distinct from text paragraph align). The frame is the canvas
+  // backstore (top-left 0,0 → canvas.width × canvas.height) in SCENE coordinates,
+  // so this is independent of zoom / CSS scaling. getBoundingRect() gives the
+  // selection's axis-aligned box in the same scene space (accounts for rotation,
+  // scale, and origin), and we only translate left/top — never resize.
+  //
+  // Single object / group → translate that object. Multi-selection → translate
+  // every child by the same delta (preserving their relative spacing), following
+  // the same discard→move→re-select pattern as distributeSelection so positions
+  // serialize correctly. Locked elements are skipped; nothing selected = no-op.
+  function alignSelectedToFrame(
+    alignment: 'left' | 'horizontal-center' | 'right' | 'top' | 'vertical-center' | 'bottom'
+  ) {
+    const canvas = fabricRef.current;
+    const fabric = fabricModuleRef.current;
+    if (!canvas || !fabric) return;
+    const active = canvas.getActiveObject() as any;
+    if (!active) return;
+
+    const frameW = (canvas.width as number) || CANVAS_REF_WIDTH;
+    const frameH = (canvas.height as number) || CANVAS_REF_HEIGHT;
+    // The EventFooter covers the bottom band of the artboard, so vertical
+    // alignment targets only the area ABOVE it (matches what stays visible in
+    // the published invite). Horizontal alignment uses the full width.
+    //
+    // Measure the footer's reserved height in SCENE units at click time: take the
+    // ratio of the footer's rendered height to the canvas's rendered height and
+    // scale it back into the frame's coordinate space. Using a ratio makes this
+    // robust to zoom, CSS scaling, and retina — no screen-pixel assumptions.
+    let footerH = 0;
+    const footerEl = footerScaleDivRef.current;
+    const cEl = canvasEl.current;
+    if (footerEl && cEl) {
+      const fr = footerEl.getBoundingClientRect();
+      const cr = cEl.getBoundingClientRect();
+      if (cr.height > 0 && fr.height > 0) footerH = (fr.height / cr.height) * frameH;
+    }
+    const usableH = Math.max(1, frameH - footerH);
+
+    // Scene-space bounding box of the whole selection (single, group, or multi).
+    const r = active.getBoundingRect();
+    let dx = 0, dy = 0;
+    switch (alignment) {
+      case 'left':              dx = 0 - r.left; break;
+      case 'horizontal-center': dx = (frameW - r.width) / 2 - r.left; break;
+      case 'right':             dx = (frameW - r.width) - r.left; break;
+      case 'top':               dy = 0 - r.top; break;
+      case 'vertical-center':   dy = (usableH - r.height) / 2 - r.top; break;
+      case 'bottom':            dy = (usableH - r.height) - r.top; break;
+    }
+    if (dx === 0 && dy === 0) return;
+
+    if (active.type === 'activeselection') {
+      // Move each child by the shared delta so spacing between them is preserved.
+      const objs: any[] = [...(active.getObjects?.() ?? [])];
+      canvas.discardActiveObject();
+      objs.forEach((o) => {
+        if (o.locked || o.isBorder) return;
+        o.set({ left: (o.left ?? 0) + dx, top: (o.top ?? 0) + dy });
+        o.setCoords?.();
+      });
+      const sel = new fabric.ActiveSelection(objs, { canvas });
+      canvas.setActiveObject(sel);
+    } else {
+      if (active.locked || active.isBorder) return; // never move a locked element
+      active.set({ left: (active.left ?? 0) + dx, top: (active.top ?? 0) + dy });
+      active.setCoords?.();
+    }
+
+    canvas.requestRenderAll();
+    pushSnapshot();                       // undo/redo
+    saveCurrentPage(currentPageRef.current); // persist x/y into the page JSON
+    updateOverlayFromActive();
+    const a = canvas.getActiveObject();
+    if (typeof props.onSelectionChange === 'function') {
+      props.onSelectionChange(a ? a.toObject([...SELECTION_PROPS]) : null);
+    }
+  }
+
   useImperativeHandle(ref, () => ({
     undo,
     redo,
@@ -671,6 +760,7 @@ const [currentPage, setCurrentPage] = useState(0);
     canRedo,
     distributeHorizontally: () => distributeSelection('x'),
     distributeVertically: () => distributeSelection('y'),
+    alignSelected: (alignment) => alignSelectedToFrame(alignment),
     save: saveLocal,
     
     exportPNG,
@@ -1346,13 +1436,16 @@ const [currentPage, setCurrentPage] = useState(0);
             setContextMenu(null);
             return;
           }
-          canvas.setActiveObject(target);
+          // computeGroupFlags preserves an existing multi-selection (so Group stays
+          // available) and otherwise makes `target` active.
+          const flags = computeGroupFlags(target);
           canvas.requestRenderAll();
           setContextMenu({
             x: opt.e.clientX,
             y: opt.e.clientY,
             hidden: target.visible === false,
             isImage: target.type === 'image',
+            ...flags,
           });
         });
 
@@ -1768,6 +1861,64 @@ const [currentPage, setCurrentPage] = useState(0);
           const active = c.getActiveObject();
           if (!active) return;
           if ((active as any).isEditing) return;
+
+          // ── Font size shortcut (Figma-style) ──────────────────────────────
+          // Ctrl/Cmd + Shift + . (or >)  → grow the selected text by 1px
+          // Ctrl/Cmd + Shift + , (or <)  → shrink the selected text by 1px
+          // Detect the modifier per-platform (Ctrl on Win/Linux, Meta/Cmd on
+          // Mac) and accept both the shifted characters (> <) and the physical
+          // keys (./, via e.code) so every keyboard layout works. Clamps to
+          // 6–300px and supports a multi-text selection.
+          if ((e.ctrlKey || e.metaKey) && e.shiftKey) {
+            const grow = e.key === '.' || e.key === '>' || e.code === 'Period';
+            const shrink = e.key === ',' || e.key === '<' || e.code === 'Comma';
+            if (grow || shrink) {
+              const isTextObj = (o: any) =>
+                o && (o.type === 'textbox' || o.type === 'text' || o.type === 'i-text');
+              // Support multi-select: an ActiveSelection adjusts every text child;
+              // a single selection adjusts that object when it's text.
+              const targets: any[] =
+                (active as any).type === 'activeselection'
+                  ? ((active as any).getObjects?.() ?? []).filter(isTextObj)
+                  : isTextObj(active)
+                  ? [active]
+                  : [];
+              // Not a text element — leave other handlers / the browser alone.
+              if (targets.length === 0) return;
+              e.preventDefault();
+              const delta = grow ? 1 : -1;
+              targets.forEach((o) => {
+                const cur = Math.round(Number(o.fontSize ?? 24));
+                const next = Math.max(6, Math.min(300, cur + delta));
+                if (next !== cur) {
+                  o.set('fontSize', next);
+                  o.setCoords?.();
+                }
+              });
+              c.requestRenderAll();
+              schedulePush(); // feeds undo/redo, same path as the Inspector edits
+              updateOverlayFromActive();
+              // Refresh the Inspector so its Font Size input mirrors the change.
+              if (typeof props.onSelectionChange === 'function') {
+                props.onSelectionChange(active.toObject([...SELECTION_PROPS]));
+              }
+              return;
+            }
+          }
+
+          // ── Group / Ungroup shortcuts ─────────────────────────────────────
+          // Ctrl/Cmd + G groups the current multi-selection; Ctrl/Cmd + Shift +
+          // G ungroups the selected group. Routes through the same doGroup /
+          // doUngroup used by the context menu.
+          if ((e.ctrlKey || e.metaKey) && (e.key === 'g' || e.key === 'G')) {
+            e.preventDefault();
+            if (e.shiftKey) {
+              if ((active as any).type === 'group') doUngroup();
+            } else if ((active as any).type === 'activeselection') {
+              doGroup();
+            }
+            return;
+          }
 
           if (e.ctrlKey && (e.key === 'c' || e.key === 'C') && !e.shiftKey) {
             e.preventDefault();
@@ -2232,6 +2383,29 @@ const [currentPage, setCurrentPage] = useState(0);
 
   const closeContextMenu = useCallback(() => setContextMenu(null), []);
 
+  // Resolve the right-click selection and report what group actions apply.
+  // Preserves an existing multi-selection when the click lands inside it (so the
+  // "Group" action stays available); otherwise makes `target` the active object.
+  // Returns: canGroup (an ActiveSelection of ≥2 unlocked, non-border objects) and
+  // isGroup (the resolved selection is a Fabric group → can be ungrouped).
+  const computeGroupFlags = useCallback((target: any): { canGroup: boolean; isGroup: boolean } => {
+    const canvas = fabricRef.current;
+    if (!canvas || !target) return { canGroup: false, isGroup: false };
+    const active = canvas.getActiveObject() as any;
+    const inMulti =
+      active?.type === 'activeselection' &&
+      (active === target || !!active.getObjects?.().includes(target));
+    if (!inMulti && canvas.getActiveObject() !== target && typeof target.onSelect === 'function') {
+      try { canvas.setActiveObject(target); } catch { /* still show the menu */ }
+    }
+    const sel = canvas.getActiveObject() as any;
+    const canGroup =
+      sel?.type === 'activeselection' &&
+      (sel.getObjects?.().length ?? 0) >= 2 &&
+      sel.getObjects().every((o: any) => !o.locked && !o.isBorder);
+    return { canGroup: !!canGroup, isGroup: sel?.type === 'group' };
+  }, []);
+
   // Native right-click handler on the canvas wrap. Fabric 7's `fireRightClick`
   // mouse:down event is unreliable, so we resolve the target ourselves via
   // findTarget (falling back to the current selection) and open our menu.
@@ -2241,42 +2415,137 @@ const [currentPage, setCurrentPage] = useState(0);
     e.preventDefault();
 
     const objects = canvas.getObjects();
-    // Resolve what was right-clicked. findTarget can return non-object values
-    // across Fabric versions, so only accept something that's actually on the
-    // canvas. Fall back to the current selection (the user usually clicks first).
+    const active = canvas.getActiveObject() as any;
+    // Resolve what was right-clicked. Fabric v7's findTarget returns an INFO
+    // object ({ target, subTargets, ... }), so read `.target` — not the return
+    // value itself (the old `objects.includes(found)` check never matched).
+    let hit: any = null;
+    try { hit = (canvas as any).findTarget?.(e.nativeEvent)?.target ?? null; } catch { hit = null; }
+
     let target: any = null;
-    try {
-      const found = (canvas as any).findTarget?.(e.nativeEvent);
-      if (found && objects.includes(found)) target = found;
-    } catch {
-      target = null;
+    // Right-clicking inside an active multi-selection keeps the whole selection
+    // (so we can offer "Group") instead of collapsing it to one object. The
+    // ActiveSelection isn't in canvas.getObjects(), so detect the hit via its
+    // own bounds / membership rather than the objects array.
+    if (active?.type === 'activeselection') {
+      let inside = false;
+      try { inside = !!active.containsPoint?.(canvas.getScenePoint(e.nativeEvent)); } catch { inside = false; }
+      if (inside || hit === active || (hit && active.getObjects?.().includes(hit))) {
+        target = active;
+      }
     }
     if (!target) {
-      const active = canvas.getActiveObject() as any;
-      if (active && objects.includes(active)) target = active;
+      if (hit && objects.includes(hit)) target = hit;
+      if (!target && active && objects.includes(active)) target = active;
     }
     if (!target) {
       setContextMenu(null);
       return;
     }
 
-    // Make it the active object (guard the call — only real, on-canvas objects).
-    if (canvas.getActiveObject() !== target && typeof target.onSelect === "function") {
-      try {
-        canvas.setActiveObject(target);
-        canvas.requestRenderAll();
-      } catch {
-        /* ignore — still show the menu for the resolved target */
-      }
-    }
+    const flags = computeGroupFlags(target);
+    canvas.requestRenderAll();
 
     setContextMenu({
       x: e.clientX,
       y: e.clientY,
       hidden: target.visible === false,
       isImage: target.type === 'image',
+      ...flags,
     });
-  }, []);
+  }, [computeGroupFlags]);
+
+  // ── Group / Ungroup ───────────────────────────────────────────────────────
+  // Operate purely on the active page's canvas objects (the canvas only ever
+  // holds the current page), so grouping never spans pages. Built on Fabric's
+  // native Group, which preserves each child's position/size/rotation/styling
+  // and order, serializes into the same page JSON, and rides the existing
+  // undo/redo (pushSnapshot) + autosave (saveCurrentPage) paths.
+  const doGroup = useCallback(() => {
+    const canvas = fabricRef.current;
+    const fabric = fabricModuleRef.current;
+    if (!canvas || !fabric) { setContextMenu(null); return; }
+    const sel = canvas.getActiveObject() as any;
+    if (!sel || sel.type !== 'activeselection') { setContextMenu(null); return; }
+
+    // Order members by their canvas stacking index so the group keeps the exact
+    // visual z-order; never absorb locked objects or pinned borders.
+    const all = canvas.getObjects();
+    const members: any[] = sel
+      .getObjects()
+      .filter((o: any) => !o.locked && !o.isBorder)
+      .sort((a: any, b: any) => all.indexOf(a) - all.indexOf(b));
+    if (members.length < 2) { setContextMenu(null); return; }
+
+    // Target stack slot: just above every surviving object that sat below the
+    // top-most selected one — keeps the group where the selection was.
+    const memberSet = new Set(members);
+    const topIndex = Math.max(...members.map((o) => all.indexOf(o)));
+    const belowSurvivors = all.filter((o, i) => i < topIndex && !memberSet.has(o)).length;
+
+    // Discard the selection first so each child is restored to absolute (scene)
+    // coordinates, then build the group from those scene-positioned objects
+    // (Fabric converts them to group-relative coords + computes the bbox).
+    canvas.discardActiveObject();
+    canvas.remove(...members);
+    const group = new fabric.Group(members);
+    if (!group.id) group.id = genLayerId();
+    canvas.add(group);
+    (canvas as any).moveObjectTo?.(group, belowSurvivors);
+    canvas.setActiveObject(group);
+    canvas.requestRenderAll();
+
+    pushSnapshot();
+    saveCurrentPage(currentPageRef.current);
+    onLayersChangeRef.current?.();
+    updateOverlayFromActive();
+    if (typeof props.onSelectionChange === 'function') {
+      props.onSelectionChange(group.toObject([...SELECTION_PROPS]));
+    }
+    setContextMenu(null);
+  }, [updateOverlayFromActive]);
+
+  const doUngroup = useCallback(() => {
+    const canvas = fabricRef.current;
+    const fabric = fabricModuleRef.current;
+    if (!canvas || !fabric) { setContextMenu(null); return; }
+    const group = canvas.getActiveObject() as any;
+    if (!group || group.type !== 'group') { setContextMenu(null); return; }
+
+    const groupIndex = canvas.getObjects().indexOf(group);
+    // removeAll() detaches the children and restores each to absolute (scene)
+    // coordinates, so they stay visually in place after the group is gone.
+    const children: any[] = group.removeAll();
+    canvas.remove(group);
+
+    // Re-insert the children at the group's old stack slot, preserving order.
+    children.forEach((o, i) => {
+      if (!o.id) o.id = genLayerId();
+      canvas.add(o);
+      (canvas as any).moveObjectTo?.(o, groupIndex + i);
+    });
+
+    // Reselect the freed objects (multi-select if supported) so the user can
+    // keep working with / regroup them, matching the editor's selection model.
+    canvas.discardActiveObject();
+    if (children.length > 1) {
+      const selection = new fabric.ActiveSelection(children, { canvas });
+      canvas.setActiveObject(selection);
+    } else if (children.length === 1) {
+      canvas.setActiveObject(children[0]);
+    }
+    canvas.requestRenderAll();
+
+    pushSnapshot();
+    saveCurrentPage(currentPageRef.current);
+    onLayersChangeRef.current?.();
+    updateOverlayFromActive();
+    if (typeof props.onSelectionChange === 'function') {
+      const a = canvas.getActiveObject();
+      props.onSelectionChange(a ? a.toObject([...SELECTION_PROPS]) : null);
+    }
+    setContextMenu(null);
+  }, [updateOverlayFromActive]);
 
   const ctxCopy = useCallback(() => {
     const c = fabricRef.current;
@@ -3321,6 +3590,7 @@ const applyBgToOtherPages = (patch: { backgroundImage?: any; backgroundColor?: a
               }}
             >
               <div
+                ref={footerScaleDivRef}
                 style={{
                   position: 'absolute',
                   bottom: 0,
@@ -3415,6 +3685,36 @@ const applyBgToOtherPages = (patch: { backgroundImage?: any; backgroundColor?: a
                 </span>
                 <span className="text-xs text-red-300">Del</span>
               </button>
+
+              {(contextMenu.canGroup || contextMenu.isGroup) && (
+                <>
+                  <div className="my-1 border-t border-neutral-100" />
+                  {contextMenu.canGroup && (
+                    <button
+                      onClick={doGroup}
+                      className="w-full flex items-center justify-between gap-6 px-3 py-1.5 hover:bg-neutral-100 cursor-pointer"
+                    >
+                      <span className="flex items-center gap-2.5">
+                        <GroupIcon size={14} className="text-neutral-500" />
+                        Group
+                      </span>
+                      <span className="text-xs text-neutral-400">Ctrl+G</span>
+                    </button>
+                  )}
+                  {contextMenu.isGroup && (
+                    <button
+                      onClick={doUngroup}
+                      className="w-full flex items-center justify-between gap-6 px-3 py-1.5 hover:bg-neutral-100 cursor-pointer"
+                    >
+                      <span className="flex items-center gap-2.5">
+                        <UngroupIcon size={14} className="text-neutral-500" />
+                        Ungroup
+                      </span>
+                      <span className="text-xs text-neutral-400">Ctrl+Shift+G</span>
+                    </button>
+                  )}
+                </>
+              )}
 
               <div className="my-1 border-t border-neutral-100" />
 

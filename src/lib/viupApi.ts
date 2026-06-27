@@ -17,6 +17,10 @@ export type ViupEvent = {
   event_id: number;
   user_id: number;
   template_id?: number | null;
+  // Purchased package tier. Package 1 (Basic) hides RSVP + Money Gift in the
+  // canvas sidebar; any other value — including null/undefined from older API
+  // builds that predate this column — shows both. See ProjectEditor.
+  package_id?: number | null;
   event_name?: string | null;
   design_name?: string | null;
   status?: string | null;
