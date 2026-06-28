@@ -457,6 +457,7 @@ function ProjectEditorInner({
               initialMusicUrl={initialMusicUrl}
               userId={userId}
               eventId={eventId}
+              packageId={event?.package_id ?? null}
             />
           </div>
         </div>

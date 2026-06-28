@@ -276,6 +276,10 @@ const CanvasEditor = forwardRef<
     };
     userId?: string | number | null;
     eventId?: string | number | null;
+    // Purchased package tier. Package 1 (Basic) hides RSVP + Money Gift in the
+    // footer; null/undefined keeps both (backward compatible). Carried into the
+    // export/preview payloads so the published card applies the same rule.
+    packageId?: number | null;
   }
 >((props, ref) => {
   const canvasEl = useRef<HTMLCanvasElement | null>(null);
@@ -785,6 +789,7 @@ const [currentPage, setCurrentPage] = useState(0);
         borders: globalBordersRef.current,
         userId: props.userId ?? null,
         eventId: props.eventId ?? null,
+        packageId: props.packageId ?? null,
       };
       // Open the tab synchronously so the browser keeps it tied to the user's
       // click (avoids popup blocking); the preview page waits for IndexedDB.
@@ -2846,6 +2851,7 @@ const [currentPage, setCurrentPage] = useState(0);
       borders: globalBordersRef.current,
       userId: props.userId ?? null,
       eventId: props.eventId ?? null,
+      packageId: props.packageId ?? null,
     }),
   });
 
@@ -3601,7 +3607,7 @@ const applyBgToOtherPages = (patch: { backgroundImage?: any; backgroundColor?: a
                   pointerEvents: 'auto',
                 }}
               >
-                <EventFooter contacts={props.contacts} moneyGift={props.moneyGift} calendar={props.calendar} location={props.location} rsvpConfig={props.rsvpConfig} userId={props.userId} eventId={props.eventId}/>
+                <EventFooter contacts={props.contacts} moneyGift={props.moneyGift} calendar={props.calendar} location={props.location} rsvpConfig={props.rsvpConfig} userId={props.userId} eventId={props.eventId} showRsvpAndMoneyGift={Number(props.packageId) !== 1}/>
               </div>
             </div>
           )}

@@ -23,6 +23,7 @@ export default function EditorLayoutClient({
   initialMusicUrl,
   userId,
   eventId,
+  packageId,
 }: {
   editorRef?: React.RefObject<EditorHandle | null>,
   contacts: any[];
@@ -39,6 +40,7 @@ export default function EditorLayoutClient({
   initialMusicUrl?: string | null;
   userId?: string | number | null;
   eventId?: string | number | null;
+  packageId?: number | null;
 }) {
   const internalRef = useRef<EditorHandle | null>(null);
   const editorRef = editorRefProp ?? internalRef;
@@ -87,6 +89,7 @@ export default function EditorLayoutClient({
       location={location}
       userId={userId}
       eventId={eventId}
+      packageId={packageId}
     />
   );
 

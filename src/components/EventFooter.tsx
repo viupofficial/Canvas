@@ -17,6 +17,7 @@ export default function EventFooter({
   userId,
   eventId,
   onGuestbookUpdate,
+  showRsvpAndMoneyGift = true,
 }: {
   contacts?: any[];
   moneyGift?: {
@@ -44,6 +45,10 @@ export default function EventFooter({
   userId?: string | number | null;
   eventId?: string | number | null;
   onGuestbookUpdate?: (entries: { message: string; sender: string }[]) => void;
+  // Package gating: false ⇒ Basic package (package_id === 1). Hides the RSVP and
+  // Money Gift footer items and blocks their modals. Defaults to true so any
+  // caller without package info (legacy/standalone previews) keeps both.
+  showRsvpAndMoneyGift?: boolean;
 }) {
   // Prefer the shared store (editor page) — fall back to props (export/SSR).
   const ctx = useEventDataOptional();
@@ -102,6 +107,9 @@ export default function EventFooter({
   };
 
   const toggleCard = (card: string) => {
+    // Basic package: RSVP and Money Gift are unavailable. Block opening their
+    // modals even if a stale element or saved layout tries to trigger them.
+    if (!showRsvpAndMoneyGift && (card === "rsvp" || card === "gift")) return;
     if (activeCard === card) {
       closeCard();
     } else {
@@ -250,7 +258,7 @@ const formatEmbedDate = (dateStr: string) => {
             )}
 
             {/* MONEY GIFT */}
-            {activeCard === "gift" && (
+            {showRsvpAndMoneyGift && activeCard === "gift" && (
 
                 <div className={`moneygift-card ${fadeCls}`}>
                     <h3>Money Gift</h3>
@@ -291,7 +299,7 @@ const formatEmbedDate = (dateStr: string) => {
             )}
 
             {/* RSVP CARD */}
-            {activeCard === "rsvp" && (
+            {showRsvpAndMoneyGift && activeCard === "rsvp" && (
 
                 <div className={`contact-card rsvp-popup ${fadeCls}`}>
 
@@ -778,15 +786,19 @@ const formatEmbedDate = (dateStr: string) => {
             )}
 
             {/* FOOTER */}
-            <div className={`footer-container preview-footer-enter${infoActive ? " bump-shift" : ""}`} style={{ background: footerBg }}>
-                <div className={`footer-rsvp-wrapper${infoActive ? " move-right" : ""}`}>
+            <div className={`footer-container preview-footer-enter${infoActive ? " bump-shift" : ""}${showRsvpAndMoneyGift ? "" : " footer-basic"}`} style={{ background: footerBg }}>
+                {showRsvpAndMoneyGift && (
+                  <div className={`footer-rsvp-wrapper${infoActive ? " move-right" : ""}`}>
                     {/* Circle is just the colored bubble; the single "RSVP" label
                         is rendered once by .footer-rsvp-text below (which also
                         follows the Text and Icon color picker). */}
                     <div className="footer-rsvp" style={{ backgroundColor: rsvpCircleBg }} onClick={() => toggleCard("rsvp")} />
-                </div>
+                  </div>
+                )}
 
-                <div className={`footer-rsvp-text${infoActive ? " drop" : ""}`} style={labelStyle}>RSVP</div>
+                {showRsvpAndMoneyGift && (
+                  <div className={`footer-rsvp-text${infoActive ? " drop" : ""}`} style={labelStyle}>RSVP</div>
+                )}
 
                 <div className="footer-buttons">
                     <div className="footer-side left">
@@ -795,10 +807,12 @@ const formatEmbedDate = (dateStr: string) => {
                             <span className="footer-label">Guestbook</span>
                         </a>
 
-                        <a className="moneygift-toggle" style={labelStyle} onClick={() => toggleCard("gift")}>
+                        {showRsvpAndMoneyGift && (
+                          <a className="moneygift-toggle" style={labelStyle} onClick={() => toggleCard("gift")}>
                             <span id="moneygift-icon" className="footer-icon" style={iconMaskStyle("/MONEYGIFT.png")} />
                             <span className="footer-label">Gift</span>
-                        </a>
+                          </a>
+                        )}
                     </div>
 
                     <div className="footer-side right">

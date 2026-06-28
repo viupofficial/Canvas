@@ -46,6 +46,7 @@ export default function EventPageClient({ data }: { data: any }) {
         userId={userId}
         eventId={eventId}
         onGuestbookUpdate={handleGuestbookUpdate}
+        showRsvpAndMoneyGift={Number(data.packageId) !== 1}
       />
     </>
   );

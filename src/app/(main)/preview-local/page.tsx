@@ -73,6 +73,7 @@ export default function PreviewLocalPage() {
         rsvpConfig: payload.rsvpConfig ?? null,
         userId: payload.userId ?? null,
         eventId: payload.eventId ?? null,
+        packageId: payload.packageId ?? null,
       });
 
       if (payload.userId && payload.eventId) {
@@ -134,6 +135,7 @@ export default function PreviewLocalPage() {
         userId={data.userId}
         eventId={data.eventId}
         onGuestbookUpdate={handleGuestbookUpdate}
+        showRsvpAndMoneyGift={Number(data.packageId) !== 1}
       />
     </main>
   );
