@@ -2358,39 +2358,56 @@ img[alt="Mayaxasyraff"],
 
 /* ── Basic package footer (package_id === 1) ──────────────────────────────────
    RSVP + Money Gift are removed, so there is no centered RSVP circle. Drop the
-   white center "bump" and lay the remaining items (Guestbook, Info → Calendar /
-   Location, Contact) out as a single evenly-spread row instead of the clustered
-   left/right groups that reserve a center slot. Placed at end-of-file so it wins
-   on source order over the base + .preview-local footer rules. */
+   white center "bump" and render a dedicated row of four evenly-spread items
+   (Guestbook, Calendar, Location, Contact) instead of the clustered left/right
+   groups that reserve a center slot. Placed at end-of-file so it wins on source
+   order over the base + .preview-local footer rules. */
 .footer-basic::before {
   display: none;
 }
 
-.footer-basic .footer-buttons {
-  position: relative;
-  display: flex;
-  align-items: center;
-  justify-content: space-around;
-  height: auto;
-  margin-top: 0.5rem;
+/* The wide RSVP-era side padding only worked because the items were absolutely
+   positioned; the Basic row is normal flow, so tighten the padding. The double
+   class beats `.preview-local .footer-container` on specificity. */
+.footer-container.footer-basic {
+  padding: 8px 16px;
 }
 
-.footer-basic .footer-side.left,
-.footer-basic .footer-side.right {
-  position: static;
-  top: auto;
-  left: auto;
-  right: auto;
-  margin: 0;
-  flex: 1;
+.footer-basic .footer-basic-row {
   display: flex;
+  align-items: flex-start;
   justify-content: space-around;
-  align-items: center;
+  width: 100%;
   gap: 0;
 }
 
-/* The Info-open choreography moved the RSVP circle/notch; with no circle in the
-   Basic footer there is nothing to shift. */
+.footer-basic .footer-basic-item {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.3rem;
+  padding: 0;
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: inherit;
+  text-decoration: none;
+  font-size: 0.75rem;
+  font-family: 'Montserrat', sans-serif;
+}
+
+.footer-basic .footer-basic-item i {
+  font-size: 1.3rem;
+  width: 23px;
+  height: 23px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* No RSVP circle/notch in the Basic footer, so the Info-open shift is a no-op. */
 .footer-basic.bump-shift::before {
   left: 52%;
 }

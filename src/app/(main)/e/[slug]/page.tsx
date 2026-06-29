@@ -23,9 +23,7 @@ export default async function Page({ params }: { params: Promise<{ slug: string 
   const data = await loadEvent(slug);
   if (!data) notFound();
 
-  return (
-    <main>
-      <EventPageClient data={data} />
-    </main>
-  );
+  // EventPageClient renders the shared PreviewShell, which provides its own
+  // top-level <main className="preview-local"> — matching /preview-local exactly.
+  return <EventPageClient data={data} />;
 }

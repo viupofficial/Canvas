@@ -1,19 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
 import { put } from "@vercel/blob";
 import { extractEnvelope } from "@/src/lib/extract-envelope";
-
-function toSlug(name: string): string {
-  return (name || "rsvp")
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "") || "rsvp";
-}
+import { slugify } from "@/src/lib/slug";
 
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
     const { pages, musicUrl, eventName, contacts, moneyGift, calendar, location, rsvpConfig, borders, userId, eventId, packageId } = body;
-    const slug = toSlug(eventName ?? "rsvp");
+    // Title-derived slug (shared rule) — the blob is stored at events/{slug}.json
+    // and the editor builds the live link from the same slug, so they always match.
+    const slug = slugify(eventName);
 
     const env = extractEnvelope(pages ?? []);
     const borderList = Array.isArray(borders) ? borders : [];

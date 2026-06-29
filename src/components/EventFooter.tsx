@@ -205,6 +205,19 @@ const formatEmbedDate = (dateStr: string) => {
 };
     console.log("FOOTER contacts:", contacts);
     const [infoTab, setInfoTab] = useState<string | null>(null)
+
+    // Basic-package footer exposes Calendar and Location as their own items and
+    // opens each straight to its section (no Info chooser). Re-tapping the open
+    // one closes the panel, mirroring toggleCard's behaviour.
+    const openInfoTab = (tab: "calendar" | "location") => {
+      if (activeCard === "info" && infoTab === tab) {
+        closeCard();
+        return;
+      }
+      setInfoTab(tab);
+      setClosing(false);
+      setActiveCard("info");
+    };
     // Fade class shared by every popup panel: fades in on open, fades out (via
     // `is-closing`) just before unmount. Opacity-only, so it never disturbs a
     // panel's own positioning transform.
@@ -584,6 +597,9 @@ const formatEmbedDate = (dateStr: string) => {
 
                 <div className={`info-popup ${fadeCls}`}>
 
+                    {/* Basic package reaches Calendar/Location from dedicated
+                        footer items, so the in-popup chooser is hidden there. */}
+                    {showRsvpAndMoneyGift && (
                     <div id="info-buttons">
 
                         <button
@@ -605,6 +621,7 @@ const formatEmbedDate = (dateStr: string) => {
                         </button>
 
                     </div>
+                    )}
 
 
                     {/* CALENDAR SECTION */}
@@ -787,46 +804,68 @@ const formatEmbedDate = (dateStr: string) => {
 
             {/* FOOTER */}
             <div className={`footer-container preview-footer-enter${infoActive ? " bump-shift" : ""}${showRsvpAndMoneyGift ? "" : " footer-basic"}`} style={{ background: footerBg }}>
-                {showRsvpAndMoneyGift && (
-                  <div className={`footer-rsvp-wrapper${infoActive ? " move-right" : ""}`}>
-                    {/* Circle is just the colored bubble; the single "RSVP" label
-                        is rendered once by .footer-rsvp-text below (which also
-                        follows the Text and Icon color picker). */}
-                    <div className="footer-rsvp" style={{ backgroundColor: rsvpCircleBg }} onClick={() => toggleCard("rsvp")} />
+                {showRsvpAndMoneyGift ? (
+                  <>
+                    <div className={`footer-rsvp-wrapper${infoActive ? " move-right" : ""}`}>
+                        {/* Circle is just the colored bubble; the single "RSVP" label
+                            is rendered once by .footer-rsvp-text below (which also
+                            follows the Text and Icon color picker). */}
+                        <div className="footer-rsvp" style={{ backgroundColor: rsvpCircleBg }} onClick={() => toggleCard("rsvp")} />
+                    </div>
+
+                    <div className={`footer-rsvp-text${infoActive ? " drop" : ""}`} style={labelStyle}>RSVP</div>
+
+                    <div className="footer-buttons">
+                        <div className="footer-side left">
+                            <a className="footer-guestbook" style={labelStyle} onClick={() => toggleCard("guestbook")}>
+                                <span id="guestbook-icon" className="footer-icon" style={iconMaskStyle("/Guestbook.png")} />
+                                <span className="footer-label">Guestbook</span>
+                            </a>
+
+                            <a className="moneygift-toggle" style={labelStyle} onClick={() => toggleCard("gift")}>
+                                <span id="moneygift-icon" className="footer-icon" style={iconMaskStyle("/MONEYGIFT.png")} />
+                                <span className="footer-label">Gift</span>
+                            </a>
+                        </div>
+
+                        <div className="footer-side right">
+                            <a className="footer-info" style={labelStyle} onClick={() => toggleCard("info")}>
+                                <i className={`${infoActive ? "fa-solid" : "fa-regular"} fa-star floating-star${infoActive ? " visible" : ""}`}></i>
+                                <span className="footer-label" style={{ marginTop: "27px" }}>Info</span>
+                            </a>
+
+                            <button className="contact-toggle" style={{ background: "none", border: "none", ...labelStyle }} onClick={() => toggleCard("contact")}>
+                                <span id="contact-icon" className="footer-icon" style={iconMaskStyle("/Contact.png")} />
+                                <span className="footer-label">Contact</span>
+                            </button>
+                        </div>
+                    </div>
+                  </>
+                ) : (
+                  // Basic package: a single evenly-spread row of the four allowed
+                  // items. Calendar/Location open their Info section directly.
+                  <div className="footer-basic-row">
+                    <a className="footer-basic-item" style={labelStyle} onClick={() => toggleCard("guestbook")}>
+                        <span className="footer-icon" style={iconMaskStyle("/Guestbook.png")} />
+                        <span className="footer-label">Guestbook</span>
+                    </a>
+
+                    <button className="footer-basic-item" style={{ background: "none", border: "none", ...labelStyle }} onClick={() => openInfoTab("calendar")}>
+                        <i className="fa-regular fa-calendar-days"></i>
+                        <span className="footer-label">Calendar</span>
+                    </button>
+
+                    <button className="footer-basic-item" style={{ background: "none", border: "none", ...labelStyle }} onClick={() => openInfoTab("location")}>
+                        <i className="fa-solid fa-location-dot"></i>
+                        <span className="footer-label">Location</span>
+                    </button>
+
+                    <button className="footer-basic-item" style={{ background: "none", border: "none", ...labelStyle }} onClick={() => toggleCard("contact")}>
+                        <span className="footer-icon" style={iconMaskStyle("/Contact.png")} />
+                        <span className="footer-label">Contact</span>
+                    </button>
                   </div>
                 )}
-
-                {showRsvpAndMoneyGift && (
-                  <div className={`footer-rsvp-text${infoActive ? " drop" : ""}`} style={labelStyle}>RSVP</div>
-                )}
-
-                <div className="footer-buttons">
-                    <div className="footer-side left">
-                        <a className="footer-guestbook" style={labelStyle} onClick={() => toggleCard("guestbook")}>
-                            <span id="guestbook-icon" className="footer-icon" style={iconMaskStyle("/Guestbook.png")} />
-                            <span className="footer-label">Guestbook</span>
-                        </a>
-
-                        {showRsvpAndMoneyGift && (
-                          <a className="moneygift-toggle" style={labelStyle} onClick={() => toggleCard("gift")}>
-                            <span id="moneygift-icon" className="footer-icon" style={iconMaskStyle("/MONEYGIFT.png")} />
-                            <span className="footer-label">Gift</span>
-                          </a>
-                        )}
-                    </div>
-
-                    <div className="footer-side right">
-                        <a className="footer-info" style={labelStyle} onClick={() => toggleCard("info")}>
-                            <i className={`${infoActive ? "fa-solid" : "fa-regular"} fa-star floating-star${infoActive ? " visible" : ""}`}></i>
-                            <span className="footer-label" style={{ marginTop: "27px" }}>Info</span>
-                        </a>
-
-                        <button className="contact-toggle" style={{ background: "none", border: "none", ...labelStyle }} onClick={() => toggleCard("contact")}>
-                            <span id="contact-icon" className="footer-icon" style={iconMaskStyle("/Contact.png")} />
-                            <span className="footer-label">Contact</span>
-                        </button>
-                    </div>
-                </div>
             </div>
 
         </>
