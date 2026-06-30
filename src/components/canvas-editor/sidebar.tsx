@@ -13,6 +13,7 @@ import { guestbookPage } from "@/src/components/template-list/guestbookTemplate"
 import { galleryPage } from "@/src/components/template-list/galleryTemplate";
 import { envelopePage } from "@/src/components/template-list/EnvelopeTemplate";
 import { downscaleImageFile } from "@/src/lib/imageDownscale";
+import { Play, Pause } from "lucide-react";
 
 // Invert a 6-digit hex color (Adobe-style negative). Falls back gracefully for non-hex input.
 function invertHex(color: string): string {
@@ -341,15 +342,42 @@ function PhotoTab({
 
 function MusicTab({ editorRef }: { editorRef?: React.RefObject<EditorHandle | null> }) {
   const [url, setUrl] = useState("");
+  // Mirrors the editor preview player. New music auto-plays, so default to true.
+  const [playing, setPlaying] = useState(true);
+
+  const togglePlay = () => {
+    const ed = editorRef?.current;
+    if (!ed) return;
+    // Nothing to control until a track has been added/uploaded.
+    if (!ed.getMusicUrl?.()) return;
+    if (playing) {
+      ed.pauseMusic?.();
+      setPlaying(false);
+    } else {
+      ed.playMusic?.();
+      setPlaying(true);
+    }
+  };
 
   return (
     <div>
-      <div className="text-[#191212] text-[17px] font-bold mb-3">Add Music</div>
+      <div className="flex items-center justify-between mb-3">
+        <div className="text-[#191212] text-[17px] font-bold">Add Music</div>
+        <button
+          onClick={togglePlay}
+          title={playing ? "Pause music" : "Play music"}
+          aria-label={playing ? "Pause music" : "Play music"}
+          className="flex items-center justify-center w-8 h-8 rounded-full bg-[#7D5B59] text-white hover:bg-[#684b49] transition-colors"
+        >
+          {playing ? <Pause size={15} fill="currentColor" /> : <Play size={15} fill="currentColor" />}
+        </button>
+      </div>
       <div className="flex flex-col gap-2">
         <button
           onClick={() => {
             if (editorRef?.current?.uploadMusic) {
               editorRef.current.uploadMusic();
+              setPlaying(true);
             }
           }}
           className="px-3 py-2 bg-gray-100 rounded text-left"
@@ -368,6 +396,7 @@ function MusicTab({ editorRef }: { editorRef?: React.RefObject<EditorHandle | nu
               if (!url) return;
               if (editorRef?.current?.addMusicFromUrl) {
                 editorRef.current.addMusicFromUrl(url.trim());
+                setPlaying(true);
               }
               setUrl("");
             }}
@@ -378,6 +407,8 @@ function MusicTab({ editorRef }: { editorRef?: React.RefObject<EditorHandle | nu
         </div>
         <p className="text-[11px] text-gray-400">
           Paste a direct audio link or a YouTube URL (youtube.com or youtu.be).
+          Use the play/pause button above to preview it. YouTube plays as
+          background audio only — the video stays hidden.
         </p>
       </div>
     </div>

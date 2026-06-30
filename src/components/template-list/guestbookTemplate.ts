@@ -31,7 +31,11 @@ export const guestbookPage = {
   scaleX: 0.3,
   scaleY: 0.3,
   angle: 270,
-  src: "/Paper.png"
+  // Filename is uppercase on disk (public/PAPER.png). The mixed-case "/Paper.png"
+  // resolved on case-insensitive Windows but 404'd on the case-sensitive Linux
+  // deploy — and a failed image load rejects the whole enlivenObjects batch, so
+  // the entire guestbook element failed to insert. Match the real filename.
+  src: "/PAPER.png"
 },
     // Title
     {

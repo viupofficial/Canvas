@@ -1,39 +1,38 @@
 import { NextRequest, NextResponse } from "next/server";
-import { put } from "@vercel/blob";
+import { handleUpload, type HandleUploadBody } from "@vercel/blob/client";
 
-export const runtime = "nodejs";
-
-// Store uploaded music in Vercel Blob (same store the published events use).
-// The previous implementation wrote into public/uploads via fs, which only
-// works in local dev — on a live deployment the filesystem is read-only and
-// public/ is served from the build, so uploads silently failed there.
-export async function POST(req: NextRequest) {
+// Token issuer for CLIENT-SIDE music uploads to Vercel Blob.
+//
+// Why client uploads: the previous implementation received the whole audio file
+// via formData here and called put() server-side, so any file over Vercel's
+// ~4.5MB serverless request-body limit was rejected — that's why "some music
+// uploads passed and some didn't" (small clips worked, full-length songs
+// failed). The browser now streams the file straight to blob storage with no
+// function-body ceiling; this route only signs the upload.
+export async function POST(req: NextRequest): Promise<NextResponse> {
+  const body = (await req.json()) as HandleUploadBody;
   try {
-    const formData = await req.formData();
-    const file = formData.get("file");
-
-    if (!file || typeof file === "string") {
-      return NextResponse.json({ ok: false, error: "No file provided" }, { status: 400 });
-    }
-
-    const blob = file as File;
-
-    const safeName =
-      (blob.name || "music")
-        .toLowerCase()
-        .replace(/[^a-z0-9.]+/g, "-")
-        .replace(/^-+|-+$/g, "") || "music";
-
-    const result = await put(`music/${Date.now()}-${safeName}`, blob, {
-      access: "public",
-      contentType: blob.type || "audio/mpeg",
-      addRandomSuffix: true,
+    const jsonResponse = await handleUpload({
+      body,
+      request: req,
       token: process.env.BLOB_READ_WRITE_TOKEN_READ_WRITE_TOKEN,
+      onBeforeGenerateToken: async () => ({
+        // Broad audio coverage (mp3/wav/ogg/m4a/flac…) plus a couple of generic
+        // fallbacks so a quirky MIME type doesn't reject a valid music file.
+        allowedContentTypes: [
+          "audio/*",
+          "video/mp4",
+          "application/ogg",
+          "application/octet-stream",
+        ],
+        addRandomSuffix: true,
+        maximumSizeInBytes: 50 * 1024 * 1024, // 50MB — ample for full songs
+      }),
+      onUploadCompleted: async () => {},
     });
-
-    return NextResponse.json({ ok: true, url: result.url });
+    return NextResponse.json(jsonResponse);
   } catch (err: any) {
-    console.error("upload-music error:", err);
-    return NextResponse.json({ ok: false, error: err.message }, { status: 500 });
+    console.error("upload-music token error:", err);
+    return NextResponse.json({ ok: false, error: err.message }, { status: 400 });
   }
 }

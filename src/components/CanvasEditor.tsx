@@ -23,6 +23,9 @@ import { useFabricEventSync } from "@/src/hooks/useFabricEventSync";
 import { FONT_GROUPS, loadGoogleFont, collectFontFamilies, preloadFonts } from "@/src/lib/fonts";
 import { downscaleImageFile } from "@/src/lib/imageDownscale";
 import { saveLocalPreview } from "@/src/lib/localPreview";
+import { extractEnvelope } from "@/src/lib/extract-envelope";
+import { slugify } from "@/src/lib/slug";
+import { upload } from "@vercel/blob/client";
 import {
   ENABLE_SMART_SNAPPING,
   ENABLE_RESIZE_SNAPPING,
@@ -103,6 +106,9 @@ export type EditorHandle = {
   addImageFromUrl: (url: string) => void;
   addMusicFromUrl: (url: string) => void;
   uploadMusic: () => void;
+  playMusic: () => void;
+  pauseMusic: () => void;
+  getMusicUrl: () => string | null;
   loadTemplate: (pages: any[]) => void;
   addGalleryPage: () => void;
   removeGalleryPage: () => void;
@@ -296,6 +302,8 @@ const [currentPage, setCurrentPage] = useState(0);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [isLoaded, setIsLoaded] = useState(false);
   const [musicUrl, setMusicUrl] = useState<string | null>(props.initialMusicUrl ?? null);
+  // Drives the in-editor preview player (and the sidebar play/pause button).
+  const [musicPlaying, setMusicPlaying] = useState(true);
   // Per-page history. Map<pageIndex, {undo, redo}>. Top of `undo` is always the CURRENT state.
   const historiesRef = useRef<Map<number, PageHistory>>(new Map());
   // True while we're programmatically loading canvas content — blocks event-driven snapshots.
@@ -612,7 +620,22 @@ const [currentPage, setCurrentPage] = useState(0);
     // Deep-clone the template defs so we never mutate the shared module export.
     const defs = source.map((o) => ({ ...o }));
 
-    fabric.util.enlivenObjects(defs).then((objs: any[]) => {
+    // Enliven each def on its own so a single object that fails to revive (e.g. an
+    // image whose src 404s) is skipped instead of rejecting the whole batch and
+    // silently dropping the entire element. The functional textboxes — which carry
+    // the markers the player relies on (countdownUnit, guestMessage/guestSender) —
+    // must always reach the canvas even if a decorative asset is missing.
+    const enlivenOne = (def: any) =>
+      fabric.util
+        .enlivenObjects([def])
+        .then((arr: any[]) => arr[0] ?? null)
+        .catch((e: any) => {
+          console.error('Failed to revive element object', kind, def?.type, def?.src, e);
+          return null;
+        });
+
+    Promise.all(defs.map(enlivenOne)).then((revived: any[]) => {
+      const objs = revived.filter(Boolean);
       if (!objs.length) return;
       // Shift the element so its top-left lands near the drop point (drag) while
       // keeping the boxes' relative layout intact.
@@ -903,6 +926,9 @@ const [currentPage, setCurrentPage] = useState(0);
     uploadMusic: () => {
       triggerMusicUpload();
     },
+    playMusic: () => setMusicPlaying(true),
+    pauseMusic: () => setMusicPlaying(false),
+    getMusicUrl: () => musicUrl,
     addBorder: (url: string) => {
       addBorder(url);
     },
@@ -2738,18 +2764,23 @@ const [currentPage, setCurrentPage] = useState(0);
     const input = e.currentTarget;
 
     try {
-      const fd = new FormData();
-      fd.append("file", file);
-      const res = await fetch("/api/upload-music", { method: "POST", body: fd });
-      const data = await res.json().catch(() => ({}));
-      if (res.ok && data?.url) {
-        setMusicUrl(data.url);
-      } else {
-        alert("Music upload failed: " + (data?.error ?? "unknown error"));
-      }
-    } catch (err) {
+      // Stream straight to blob storage (no 4.5MB serverless body limit), so
+      // full-length songs upload as reliably as short clips.
+      const safeName =
+        (file.name || "music")
+          .toLowerCase()
+          .replace(/[^a-z0-9.]+/g, "-")
+          .replace(/^-+|-+$/g, "") || "music";
+      const blob = await upload(`music/${Date.now()}-${safeName}`, file, {
+        access: "public",
+        contentType: file.type || "audio/mpeg",
+        handleUploadUrl: "/api/upload-music",
+      });
+      setMusicUrl(blob.url);
+      setMusicPlaying(true);
+    } catch (err: any) {
       console.error("Music upload failed", err);
-      alert("Music upload failed");
+      alert("Music upload failed: " + (err?.message ?? "unknown error"));
     } finally {
       input.value = "";
     }
@@ -2772,6 +2803,7 @@ const [currentPage, setCurrentPage] = useState(0);
   const addMusicFromUrl = useCallback((url: string) => {
     if (!url) return;
     setMusicUrl(url);
+    setMusicPlaying(true);
     console.log("Music added:", url);
   }, []);
 
@@ -2834,33 +2866,65 @@ const [currentPage, setCurrentPage] = useState(0);
     return page ?? null;
   });
 
-  console.log("[export] page[0] objects:", exportedPages[0]?.objects?.map((o: any) => ({ type: o.type, name: o.name, src: String(o.src ?? "").slice(0, 60) })));
+  // Shape the published payload on the CLIENT (was done in the route handler)
+  // so the whole design — including base64 photos and per-page backgrounds —
+  // can stream straight to blob storage. Routing it through the serverless
+  // function instead hit Vercel's 4.5MB request-body limit and silently
+  // dropped large publishes, freezing /e/{slug} at the last small version.
+  const slug = slugify(eventName);
+  const env = extractEnvelope(exportedPages ?? []);
+  const borderList = globalBordersRef.current ?? [];
+  const borderUrl = borderList.length > 0 ? borderList[0].url : null;
 
-  const res = await fetch("/api/export-to-rsvp", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      pages: exportedPages,
-      musicUrl,
-      eventName: eventName ?? "",
-      contacts: props.contacts,
-      moneyGift: props.moneyGift,
-      calendar: props.calendar,
-      location: props.location,
-      rsvpConfig: props.rsvpConfig ?? null,
-      borders: globalBordersRef.current,
-      userId: props.userId ?? null,
-      eventId: props.eventId ?? null,
-      packageId: props.packageId ?? null,
-    }),
-  });
+  const payload = {
+    eventName: eventName ?? "",
+    pages: env.remainingPages,
+    envelope: env.hasEnvelope
+      ? {
+          headSrc: env.headSrc,
+          sealSrc: env.sealSrc,
+          bodySrc: env.bodySrc,
+          logoSrc: env.logoSrc,
+          bgColor: env.bgColor,
+          titleText: env.titleText,
+          subtitleText: env.subtitleText,
+          pressText: env.pressText,
+          headPos: env.headPos,
+          sealPos: env.sealPos,
+          bodyPos: env.bodyPos,
+          logoPos: env.logoPos,
+          titlePos: env.titlePos,
+          subtitlePos: env.subtitlePos,
+          pressPos: env.pressPos,
+          titleStyle: env.titleStyle,
+          subtitleStyle: env.subtitleStyle,
+          pressStyle: env.pressStyle,
+        }
+      : null,
+    musicUrl: musicUrl ?? null,
+    borderUrl,
+    contacts: props.contacts ?? [],
+    moneyGift: props.moneyGift ?? null,
+    calendar: props.calendar ?? null,
+    location: props.location ?? null,
+    rsvpConfig: props.rsvpConfig ?? null,
+    userId: props.userId ?? null,
+    eventId: props.eventId ?? null,
+    packageId: props.packageId ?? null,
+  };
 
-  if (res.ok) {
-    const data = await res.json().catch(() => ({}));
-    return data.slug ?? "rsvp";
-  } else {
-    const err = await res.json().catch(() => ({}));
-    alert("Export failed: " + (err.error ?? "unknown error"));
+  try {
+    // Direct browser → blob upload; /api/export-to-rsvp only signs the token,
+    // so there is no function-body size ceiling on the design itself.
+    await upload(`events/${slug}.json`, JSON.stringify(payload), {
+      access: "public",
+      contentType: "application/json",
+      handleUploadUrl: "/api/export-to-rsvp",
+    });
+    return slug;
+  } catch (err: any) {
+    console.error("export-to-rsvp upload error:", err);
+    alert("Publish failed: " + (err?.message ?? "unknown error"));
     return "rsvp";
   }
 }, [currentPage, musicUrl, pages, serializeCanvas, props]);
@@ -3782,7 +3846,7 @@ const applyBgToOtherPages = (patch: { backgroundImage?: any; backgroundColor?: a
           )}
           {musicUrl && (
             <div className="absolute top-2 right-2 z-40">
-              <MusicPlayer url={musicUrl} start />
+              <MusicPlayer url={musicUrl} start={musicPlaying} />
             </div>
           )}
 
