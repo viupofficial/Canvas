@@ -1643,6 +1643,7 @@ export default function Sidebar({
   rules,
   featureUsage,
   onLocationChanged,
+  onUpgrade,
 }: {
   editorRef?: React.RefObject<EditorHandle | null>;
   isPhonePreview?: boolean;
@@ -1653,6 +1654,9 @@ export default function Sidebar({
   // Package gating (Basic / package_id === 1 hides RSVP + Money Gift). Defaults
   // to true so non-event usages (free designer canvas) keep both tools visible.
   showRsvpAndMoneyGift?: boolean;
+  // Opens the package upgrade modal. On Basic, RSVP + Money Gift tabs are still
+  // visible but locked — clicking them fires this instead of opening the tab.
+  onUpgrade?: () => void;
   // Full package rule set (gallery/location/music limits). Absent for free
   // designer canvases — defaults to full access (all limits Infinity).
   rules?: PackageRules;
@@ -1780,8 +1784,18 @@ export default function Sidebar({
     return () => window.removeEventListener('keydown', onKey);
   }, []);
 
+  // Basic package: RSVP + Money Gift stay visible but are locked behind an
+  // upgrade. `showRsvpAndMoneyGift` is false only on Basic.
+  const rsvpMoneyLocked = !pkgRules.showRsvpAndMoneyGift;
+
   const toggle = (id: Tab, disabled?: boolean) => {
     if (disabled) return;
+    // On Basic, clicking RSVP / Money Gift opens the upgrade modal instead of
+    // the tool panel. Falls through to normal behaviour when unlocked.
+    if ((id === 'rsvp' || id === 'money') && rsvpMoneyLocked) {
+      onUpgrade?.();
+      return;
+    }
     if (id === 'text') {
       setActive(null);
       editorRef?.current?.enterTextTool?.();
@@ -1799,7 +1813,8 @@ export default function Sidebar({
     <aside className="bg-brand-cream transition-all duration-200 w-30 h-full overflow-y-auto shrink-0">
       <nav className="flex flex-col gap-2 pt-4">
         {SIDEBAR_ITEMS.map((it) => {
-          const isLocked = false; // Premium lock disabled
+          // Basic locks RSVP + Money Gift: shown with a 🔒 badge, click upgrades.
+          const isLocked = (it.id === 'rsvp' || it.id === 'money') && rsvpMoneyLocked;
           return (
             <button
               key={it.id}

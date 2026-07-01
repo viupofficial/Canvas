@@ -2,7 +2,7 @@
 
 'use client';
 
-import { Upload, LogIn, Link2, FileText, Check, Loader2, AlertCircle } from 'lucide-react';
+import { Upload, LogIn, Link2, FileText, Check, Loader2, AlertCircle, Gift } from 'lucide-react';
 import { RefObject, useState, useRef, useEffect } from "react";
 import { useRouter, usePathname } from "next/navigation"; // ✅ ADD THIS
 import { EditorHandle } from "@/src/components/CanvasEditor";
@@ -190,11 +190,12 @@ export default function EditorHeader(props: {
     console.log('Preview (local) action triggered');
   };
 
-  // Upgrade button disabled — kept for reference
-  // const handleUpgradeClick = () => {
-  //   if (onUpgrade) return onUpgrade();
-  //   console.log('Upgrade action triggered');
-  // };
+  // Opens the package upgrade modal (DUMMY PAYMENT TEST MODE — see
+  // PaymentUpgradeModal). No-op when no handler is wired (legacy/teaser).
+  const handleUpgradeClick = () => {
+    if (props.onUpgrade) return props.onUpgrade();
+    console.log('Upgrade action triggered');
+  };
 
   /**
    * Handle the click event for the profile button
@@ -398,13 +399,16 @@ export default function EditorHeader(props: {
           </nav>
         </div>
 
-        {/* Unlock Package button — disabled for now
-        <button onClick={handleUpgradeClick} className="border-3 rounded-[100px] px-[22px] py-[12px] flex items-center gap-2 h-[45px] text-[18px] font-bold">
-          <Gift /> Upgrade Package
-        </button>
-        */}
-
-        
+        {/* Upgrade Package — opens the dummy-checkout modal. Only shown when a
+            handler is wired (event-bound editor), never for teaser/legacy. */}
+        {props.onUpgrade && (
+          <button
+            onClick={handleUpgradeClick}
+            className="border-3 border-[#7D5B59] text-[#7D5B59] rounded-[100px] px-[22px] py-[12px] flex items-center gap-2 h-[45px] text-[18px] font-bold hover:bg-[#7D5B59]/5"
+          >
+            <Gift className="w-5" /> Upgrade Package
+          </button>
+        )}
 
         {teaser ? (
           <button onClick={handleLoginClick} className="bg-[#5a2d2d] text-white px-[22px] py-[12px] rounded-[100px] flex items-center gap-2 h-[45px] text-[18px] font-bold">

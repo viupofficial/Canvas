@@ -14,7 +14,8 @@ import { getCanvasUser } from "@/src/lib/userSession";
 import { updateDesign, syncCanvasTitle, getCanvasName, num, type ViupEvent, type ViupDesign } from "@/src/lib/viupApi";
 import type { CanvasUser } from "@/src/lib/userSession";
 import { getPackageRules, readFeatureUsage, normalizeUsageCounter, type FeatureUsage } from "@/src/lib/packageRules";
-import { PackageToastHost } from "@/src/components/PackageLimitToast";
+import { PackageToastHost, showPackageToast } from "@/src/components/PackageLimitToast";
+import PaymentUpgradeModal from "@/src/components/PaymentUpgradeModal";
 
 const API_BASE = "https://vi-up.com/api";
 
@@ -99,6 +100,41 @@ function ProjectEditorInner({
   // All package feature rules (RSVP/Money-Gift visibility, gallery/location/
   // music limits) come from the shared helper so every surface stays consistent.
   const rules = getPackageRules(event?.package_id);
+
+  // ── Package upgrade (DUMMY PAYMENT TEST MODE) ──────────────────────────────
+  // The modal only ever redirects to the PHP/iFastNet dummy checkout; Canvas
+  // never writes events.package_id itself. Opening the modal is gated so Premium
+  // events (nothing left to buy) just get a toast instead. See PaymentUpgradeModal.
+  const [upgradeOpen, setUpgradeOpen] = useState(false);
+  const openUpgrade = useCallback(() => {
+    if (rules.isPremiumPackage) {
+      showPackageToast("You already have Premium.");
+      return;
+    }
+    setUpgradeOpen(true);
+  }, [rules.isPremiumPackage]);
+
+  // Handle the return from the PHP dummy checkout. The actual package update
+  // happens server-side in dummy_upgrade_success.php — we never trust the URL
+  // alone. Because returning from PHP is a full page load, EventCanvasGuard has
+  // already refetched the event (and its new package_id) before we mount here;
+  // this effect just surfaces the result toast and scrubs the payment params.
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("upgrade") !== "1" || params.get("dummy") !== "1") return;
+
+    const status = params.get("payment");
+    if (status === "success") {
+      showPackageToast("Package upgraded successfully. Dummy test mode.");
+    } else if (status === "cancelled") {
+      showPackageToast("Payment cancelled. Your package was not changed.");
+    } else {
+      return;
+    }
+    // Drop ?payment=…&upgrade=…&dummy=… so a refresh doesn't re-toast.
+    window.history.replaceState({}, document.title, window.location.pathname);
+  }, []);
 
   // Location/music change counters persisted inside designs.json_data (NOT the
   // events table). Seeded from the loaded design; only real, successful changes
@@ -436,6 +472,7 @@ function ProjectEditorInner({
           onUndo={() => editorRef.current?.undo()}
           onRedo={() => editorRef.current?.redo()}
           onSave={() => persist({ syncTitle: true })}
+          onUpgrade={openUpgrade}
           onPreview={() => {
             // Persist the design to the DB first (same path as Save/autosave),
             // then publish + open the hosted page. The save is fire-and-forget:
@@ -477,6 +514,7 @@ function ProjectEditorInner({
             rules={rules}
             featureUsage={featureUsage}
             onLocationChanged={handleLocationChanged}
+            onUpgrade={openUpgrade}
           />
 
           <div className="flex-1 min-w-0">
@@ -505,6 +543,17 @@ function ProjectEditorInner({
 
       {/* Top toast for package-limit upgrade nudges (gallery/location/music). */}
       <PackageToastHost />
+
+      {/* DUMMY PAYMENT TEST MODE — redirects to PHP dummy checkout, never writes
+          package_id from here. Only meaningful for event-bound canvases. */}
+      {isEventMode && eventId != null && (
+        <PaymentUpgradeModal
+          isOpen={upgradeOpen}
+          onClose={() => setUpgradeOpen(false)}
+          eventId={eventId}
+          currentPackageId={rules.packageId as number | null}
+        />
+      )}
 
       {showRecordSaveStatus && saveStatus !== "idle" && (
         <div className="fixed bottom-4 right-4 z-[90] rounded-full bg-white/90 border border-[#EDE2DE] px-4 py-1.5 text-[12px] font-semibold text-[#7D5B59] shadow">
