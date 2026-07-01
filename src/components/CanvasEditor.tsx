@@ -25,6 +25,7 @@ import { downscaleImageFile } from "@/src/lib/imageDownscale";
 import { saveLocalPreview } from "@/src/lib/localPreview";
 import { extractEnvelope } from "@/src/lib/extract-envelope";
 import { slugify } from "@/src/lib/slug";
+import { getPackageRules } from "@/src/lib/packageRules";
 import { upload } from "@vercel/blob/client";
 import {
   ENABLE_SMART_SNAPPING,
@@ -114,6 +115,9 @@ export type EditorHandle = {
   removeGalleryPage: () => void;
   hasGalleryPage: () => boolean;
   addPhotoToGallery: (url: string) => void;
+  // Number of photos currently on the gallery page (0 if none). Used to enforce
+  // the per-package gallery limit before adding another photo.
+  getGalleryCount: () => number;
   setGallerySlideInterval: (ms: number) => void;
   addBorder: (url: string) => void;
   setBackgroundColor: (color: string, scope?: BackgroundScope) => void;
@@ -268,6 +272,10 @@ const CanvasEditor = forwardRef<
     // Fired after the active page's content is (re)loaded — page switch, undo/redo,
     // template load. Lets panels re-read page-scoped state like the background.
     onContentReplaced?: () => void;
+    // Fired when the music track actually changes (URL added or upload finished),
+    // NOT on initial hydration. Lets the parent count real music changes for
+    // package-limit tracking.
+    onMusicChange?: (url: string) => void;
     initialPages?: any[] | null;
     initialMusicUrl?: string | null;
     contacts: any[];
@@ -832,6 +840,7 @@ const [currentPage, setCurrentPage] = useState(0);
     removeGalleryPage,
     hasGalleryPage,
     addPhotoToGallery,
+    getGalleryCount,
     setGallerySlideInterval,
     updateActiveObject: (props: Record<string, any>) => {
       const canvas = fabricRef.current;
@@ -2778,13 +2787,15 @@ const [currentPage, setCurrentPage] = useState(0);
       });
       setMusicUrl(blob.url);
       setMusicPlaying(true);
+      // Upload succeeded — count it (a cancelled file dialog never reaches here).
+      props.onMusicChange?.(blob.url);
     } catch (err: any) {
       console.error("Music upload failed", err);
       alert("Music upload failed: " + (err?.message ?? "unknown error"));
     } finally {
       input.value = "";
     }
-  }, []);
+  }, [props.onMusicChange]);
 
   const addImageFromUrl = useCallback((url: string) => {
     const canvas = fabricRef.current;
@@ -2804,8 +2815,10 @@ const [currentPage, setCurrentPage] = useState(0);
     if (!url) return;
     setMusicUrl(url);
     setMusicPlaying(true);
+    // Real, user-initiated change — let the parent count it toward the limit.
+    props.onMusicChange?.(url);
     console.log("Music added:", url);
-  }, []);
+  }, [props.onMusicChange]);
 
   const addBorder = useCallback((url: string) => {
     const canvas = fabricRef.current;
@@ -3174,6 +3187,20 @@ const applyBgToOtherPages = (patch: { backgroundImage?: any; backgroundColor?: a
   };
 
   const hasGalleryPage = () => findGalleryPageIndex() >= 0;
+
+  // Count the gallery photos, reading the live canvas when the gallery is the
+  // page on screen and the stored page JSON otherwise. 0 when no gallery exists.
+  const getGalleryCount = (): number => {
+    const idx = findGalleryPageIndex();
+    if (idx < 0) return 0;
+    const canvas = fabricRef.current;
+    if (idx === currentPageRef.current && canvas) {
+      return canvas.getObjects().filter(isGalleryObj).length;
+    }
+    const page = pages[idx];
+    const objs = Array.isArray(page?.objects) ? page.objects : [];
+    return objs.filter(isGalleryObj).length;
+  };
 
   // Append the gallery template as a new page and switch to it. No-op if a
   // gallery page already exists (we never add a second one). The template
@@ -3671,7 +3698,7 @@ const applyBgToOtherPages = (patch: { backgroundImage?: any; backgroundColor?: a
                   pointerEvents: 'auto',
                 }}
               >
-                <EventFooter contacts={props.contacts} moneyGift={props.moneyGift} calendar={props.calendar} location={props.location} rsvpConfig={props.rsvpConfig} userId={props.userId} eventId={props.eventId} showRsvpAndMoneyGift={Number(props.packageId) !== 1}/>
+                <EventFooter contacts={props.contacts} moneyGift={props.moneyGift} calendar={props.calendar} location={props.location} rsvpConfig={props.rsvpConfig} userId={props.userId} eventId={props.eventId} showRsvpAndMoneyGift={getPackageRules(props.packageId).showRsvpAndMoneyGift}/>
               </div>
             </div>
           )}

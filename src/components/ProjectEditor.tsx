@@ -13,6 +13,8 @@ import { ensureProject, saveProject } from "@/src/lib/projectStorage";
 import { getCanvasUser } from "@/src/lib/userSession";
 import { updateDesign, syncCanvasTitle, getCanvasName, num, type ViupEvent, type ViupDesign } from "@/src/lib/viupApi";
 import type { CanvasUser } from "@/src/lib/userSession";
+import { getPackageRules, readFeatureUsage, normalizeUsageCounter, type FeatureUsage } from "@/src/lib/packageRules";
+import { PackageToastHost } from "@/src/components/PackageLimitToast";
 
 const API_BASE = "https://vi-up.com/api";
 
@@ -93,6 +95,19 @@ function ProjectEditorInner({
 
   const { eventData } = useEventData();
 
+  // ── Package gating ─────────────────────────────────────────────────────────
+  // All package feature rules (RSVP/Money-Gift visibility, gallery/location/
+  // music limits) come from the shared helper so every surface stays consistent.
+  const rules = getPackageRules(event?.package_id);
+
+  // Location/music change counters persisted inside designs.json_data (NOT the
+  // events table). Seeded from the loaded design; only real, successful changes
+  // increment them. Premium/Standard/legacy have Infinity limits so the counters
+  // are effectively cosmetic there.
+  const [featureUsage, setFeatureUsage] = useState<FeatureUsage>(() =>
+    readFeatureUsage(initialDesignJson),
+  );
+
   // Is this canvas bound to a single DB event/design?
   const isEventMode = !!mode && mode !== "designer" && designId != null && eventId != null;
 
@@ -166,6 +181,7 @@ function ProjectEditorInner({
         version: 1,
         eventData,
         canvas: { ...data, eventName: cleanTitle || eventName },
+        featureUsage,
       };
 
       // Flush the title to PHP first (manual save only) so events.event_name +
@@ -263,7 +279,7 @@ function ProjectEditorInner({
         setSaveStatus("idle");
       });
     },
-    [isEventMode, projectId, eventName, eventData, userId, eventId, designId, event],
+    [isEventMode, projectId, eventName, eventData, userId, eventId, designId, event, featureUsage],
   );
 
   // Always call the freshest persist from the debounced timer.
@@ -277,6 +293,27 @@ function ProjectEditorInner({
     if (autosaveTimerRef.current) clearTimeout(autosaveTimerRef.current);
     autosaveTimerRef.current = setTimeout(() => persistRef.current(), 1000);
   }, [autosaveEnabled]);
+
+  // ── Feature-usage counters (24-hour rate limit) ────────────────────────────
+  // Fired only on a real, successful change. The sidebar does the up-front
+  // limit check + upgrade toast/message; these normalise the counter (which
+  // rolls the 24-hour window over if it has expired), increment it, and schedule
+  // an autosave so the updated window is persisted into json_data.
+  const handleMusicChanged = useCallback(() => {
+    setFeatureUsage((u) => {
+      const normalized = normalizeUsageCounter(u.music);
+      return { ...u, music: { ...normalized, count: normalized.count + 1 } };
+    });
+    handleCanvasChange();
+  }, [handleCanvasChange]);
+
+  const handleLocationChanged = useCallback(() => {
+    setFeatureUsage((u) => {
+      const normalized = normalizeUsageCounter(u.location);
+      return { ...u, location: { ...normalized, count: normalized.count + 1 } };
+    });
+    handleCanvasChange();
+  }, [handleCanvasChange]);
 
   useEffect(() => {
     return () => {
@@ -358,11 +395,10 @@ function ProjectEditorInner({
     closeImageEditor();
   };
 
-  // Package gating for the sidebar UI only. Package 1 (Basic) hides the RSVP and
-  // Money Gift tools; every other tier — and null/undefined package_id from old
-  // events or an API build that predates the column — keeps both visible. This is
-  // purely cosmetic: it never touches saved canvas JSON or the RSVP/gift APIs.
-  const showRsvpAndMoneyGift = Number(event?.package_id) !== 1;
+  // Package 1 (Basic) hides the RSVP and Money Gift tools; every other tier — and
+  // null/undefined package_id from old events or an API build that predates the
+  // column — keeps both visible. Sourced from the shared rules helper.
+  const showRsvpAndMoneyGift = rules.showRsvpAndMoneyGift;
 
   if (!loaded) {
     return (
@@ -438,6 +474,9 @@ function ProjectEditorInner({
             onEditImage={handleSidebarEditImage}
             bgReadNonce={bgReadNonce}
             showRsvpAndMoneyGift={showRsvpAndMoneyGift}
+            rules={rules}
+            featureUsage={featureUsage}
+            onLocationChanged={handleLocationChanged}
           />
 
           <div className="flex-1 min-w-0">
@@ -453,6 +492,7 @@ function ProjectEditorInner({
               onEditImage={handleCanvasEditImage}
               onCanvasChange={handleCanvasChange}
               onContentReplaced={() => setBgReadNonce((n) => n + 1)}
+              onMusicChange={handleMusicChanged}
               initialPages={initialPages}
               initialMusicUrl={initialMusicUrl}
               userId={userId}
@@ -462,6 +502,9 @@ function ProjectEditorInner({
           </div>
         </div>
       </div>
+
+      {/* Top toast for package-limit upgrade nudges (gallery/location/music). */}
+      <PackageToastHost />
 
       {showRecordSaveStatus && saveStatus !== "idle" && (
         <div className="fixed bottom-4 right-4 z-[90] rounded-full bg-white/90 border border-[#EDE2DE] px-4 py-1.5 text-[12px] font-semibold text-[#7D5B59] shadow">

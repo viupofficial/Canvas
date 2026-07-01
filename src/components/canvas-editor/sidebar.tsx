@@ -14,6 +14,15 @@ import { galleryPage } from "@/src/components/template-list/galleryTemplate";
 import { envelopePage } from "@/src/components/template-list/EnvelopeTemplate";
 import { downscaleImageFile } from "@/src/lib/imageDownscale";
 import { Play, Pause } from "lucide-react";
+import {
+  getPackageRules,
+  normalizeUsageCounter,
+  EMPTY_FEATURE_USAGE,
+  UPGRADE_MESSAGES,
+  type PackageRules,
+  type FeatureUsage,
+} from "@/src/lib/packageRules";
+import { showPackageToast } from "@/src/components/PackageLimitToast";
 
 // Invert a 6-digit hex color (Adobe-style negative). Falls back gracefully for non-hex input.
 function invertHex(color: string): string {
@@ -131,9 +140,11 @@ const DEFAULT_PHOTOS: string[] = [
 function PhotoTab({
   editorRef,
   onEditImage,
+  rules,
 }: {
   editorRef?: React.RefObject<EditorHandle | null>;
   onEditImage?: (src: string, onReplace: (dataUrl: string) => void) => void;
+  rules: PackageRules;
 }) {
   // Single source of truth for the gallery — seeded with the default photos so
   // edit / duplicate / delete can all operate in place by index.
@@ -147,6 +158,26 @@ function PhotoTab({
   const [galleryOn, setGalleryOn] = useState(
     () => editorRef?.current?.hasGalleryPage?.() ?? false,
   );
+
+  // Reactive mirror of the gallery photo count so the "limit reached" note can
+  // render (getGalleryCount is imperative). Refreshed on toggle + each add.
+  const [galleryCount, setGalleryCount] = useState(0);
+  const refreshGalleryCount = () =>
+    setGalleryCount(editorRef?.current?.getGalleryCount?.() ?? 0);
+
+  useEffect(() => {
+    refreshGalleryCount();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [galleryOn]);
+
+  const galleryLimit = rules.galleryLimit;
+  const galleryLimited = Number.isFinite(galleryLimit);
+  const galleryAtLimit = galleryOn && galleryLimited && galleryCount >= galleryLimit;
+  const galleryLimitMessage = rules.isBasicPackage
+    ? UPGRADE_MESSAGES.galleryBasicSidebar
+    : rules.isStandardPackage
+    ? UPGRADE_MESSAGES.galleryStandardSidebar
+    : "";
 
   const toggleGallery = () => {
     const next = !galleryOn;
@@ -171,8 +202,18 @@ function PhotoTab({
     // Chain sequentially so multi-file uploads keep their FIFO order even
     // though downscaling finishes at different speeds per file.
     let chain: Promise<unknown> = Promise.resolve();
+    // Package gallery cap only applies once a gallery page exists (that's what
+    // the limit counts). `projected` tracks the running total so a multi-file
+    // drop stops exactly at the limit instead of overshooting.
+    let projected = editorRef?.current?.getGalleryCount?.() ?? 0;
+    let blocked = false;
     Array.from(files).forEach((file) => {
       if (!file.type.startsWith('image/')) return;
+      if (galleryOn && galleryLimited && projected >= galleryLimit) {
+        blocked = true;
+        return;
+      }
+      if (galleryOn) projected += 1;
       chain = chain
         .then(() => downscaleImageFile(file))
         .then((dataUrl) => {
@@ -180,8 +221,10 @@ function PhotoTab({
           // Grow the gallery page with each newly uploaded photo (FIFO order).
           // No-op if no gallery page exists.
           editorRef?.current?.addPhotoToGallery?.(dataUrl);
+          refreshGalleryCount();
         });
     });
+    if (blocked) showPackageToast(UPGRADE_MESSAGES.gallery(galleryLimit));
   };
 
   const addToCanvas = (src: string) => {
@@ -257,11 +300,27 @@ function PhotoTab({
         onChange={(e) => handleFiles(e.target.files)}
       />
       <button
-        onClick={() => fileInputRef.current?.click()}
-        className="w-full px-3 py-2 bg-gray-100 rounded text-sm font-medium hover:bg-gray-200 transition mb-3"
+        onClick={() => {
+          if (galleryAtLimit) {
+            showPackageToast(UPGRADE_MESSAGES.gallery(galleryLimit));
+            return;
+          }
+          fileInputRef.current?.click();
+        }}
+        disabled={galleryAtLimit}
+        className={`w-full px-3 py-2 rounded text-sm font-medium transition mb-3 ${
+          galleryAtLimit
+            ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
+            : 'bg-gray-100 hover:bg-gray-200'
+        }`}
       >
         + Upload Images
       </button>
+      {galleryAtLimit && galleryLimitMessage && (
+        <div className="mb-3 rounded-md bg-[#FBF1EC] border border-[#E7C9BC] px-3 py-2 text-[11px] font-semibold text-[#8C5B3F]">
+          {galleryLimitMessage}
+        </div>
+      )}
       <div className="text-[11px] text-gray-400 text-center mb-2">
         Double-click to add to canvas. Right-click for more options.
       </div>
@@ -328,10 +387,23 @@ function PhotoTab({
   );
 }
 
-function MusicTab({ editorRef }: { editorRef?: React.RefObject<EditorHandle | null> }) {
+function MusicTab({
+  editorRef,
+  rules,
+  musicChanges,
+}: {
+  editorRef?: React.RefObject<EditorHandle | null>;
+  rules: PackageRules;
+  musicChanges: number;
+}) {
   const [url, setUrl] = useState("");
   // Mirrors the editor preview player. New music auto-plays, so default to true.
   const [playing, setPlaying] = useState(true);
+
+  const musicLimit = rules.musicChangeLimit;
+  const musicLimited = Number.isFinite(musicLimit);
+  const musicAtLimit = musicLimited && musicChanges >= musicLimit;
+  const musicRemaining = musicLimited ? Math.max(0, musicLimit - musicChanges) : Infinity;
 
   const togglePlay = () => {
     const ed = editorRef?.current;
@@ -360,15 +432,34 @@ function MusicTab({ editorRef }: { editorRef?: React.RefObject<EditorHandle | nu
           {playing ? <Pause size={15} fill="currentColor" /> : <Play size={15} fill="currentColor" />}
         </button>
       </div>
+      {rules.isBasicPackage && (
+        musicAtLimit ? (
+          <div className="mb-3 rounded-md bg-[#FBF1EC] border border-[#E7C9BC] px-3 py-2 text-[11px] font-semibold text-[#8C5B3F]">
+            {UPGRADE_MESSAGES.music}
+          </div>
+        ) : (
+          <div className="mb-3 rounded-md bg-[#F2E8E6] border border-[#E4D3CE] px-3 py-2 text-[11px] font-semibold text-[#7D5B59]">
+            {UPGRADE_MESSAGES.musicRemaining(musicRemaining)}
+          </div>
+        )
+      )}
       <div className="flex flex-col gap-2">
         <button
           onClick={() => {
+            // Block + nudge once the Basic music-change limit is reached.
+            if (musicAtLimit) {
+              showPackageToast(UPGRADE_MESSAGES.music);
+              return;
+            }
             if (editorRef?.current?.uploadMusic) {
               editorRef.current.uploadMusic();
               setPlaying(true);
             }
           }}
-          className="px-3 py-2 bg-gray-100 rounded text-left"
+          disabled={musicAtLimit}
+          className={`px-3 py-2 rounded text-left ${
+            musicAtLimit ? 'bg-gray-100 text-gray-400 cursor-not-allowed' : 'bg-gray-100'
+          }`}
         >
           Upload Music
         </button>
@@ -382,13 +473,20 @@ function MusicTab({ editorRef }: { editorRef?: React.RefObject<EditorHandle | nu
           <button
             onClick={() => {
               if (!url) return;
+              if (musicAtLimit) {
+                showPackageToast(UPGRADE_MESSAGES.music);
+                return;
+              }
               if (editorRef?.current?.addMusicFromUrl) {
                 editorRef.current.addMusicFromUrl(url.trim());
                 setPlaying(true);
               }
               setUrl("");
             }}
-            className="px-3 py-1 bg-brand-accent text-[#5a2d2d] rounded"
+            disabled={musicAtLimit}
+            className={`px-3 py-1 rounded text-[#5a2d2d] ${
+              musicAtLimit ? 'bg-gray-200 text-gray-400 cursor-not-allowed' : 'bg-brand-accent'
+            }`}
           >
             Add
           </button>
@@ -495,26 +593,66 @@ function ContactTab() {
   );
 }
 
-function LocationTab() {
+function LocationTab({
+  rules,
+  locationChanges,
+  onLocationChanged,
+}: {
+  rules: PackageRules;
+  locationChanges: number;
+  onLocationChanged?: () => void;
+}) {
   const { eventData, setSection } = useEventData();
   const [address, setAddress] = useState(eventData.location?.address ?? '');
 
+  const limit = rules.locationChangeLimit;
+  const limited = Number.isFinite(limit);
+  const atLimit = limited && locationChanges >= limit;
+  const remaining = limited ? Math.max(0, limit - locationChanges) : Infinity;
+
   const handleChange = (value: string) => {
     setAddress(value);
-    setSection('location', value ? { address: value } : null);
+    // For limited (Basic) packages the change must go through the gated Save so
+    // it can be counted/blocked — no live commit. Other tiers keep live preview.
+    if (!rules.isBasicPackage) {
+      setSection('location', value ? { address: value } : null);
+    }
   };
 
   const handleSave = () => {
-    if (!address) {
+    const trimmed = address.trim();
+    if (!trimmed) {
       alert("Please enter a location");
       return;
     }
-    setSection('location', { address });
+    const committed = (eventData.location?.address ?? '').trim();
+    // Re-saving the same address isn't a change — commit it but don't count it.
+    if (trimmed === committed) {
+      setSection('location', { address: trimmed });
+      return;
+    }
+    if (atLimit) {
+      showPackageToast(UPGRADE_MESSAGES.location);
+      return;
+    }
+    setSection('location', { address: trimmed });
+    onLocationChanged?.();
   };
 
   return (
     <div>
       <div className="text-[#191212] text-[17px] font-bold mb-4">Location</div>
+      {rules.isBasicPackage && (
+        atLimit ? (
+          <div className="mb-3 rounded-md bg-[#FBF1EC] border border-[#E7C9BC] px-3 py-2 text-[11px] font-semibold text-[#8C5B3F]">
+            {UPGRADE_MESSAGES.location}
+          </div>
+        ) : (
+          <div className="mb-3 rounded-md bg-[#F2E8E6] border border-[#E4D3CE] px-3 py-2 text-[11px] font-semibold text-[#7D5B59]">
+            {UPGRADE_MESSAGES.locationRemaining(remaining)}
+          </div>
+        )
+      )}
       <div className="flex flex-col gap-3">
         <input
           value={address}
@@ -524,7 +662,10 @@ function LocationTab() {
         />
         <button
           onClick={handleSave}
-          className="mt-2 py-2 rounded-md bg-[#8C6B6B] text-white font-semibold hover:opacity-90 transition"
+          disabled={atLimit}
+          className={`mt-2 py-2 rounded-md text-white font-semibold transition ${
+            atLimit ? 'bg-[#C9B7B6] cursor-not-allowed' : 'bg-[#8C6B6B] hover:opacity-90'
+          }`}
         >
           Save
         </button>
@@ -1499,6 +1640,9 @@ export default function Sidebar({
   onEditImage,
   bgReadNonce,
   showRsvpAndMoneyGift = true,
+  rules,
+  featureUsage,
+  onLocationChanged,
 }: {
   editorRef?: React.RefObject<EditorHandle | null>;
   isPhonePreview?: boolean;
@@ -1509,7 +1653,18 @@ export default function Sidebar({
   // Package gating (Basic / package_id === 1 hides RSVP + Money Gift). Defaults
   // to true so non-event usages (free designer canvas) keep both tools visible.
   showRsvpAndMoneyGift?: boolean;
+  // Full package rule set (gallery/location/music limits). Absent for free
+  // designer canvases — defaults to full access (all limits Infinity).
+  rules?: PackageRules;
+  // Persisted location/music change counters from designs.json_data.
+  featureUsage?: FeatureUsage;
+  // Called after a real, successful location change so the parent increments +
+  // persists the counter.
+  onLocationChanged?: () => void;
 }) {
+  // Free/legacy canvases pass no rules → full access.
+  const pkgRules = rules ?? getPackageRules(null);
+  const usage = featureUsage ?? EMPTY_FEATURE_USAGE;
   const [active, setActive] = useState<Tab | null>(null);
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
   const [phoneOpen, setPhoneOpen] = useState(false);
@@ -1863,13 +2018,21 @@ export default function Sidebar({
       ) : active === 'background' ? (
         <BackgroundTab editorRef={editorRef} readNonce={bgReadNonce} />
       ) : active === 'photo' ? (
-        <PhotoTab editorRef={editorRef} onEditImage={onEditImage} />
+        <PhotoTab editorRef={editorRef} onEditImage={onEditImage} rules={pkgRules} />
       ) : active === 'music' ? (
-        <MusicTab editorRef={editorRef} />
+        <MusicTab
+          editorRef={editorRef}
+          rules={pkgRules}
+          musicChanges={normalizeUsageCounter(usage.music).count}
+        />
       ) : active === 'contact' ? (
         <ContactTab />
       ) : active === 'location' ? (
-        <LocationTab />
+        <LocationTab
+          rules={pkgRules}
+          locationChanges={normalizeUsageCounter(usage.location).count}
+          onLocationChanged={onLocationChanged}
+        />
       ) : active === 'calendar' ? (
         <CalendarTab />
       ) : active === 'rsvp' ? (

@@ -19,6 +19,7 @@ export default function EditorLayoutClient({
   onEditImage,
   onCanvasChange,
   onContentReplaced,
+  onMusicChange,
   initialPages,
   initialMusicUrl,
   userId,
@@ -36,6 +37,7 @@ export default function EditorLayoutClient({
   onEditImage?: (src: string, opts?: { crop?: boolean }) => void;
   onCanvasChange?: () => void;
   onContentReplaced?: () => void;
+  onMusicChange?: (url: string) => void;
   initialPages?: any[] | null;
   initialMusicUrl?: string | null;
   userId?: string | number | null;
@@ -81,6 +83,7 @@ export default function EditorLayoutClient({
       onLayersChange={refreshLayers}
       onPagesChange={handlePagesChange}
       onContentReplaced={onContentReplaced}
+      onMusicChange={onMusicChange}
       initialPages={initialPages}
       initialMusicUrl={initialMusicUrl}
       contacts={contacts}

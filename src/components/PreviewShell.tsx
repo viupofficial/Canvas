@@ -4,6 +4,7 @@ import { useEffect, useState, useCallback } from "react";
 import RsvpPlayer from "@/src/components/RsvpPlayer";
 import EventFooter from "@/src/components/EventFooter";
 import { getCanvasGuestbook } from "@/src/lib/viupApi";
+import { getPackageRules } from "@/src/lib/packageRules";
 
 /**
  * Shared preview shell used by BOTH the local preview (/preview-local) and the
@@ -80,7 +81,7 @@ export default function PreviewShell({ data }: { data: PreviewShellData }) {
         userId={userId}
         eventId={eventId}
         onGuestbookUpdate={handleGuestbookUpdate}
-        showRsvpAndMoneyGift={Number(data.packageId) !== 1}
+        showRsvpAndMoneyGift={getPackageRules(data.packageId).showRsvpAndMoneyGift}
       />
     </main>
   );
