@@ -1513,6 +1513,51 @@ star-fly-in {
   border-color: #5a2d2d;
 }
 
+/* RSVP form: floating (notched) labels. The label sits centered inside the field
+   as a placeholder, then rises to sit on the top border once the field is
+   focused or has a value. Driven purely by :has()/:placeholder-shown so no JS
+   `.focused` toggle is needed (unlike the Guestbook form). */
+.rsvp-form .form-group label {
+  top: 50%;
+  left: 1rem;
+  transform: translateY(-50%);
+  margin: 0;
+}
+
+.rsvp-form .form-group:has(input:focus) label,
+.rsvp-form .form-group:has(input:not(:placeholder-shown)) label,
+.rsvp-form .form-group:has(select:focus) label,
+.rsvp-form .form-group:has(select:valid) label {
+  top: 0;
+  left: 0.8rem;
+  transform: translateY(-50%) scale(0.8);
+  color: #5a2d2d;
+}
+
+/* Guestbook form: same floating-label behavior as the RSVP form. The Wish field
+   is a tall textarea, so its resting placeholder sits near the top instead of
+   the vertical center. */
+.guestbook-modal .form-group label {
+  top: 50%;
+  left: 1rem;
+  transform: translateY(-50%);
+  margin: 0;
+}
+
+.guestbook-modal .form-group:has(textarea) label {
+  top: 1.1rem;
+  transform: none;
+}
+
+.guestbook-modal .form-group:has(input:focus) label,
+.guestbook-modal .form-group:has(input:not(:placeholder-shown)) label,
+.guestbook-modal .form-group:has(textarea:focus) label,
+.guestbook-modal .form-group:has(textarea:not(:placeholder-shown)) label {
+  top: 0;
+  left: 0.8rem;
+  transform: translateY(-50%) scale(0.8);
+}
+
 .btn-submit {
   width: 100%;
   padding: 0.8rem;
@@ -2363,6 +2408,12 @@ img[alt="Mayaxasyraff"],
    groups that reserve a center slot. Placed at end-of-file so it wins on source
    order over the base + .preview-local footer rules. */
 .footer-basic::before {
+  display: none;
+}
+
+/* RSVP turned off via the sidebar toggle (full layout still in use): there is no
+   centered RSVP circle, so drop the white center "bump" too. */
+.footer-container.footer-no-rsvp::before {
   display: none;
 }
 

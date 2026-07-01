@@ -36,6 +36,7 @@ export default function EventFooter({
   } | null;
   location?: { address: string } | null;
   rsvpConfig?: {
+    enabled?: boolean;
     maxGuest?: number;
     navColor?: string;
     navOpacity?: number;
@@ -110,6 +111,8 @@ export default function EventFooter({
     // Basic package: RSVP and Money Gift are unavailable. Block opening their
     // modals even if a stale element or saved layout tries to trigger them.
     if (!showRsvpAndMoneyGift && (card === "rsvp" || card === "gift")) return;
+    // RSVP turned off via the sidebar toggle — never open its modal.
+    if (card === "rsvp" && rsvpConfig?.enabled === false) return;
     if (activeCard === card) {
       closeCard();
     } else {
@@ -146,6 +149,9 @@ export default function EventFooter({
   // star scales up onto the moved circle (visible).
   const infoActive = activeCard === "info";
   const maxPax = rsvpConfig?.maxGuest ?? 3;
+  // RSVP toggle (from the RSVP sidebar). Undefined ⇒ ON for backward compat;
+  // only an explicit `false` hides RSVP. Gated together with the package check.
+  const rsvpEnabled = showRsvpAndMoneyGift && rsvpConfig?.enabled !== false;
     const formatDate = (dateStr: string) => {
   const date = new Date(dateStr);
 
@@ -312,7 +318,7 @@ const formatEmbedDate = (dateStr: string) => {
             )}
 
             {/* RSVP CARD */}
-            {showRsvpAndMoneyGift && activeCard === "rsvp" && (
+            {rsvpEnabled && activeCard === "rsvp" && (
 
                 <div className={`contact-card rsvp-popup ${fadeCls}`}>
 
@@ -427,25 +433,25 @@ const formatEmbedDate = (dateStr: string) => {
                             <input type="hidden" name="status" value={rsvpStatus === "accept" ? "Attending" : "Not Attending"} />
 
                             <div className="form-group">
-                                <label style={{ paddingBottom: "8px" }}>Name</label>
-                                <input type="text" name="name" ref={rsvpNameRef} required disabled={rsvpSubmitting} />
+                                <input type="text" name="name" ref={rsvpNameRef} required disabled={rsvpSubmitting} placeholder=" " />
+                                <label>Name</label>
                             </div>
 
                             <div className="form-group">
-                                <label style={{ paddingBottom: "8px" }}>Phone No.</label>
-                                <input type="tel" name="phone" ref={rsvpPhoneRef} required={rsvpStatus === "accept"} disabled={rsvpSubmitting} />
+                                <input type="tel" name="phone" ref={rsvpPhoneRef} required={rsvpStatus === "accept"} disabled={rsvpSubmitting} placeholder=" " />
+                                <label>Phone No.</label>
                             </div>
 
                             {rsvpStatus === "accept" && (
                                 <>
                                     <div className="form-group">
-                                        <label style={{ paddingBottom: "8px" }}>Number of Pax</label>
                                         <select name="pax" ref={rsvpPaxRef} required className="styled-select" disabled={rsvpSubmitting}>
-                                            <option value="">-- Select --</option>
+                                            <option value="" disabled hidden></option>
                                             {Array.from({ length: maxPax }, (_, i) => i + 1).map((n) => (
                                                 <option key={n} value={n}>{n}</option>
                                             ))}
                                         </select>
+                                        <label>Number of Pax</label>
                                     </div>
 
                                     <p className="info-line">
@@ -510,6 +516,7 @@ const formatEmbedDate = (dateStr: string) => {
                                 style={{ paddingBottom: "85px" }}
                                 required
                                 disabled={gbSubmitting}
+                                placeholder=" "
                             />
                             <label
                                 htmlFor="wish"
@@ -520,7 +527,7 @@ const formatEmbedDate = (dateStr: string) => {
                         </div>
 
                         <div className="form-group">
-                            <input type="text" id="name" ref={gbNameRef} required disabled={gbSubmitting} />
+                            <input type="text" id="name" ref={gbNameRef} required disabled={gbSubmitting} placeholder=" " />
                             <label
                                 htmlFor="name"
                                 style={{ fontFamily: "Montserrat", color: "#7D5B59" }}
@@ -803,17 +810,21 @@ const formatEmbedDate = (dateStr: string) => {
             )}
 
             {/* FOOTER */}
-            <div className={`footer-container preview-footer-enter${infoActive ? " bump-shift" : ""}${showRsvpAndMoneyGift ? "" : " footer-basic"}`} style={{ background: footerBg }}>
+            <div className={`footer-container preview-footer-enter${infoActive ? " bump-shift" : ""}${showRsvpAndMoneyGift ? "" : " footer-basic"}${rsvpEnabled ? "" : " footer-no-rsvp"}`} style={{ background: footerBg }}>
                 {showRsvpAndMoneyGift ? (
                   <>
-                    <div className={`footer-rsvp-wrapper${infoActive ? " move-right" : ""}`}>
-                        {/* Circle is just the colored bubble; the single "RSVP" label
-                            is rendered once by .footer-rsvp-text below (which also
-                            follows the Text and Icon color picker). */}
-                        <div className="footer-rsvp" style={{ backgroundColor: rsvpCircleBg }} onClick={() => toggleCard("rsvp")} />
-                    </div>
+                    {rsvpEnabled && (
+                      <>
+                        <div className={`footer-rsvp-wrapper${infoActive ? " move-right" : ""}`}>
+                            {/* Circle is just the colored bubble; the single "RSVP" label
+                                is rendered once by .footer-rsvp-text below (which also
+                                follows the Text and Icon color picker). */}
+                            <div className="footer-rsvp" style={{ backgroundColor: rsvpCircleBg }} onClick={() => toggleCard("rsvp")} />
+                        </div>
 
-                    <div className={`footer-rsvp-text${infoActive ? " drop" : ""}`} style={labelStyle}>RSVP</div>
+                        <div className={`footer-rsvp-text${infoActive ? " drop" : ""}`} style={labelStyle}>RSVP</div>
+                      </>
+                    )}
 
                     <div className="footer-buttons">
                         <div className="footer-side left">

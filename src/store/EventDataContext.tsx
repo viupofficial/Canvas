@@ -29,6 +29,9 @@ export type GiftData = {
   image: string | null;
 } | null;
 export type RSVPConfig = {
+  // Whether RSVP is available on the invitation. Treated as ON when undefined so
+  // pre-existing designs (saved before this toggle existed) keep showing RSVP.
+  enabled?: boolean;
   maxGuest?: number;
   navColor?: string;
   navOpacity?: number;

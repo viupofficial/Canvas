@@ -690,6 +690,18 @@ function CalendarTab() {
 function RSVPTab() {
   const { eventData, updateEventData, setSection } = useEventData();
   const current = eventData.rsvpConfig;
+
+  // RSVP toggle — ON ⇒ RSVP is available on the invitation, OFF ⇒ hidden.
+  // Defaults to ON unless explicitly turned off, so existing designs are
+  // unaffected. Mirrors the Photo Gallery toggle pattern.
+  const [rsvpOn, setRsvpOn] = useState(current?.enabled !== false);
+
+  const toggleRsvp = () => {
+    const next = !rsvpOn;
+    setRsvpOn(next);
+    updateEventData('rsvpConfig', { enabled: next } as any);
+  };
+
   const [maxGuest, setMaxGuest] = useState<number | ''>(current?.maxGuest ?? '');
   const [navColor, setNavColor] = useState(current?.navColor ?? '#000000');
   const [navOpacity, setNavOpacity] = useState(current?.navOpacity ?? 100);
@@ -737,12 +749,36 @@ function RSVPTab() {
       alert("Please enter max guest");
       return;
     }
-    setSection('rsvpConfig', { maxGuest, navColor, navOpacity, textColor, textOpacity });
+    setSection('rsvpConfig', { enabled: rsvpOn, maxGuest, navColor, navOpacity, textColor, textOpacity });
   };
 
   return (
     <div>
-      <div className="text-[#191212] text-[17px] font-bold mb-4">RSVP</div>
+      <div className="flex items-center justify-between mb-4">
+        <div className="text-[#191212] text-[17px] font-bold">RSVP</div>
+        <button
+          type="button"
+          role="switch"
+          aria-checked={rsvpOn}
+          aria-label="Toggle RSVP"
+          title={rsvpOn ? 'Disable RSVP' : 'Enable RSVP'}
+          onClick={toggleRsvp}
+          className={`relative inline-flex h-5 w-9 shrink-0 items-center rounded-full transition-colors ${
+            rsvpOn ? 'bg-[#8C6B6B]' : 'bg-gray-300'
+          }`}
+        >
+          <span
+            className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${
+              rsvpOn ? 'translate-x-[18px]' : 'translate-x-[2px]'
+            }`}
+          />
+        </button>
+      </div>
+      {!rsvpOn ? (
+        <p className="text-[12px] text-gray-400 text-center py-6">
+          RSVP is turned off. Guests won&apos;t see it on the invitation.
+        </p>
+      ) : (
       <div className="flex flex-col gap-4">
         <div>
           <label className="text-xs text-gray-500">Max Guest Capacity</label>
@@ -877,6 +913,7 @@ function RSVPTab() {
           Save
         </button>
       </div>
+      )}
     </div>
   );
 }
