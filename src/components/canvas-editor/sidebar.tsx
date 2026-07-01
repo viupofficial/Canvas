@@ -83,24 +83,12 @@ const INTERACTIVE_ELEMENTS: { id: 'countdown' | 'guestbook'; label: string; icon
   {
     id: 'countdown',
     label: 'Counting Days',
-    icon: (
-      <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-        <circle cx="12" cy="13" r="8" />
-        <path d="M12 9v4l2.5 2.5" />
-        <path d="M9 2h6" />
-      </svg>
-    ),
+    icon: <img src="/Stopwatch.svg" width={28} height={28} aria-hidden alt="" />,
   },
   {
     id: 'guestbook',
     label: 'Guestbook',
-    icon: (
-      <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-        <path d="M4 4h13a2 2 0 0 1 2 2v14H6a2 2 0 0 1-2-2z" />
-        <path d="M8 4v16" />
-        <path d="M11 9h5M11 13h5" />
-      </svg>
-    ),
+    icon: <img src="/Guestbook.svg" width={28} height={28} aria-hidden alt="" />,
   },
 ];
 
@@ -1587,9 +1575,7 @@ export default function Sidebar({
   const iconNav = (
     <aside className="bg-brand-cream transition-all duration-200 w-30 h-full overflow-y-auto shrink-0">
       <nav className="flex flex-col gap-2 pt-4">
-        {SIDEBAR_ITEMS.filter(
-          (it) => showRsvpAndMoneyGift || (it.id !== 'rsvp' && it.id !== 'money'),
-        ).map((it) => {
+        {SIDEBAR_ITEMS.map((it) => {
           const isLocked = false; // Premium lock disabled
           return (
             <button
