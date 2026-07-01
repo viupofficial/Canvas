@@ -1,17 +1,14 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
-import RsvpPlayer from "@/src/components/RsvpPlayer";
-import EventFooter from "@/src/components/EventFooter";
+import { useEffect, useState } from "react";
+import PreviewShell from "@/src/components/PreviewShell";
 import { extractEnvelope } from "@/src/lib/extract-envelope";
 import { loadLocalPreview } from "@/src/lib/localPreview";
-import { getCanvasGuestbook } from "@/src/lib/viupApi";
 import "../../globals.css";
 
 export default function PreviewLocalPage() {
   const [data, setData] = useState<any | null>(null);
   const [missing, setMissing] = useState(false);
-  const [guestMessages, setGuestMessages] = useState<{ message: string; sender: string }[]>([]);
 
   useEffect(() => {
     let cancelled = false;
@@ -75,18 +72,6 @@ export default function PreviewLocalPage() {
         eventId: payload.eventId ?? null,
         packageId: payload.packageId ?? null,
       });
-
-      if (payload.userId && payload.eventId) {
-        getCanvasGuestbook({ userId: payload.userId, eventId: payload.eventId })
-          .then((res) => {
-            const entries = (res.entries || []).map((e: any) => ({
-              message: e.message || e.wish || "",
-              sender: e.sender || e.name || "",
-            }));
-            if (entries.length) setGuestMessages(entries);
-          })
-          .catch(() => {});
-      }
     } catch (e) {
       console.error("[preview-local] failed to parse", e);
       if (!cancelled) setMissing(true);
@@ -109,34 +94,7 @@ export default function PreviewLocalPage() {
     );
   }
 
-  const handleGuestbookUpdate = useCallback((entries: { message: string; sender: string }[]) => {
-    setGuestMessages(entries);
-  }, []);
-
   if (!data) return null;
 
-  return (
-    <main className="preview-local" style={{ width: "100%", position: "relative" }}>
-      <RsvpPlayer
-        pages={data.pages}
-        envelope={data.envelope}
-        musicUrl={data.musicUrl}
-        borderUrl={data.borderUrl}
-        eventDate={data.calendar?.date ?? null}
-        fillMode="cover"
-        guestMessages={guestMessages.length > 0 ? guestMessages : undefined}
-      />
-      <EventFooter
-        contacts={data.contacts}
-        moneyGift={data.moneyGift}
-        calendar={data.calendar}
-        location={data.location}
-        rsvpConfig={data.rsvpConfig}
-        userId={data.userId}
-        eventId={data.eventId}
-        onGuestbookUpdate={handleGuestbookUpdate}
-        showRsvpAndMoneyGift={Number(data.packageId) !== 1}
-      />
-    </main>
-  );
+  return <PreviewShell data={data} />;
 }

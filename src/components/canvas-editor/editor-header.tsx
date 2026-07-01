@@ -12,6 +12,7 @@ import {
   avatarFor,
   type CanvasUser,
 } from "@/src/lib/userSession";
+import { liveEventUrl } from "@/src/lib/slug";
 
 /**
  * EditorHeader component
@@ -242,8 +243,11 @@ export default function EditorHeader(props: {
     if (!editor || shareStatus !== "idle") return;
     setShareStatus("link");
     try {
+      // exportHTML publishes the pages and returns the title-derived slug; build
+      // the canonical public link so the copied URL is always the real live
+      // format (https://canvas.vi-up.com/e/{slug}), not the editor's own origin.
       const slug = await editor.exportHTML(eventName);
-      const shareUrl = `${window.location.origin}/e/${slug}`;
+      const shareUrl = liveEventUrl(slug);
       await copyText(shareUrl);
       setShareStatus("copied");
       setTimeout(() => {
