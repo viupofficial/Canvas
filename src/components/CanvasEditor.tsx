@@ -16,6 +16,16 @@ import '../app/globals.css'
 import TemplateList from "@/src/components/template-list";
 import { envelopePage } from "@/src/components/template-list/EnvelopeTemplate";
 import { galleryPage } from "@/src/components/template-list/galleryTemplate";
+// The gallery template ships with a few decorative starter photos
+// (galleryImage1 / galleryImage2 / …). Those are free defaults and must NOT
+// count against the package photo budget — otherwise a Standard user (limit 8)
+// could only add 6 of their own before hitting the cap. Derive the starter count
+// from the template itself so it stays correct if the template changes.
+const GALLERY_STARTER_COUNT = Array.isArray((galleryPage as any)?.objects)
+  ? (galleryPage as any).objects.filter(
+      (o: any) => typeof o?.name === "string" && o.name.startsWith("galleryImage"),
+    ).length
+  : 0;
 import { countdownPage } from "@/src/components/template-list/timeBoxTemplate";
 import { guestbookPage } from "@/src/components/template-list/guestbookTemplate";
 import { useEventDataOptional } from "@/src/store/EventDataContext";
@@ -115,8 +125,9 @@ export type EditorHandle = {
   removeGalleryPage: () => void;
   hasGalleryPage: () => boolean;
   addPhotoToGallery: (url: string) => void;
-  // Number of photos currently on the gallery page (0 if none). Used to enforce
-  // the per-package gallery limit before adding another photo.
+  // Number of USER-added photos on the gallery page — the template's free starter
+  // photos are excluded (0 if no gallery). Used to enforce the per-package gallery
+  // limit before adding another photo.
   getGalleryCount: () => number;
   setGallerySlideInterval: (ms: number) => void;
   addBorder: (url: string) => void;
@@ -3188,18 +3199,22 @@ const applyBgToOtherPages = (patch: { backgroundImage?: any; backgroundColor?: a
 
   const hasGalleryPage = () => findGalleryPageIndex() >= 0;
 
-  // Count the gallery photos, reading the live canvas when the gallery is the
-  // page on screen and the stored page JSON otherwise. 0 when no gallery exists.
+  // Count the USER-added gallery photos (what the package limit applies to),
+  // reading the live canvas when the gallery is the page on screen and the stored
+  // page JSON otherwise. The template's free starter photos are discounted, so a
+  // Standard user (limit 8) can add a full 8 of their own. 0 when no gallery
+  // exists; clamped at 0 in case the user deleted the starters.
   const getGalleryCount = (): number => {
     const idx = findGalleryPageIndex();
     if (idx < 0) return 0;
     const canvas = fabricRef.current;
-    if (idx === currentPageRef.current && canvas) {
-      return canvas.getObjects().filter(isGalleryObj).length;
-    }
-    const page = pages[idx];
-    const objs = Array.isArray(page?.objects) ? page.objects : [];
-    return objs.filter(isGalleryObj).length;
+    const total =
+      idx === currentPageRef.current && canvas
+        ? canvas.getObjects().filter(isGalleryObj).length
+        : (Array.isArray(pages[idx]?.objects) ? pages[idx].objects : []).filter(
+            isGalleryObj,
+          ).length;
+    return Math.max(0, total - GALLERY_STARTER_COUNT);
   };
 
   // Append the gallery template as a new page and switch to it. No-op if a
