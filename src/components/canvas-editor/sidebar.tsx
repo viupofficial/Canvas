@@ -13,6 +13,7 @@ import { guestbookPage } from "@/src/components/template-list/guestbookTemplate"
 import { galleryPage } from "@/src/components/template-list/galleryTemplate";
 import { envelopePage } from "@/src/components/template-list/EnvelopeTemplate";
 import { downscaleImageFile } from "@/src/lib/imageDownscale";
+import Scrubbable from "@/src/components/canvas-editor/scrubbable";
 import { Play, Pause } from "lucide-react";
 import {
   getPackageRules,
@@ -537,7 +538,8 @@ function ContactTab() {
 
   return (
     <div>
-      <div className="text-[#191212] text-[17px] font-bold mb-4">Contact</div>
+      <div className="text-[#191212] text-[17px] font-bold mb-1">Contact</div>
+      <p className="text-[11px] text-[#7D5B5980] mb-4">Please do not use dashes (-) in the phone number.</p>
       <div className="flex flex-col gap-3">
         {contacts.map((c, i) => (
           <div
@@ -955,7 +957,16 @@ function RSVPTab() {
                 maxLength={6}
               />
               <div className="w-[2px] self-stretch -my-2 bg-white shrink-0 ml-auto" />
-              <div className="flex items-baseline gap-0.5 shrink-0 pl-1">
+              <Scrubbable
+                className="flex items-baseline gap-0.5 shrink-0 pl-1"
+                min={0}
+                max={100}
+                value={navOpacity}
+                onScrub={(v) => {
+                  setNavOpacity(v);
+                  pushField('navOpacity', v);
+                }}
+              >
                 <input
                   className="w-[32px] bg-transparent outline-none text-right font-[600] text-[16px] leading-none text-[#7D5B59] [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                   type="number"
@@ -969,7 +980,7 @@ function RSVPTab() {
                   }}
                 />
                 <span className="font-[600] text-[16px] leading-none text-[#B98587]">%</span>
-              </div>
+              </Scrubbable>
             </div>
             <button type="button" title="Revert Navigation Bar" aria-label="Revert Navigation Bar" onClick={revertNav} className={colorIconBtnCls}>
               <RevertIcon />
@@ -1011,7 +1022,16 @@ function RSVPTab() {
                 maxLength={6}
               />
               <div className="w-[2px] self-stretch -my-2 bg-white shrink-0 ml-auto" />
-              <div className="flex items-baseline gap-0.5 shrink-0 pl-1">
+              <Scrubbable
+                className="flex items-baseline gap-0.5 shrink-0 pl-1"
+                min={0}
+                max={100}
+                value={textOpacity}
+                onScrub={(v) => {
+                  setTextOpacity(v);
+                  pushField('textOpacity', v);
+                }}
+              >
                 <input
                   className="w-[32px] bg-transparent outline-none text-right font-[600] text-[16px] leading-none text-[#7D5B59] [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                   type="number"
@@ -1025,7 +1045,7 @@ function RSVPTab() {
                   }}
                 />
                 <span className="font-[600] text-[16px] leading-none text-[#B98587]">%</span>
-              </div>
+              </Scrubbable>
             </div>
             <button type="button" title="Revert Text and Icon" aria-label="Revert Text and Icon" onClick={revertText} className={colorIconBtnCls}>
               <RevertIcon />
@@ -1219,6 +1239,12 @@ const BG_SWATCHES = [
   '#e2eafc', '#d0f4de', '#fff1ba', '#1f2937',
 ];
 
+// Figma-style scrubbable number field: hovering the label or box shows an
+// ew-resize cursor and a horizontal drag adjusts the value (`step` per px),
+// while a plain click (<3px movement) still focuses the input for normal
+// typing. While focused, a string draft backs the input so partial entries
+// like "-" or "-5" aren't coerced to 0 mid-keystroke, and drags inside the
+// focused input keep selecting text instead of scrubbing.
 function NumberField({
   label, value, onChange, min, max, step = 1, suffix,
 }: {
@@ -1230,20 +1256,93 @@ function NumberField({
   step?: number;
   suffix?: string;
 }) {
+  const inputRef = React.useRef<HTMLInputElement>(null);
+  const scrubbedRef = React.useRef(false);
+  const [draft, setDraft] = useState<string | null>(null);
+  const editing = draft !== null;
+
+  const clamp = (v: number) => {
+    if (min !== undefined && v < min) return min;
+    if (max !== undefined && v > max) return max;
+    return v;
+  };
+
+  const startScrub = (e: React.PointerEvent) => {
+    if (e.button !== 0 || document.activeElement === inputRef.current) return;
+    const startX = e.clientX;
+    const startValue = value;
+    let active = false;
+
+    const onMove = (ev: PointerEvent) => {
+      const dx = ev.clientX - startX;
+      if (!active) {
+        if (Math.abs(dx) < 3) return;
+        active = true;
+        scrubbedRef.current = true;
+        inputRef.current?.blur();
+        document.body.style.cursor = 'ew-resize';
+        document.body.style.userSelect = 'none';
+      }
+      ev.preventDefault();
+      onChange(clamp(Math.round(startValue + dx * step)));
+    };
+    const end = () => {
+      window.removeEventListener('pointermove', onMove);
+      window.removeEventListener('pointerup', end);
+      window.removeEventListener('pointercancel', end);
+      if (active) {
+        document.body.style.cursor = '';
+        document.body.style.userSelect = '';
+      }
+    };
+    window.addEventListener('pointermove', onMove);
+    window.addEventListener('pointerup', end);
+    window.addEventListener('pointercancel', end);
+  };
+
+  const commitDraft = () => {
+    if (draft !== null) {
+      const n = Number(draft);
+      if (draft.trim() !== '' && Number.isFinite(n)) onChange(clamp(n));
+    }
+    setDraft(null);
+  };
+
   return (
-    <label className="flex flex-col gap-1">
-      <span className="text-[11px] text-[#7D5B5980] font-[600]">{label}</span>
+    <label
+      className={`flex flex-col gap-1 ${editing ? '' : 'cursor-ew-resize'}`}
+      onPointerDown={startScrub}
+      onClickCapture={(e) => {
+        // Swallow the click that ends a scrub so the label doesn't focus the input.
+        if (scrubbedRef.current) {
+          scrubbedRef.current = false;
+          e.preventDefault();
+          e.stopPropagation();
+        }
+      }}
+    >
+      <span className="text-[11px] text-[#7D5B5980] font-[600] select-none">{label}</span>
       <div className="flex items-center bg-[#F2E8E6B2] border border-[#EDE2DE] rounded-[10px] px-2.5 py-1.5">
         <input
+          ref={inputRef}
           type="number"
-          value={value}
+          value={draft ?? value}
           min={min}
           max={max}
           step={step}
-          onChange={(e) => onChange(Number(e.target.value))}
-          className="flex-1 min-w-0 bg-transparent outline-none text-[13px] font-[600] text-[#7D5B59] [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+          onFocus={() => setDraft(String(value))}
+          onBlur={commitDraft}
+          onChange={(e) => {
+            const raw = e.target.value;
+            setDraft(raw);
+            const n = Number(raw);
+            if (raw.trim() !== '' && Number.isFinite(n)) onChange(clamp(n));
+          }}
+          className={`flex-1 min-w-0 bg-transparent outline-none text-[13px] font-[600] text-[#7D5B59] [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none ${
+            editing ? 'cursor-text' : 'cursor-ew-resize'
+          }`}
         />
-        {suffix && <span className="text-[12px] text-[#B98587] font-[600] pl-1">{suffix}</span>}
+        {suffix && <span className="text-[12px] text-[#B98587] font-[600] pl-1 select-none">{suffix}</span>}
       </div>
     </label>
   );
@@ -1558,8 +1657,8 @@ function BackgroundTab({
 
               {/* Scale */}
               <div className="grid grid-cols-2 gap-2">
-                <NumberField label="Scale X" value={scaleX} onChange={setScaleX} min={1} max={1000} suffix="%" />
-                <NumberField label="Scale Y" value={scaleY} onChange={setScaleY} min={1} max={1000} suffix="%" />
+                <NumberField label="Scale X" value={scaleX} onChange={setScaleX} min={-1000} max={1000} suffix="%" />
+                <NumberField label="Scale Y" value={scaleY} onChange={setScaleY} min={-1000} max={1000} suffix="%" />
               </div>
 
               {/* Offset */}
@@ -1798,7 +1897,8 @@ export default function Sidebar({
     }
     if (id === 'text') {
       setActive(null);
-      editorRef?.current?.enterTextTool?.();
+      // Drop a fresh text box in the centre of the canvas, ready to edit.
+      editorRef?.current?.addText?.();
       return;
     }
     // Premium lock disabled — all tabs accessible

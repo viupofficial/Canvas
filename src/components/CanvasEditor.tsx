@@ -856,20 +856,60 @@ const [currentPage, setCurrentPage] = useState(0);
     updateActiveObject: (props: Record<string, any>) => {
       const canvas = fabricRef.current;
       if (!canvas) return;
-      const active = canvas.getActiveObject();
+      const active = canvas.getActiveObject() as any;
       if (!active) return;
-      active.set(props);
+
+      // Geometry lives on the selection group; everything else (typography,
+      // colors, …) should fan out to each child so a multi-selection can be
+      // restyled in bulk — e.g. changing the font for several text boxes at once.
+      const GEOMETRIC_PROPS = new Set([
+        'left', 'top', 'scaleX', 'scaleY', 'angle', 'width', 'height', 'skewX', 'skewY',
+      ]);
+      const isMulti = active.type === 'activeselection';
+
+      let groupProps = props;
+      let targets: any[] = [];
+      if (isMulti) {
+        const childProps: Record<string, any> = {};
+        const geomProps: Record<string, any> = {};
+        for (const [k, v] of Object.entries(props)) {
+          if (GEOMETRIC_PROPS.has(k)) geomProps[k] = v;
+          else childProps[k] = v;
+        }
+        groupProps = geomProps;
+        if (Object.keys(childProps).length) {
+          targets = active.getObjects?.() ?? [];
+          targets.forEach((o: any) => {
+            o.set(childProps);
+            if (childProps.fontFamily) o.dirty = true;
+            o.setCoords?.();
+          });
+        }
+      }
+
+      if (Object.keys(groupProps).length) active.set(groupProps);
+      // Fabric caches rendered text on an offscreen canvas; a plain set()+render
+      // redraws from that stale cache, so a font change wouldn't show until the
+      // object was otherwise invalidated (typing/resizing). Flag it dirty to
+      // force an immediate re-render with the new glyphs.
+      if (props.fontFamily && !isMulti) active.dirty = true;
       canvas.requestRenderAll();
       // A font-family change needs the webfont loaded, then a re-measure so the
-      // text box reflows against the real glyphs (Inspector path).
+      // text box reflows against the real glyphs (Inspector path). Reflow every
+      // affected object — the single selection or each child of a multi-select.
       if (props.fontFamily) {
         loadGoogleFont(props.fontFamily).then(() => {
-          const obj = canvas.getActiveObject();
-          if (obj && (obj as any).fontFamily === props.fontFamily) {
-            (obj as any).initDimensions?.();
-            obj.setCoords?.();
-            canvas.requestRenderAll();
-          }
+          const reflow = (o: any) => {
+            if (o && o.fontFamily === props.fontFamily) {
+              o.initDimensions?.();
+              o.dirty = true;
+              o.setCoords?.();
+            }
+          };
+          const cur = canvas.getActiveObject() as any;
+          if (cur?.type === 'activeselection') (cur.getObjects?.() ?? []).forEach(reflow);
+          else reflow(cur);
+          canvas.requestRenderAll();
         });
       }
       pushSnapshot();
@@ -2195,7 +2235,20 @@ const [currentPage, setCurrentPage] = useState(0);
     const fabric = fabricModuleRef.current;
     if (!canvas || !fabric) return;
 
-    const props = { left: 80, top: 80, fontSize: 36, fill: "#111827", ...opts };
+    // When no explicit position is supplied (e.g. clicking "Text" in the
+    // sidebar) drop the textbox in the centre of the current viewport. Callers
+    // that pass left/top — like drag-and-drop — keep the top-left origin.
+    const hasPos = opts.left !== undefined || opts.top !== undefined;
+    let centerProps: Record<string, any> = { left: 80, top: 80 };
+    if (!hasPos) {
+      const center =
+        typeof (canvas as any).getVpCenter === 'function'
+          ? (canvas as any).getVpCenter()
+          : { x: canvas.getWidth() / 2, y: canvas.getHeight() / 2 };
+      centerProps = { left: center.x, top: center.y, originX: 'center', originY: 'center' };
+    }
+
+    const props = { ...centerProps, fontSize: 36, fill: "#111827", ...opts };
     const textObj = new fabric.Textbox(text, props);
 
     canvas.add(textObj);

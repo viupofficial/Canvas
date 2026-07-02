@@ -103,6 +103,9 @@ export default function EventFooter({
     setTimeout(() => {
       setActiveCard(null);
       setRsvpStatus(null);
+      // Forget which Info section was open so the next open starts fresh on
+      // the Calendar/Location chooser instead of a stale section.
+      setInfoTab(null);
       setClosing(false);
     }, 240);
   };
@@ -114,6 +117,13 @@ export default function EventFooter({
     // RSVP turned off via the sidebar toggle — never open its modal.
     if (card === "rsvp" && rsvpConfig?.enabled === false) return;
     if (activeCard === card) {
+      // Info steps back one level: if a Calendar/Location section is open,
+      // return to the floating chooser buttons first; only close the card
+      // (and send the circle back to the RSVP slot) from the buttons view.
+      if (card === "info" && infoTab) {
+        setInfoTab(null);
+        return;
+      }
       closeCard();
     } else {
       // Switch straight to the new panel; it fades in via `.preview-fade`.
@@ -822,7 +832,15 @@ const formatEmbedDate = (dateStr: string) => {
                             <div className="footer-rsvp" style={{ backgroundColor: rsvpCircleBg }} onClick={() => toggleCard("rsvp")} />
                         </div>
 
-                        <div className={`footer-rsvp-text${infoActive ? " drop" : ""}`} style={labelStyle}>RSVP</div>
+                        {/* The label overlays the circle (z-index 3), so it must
+                            trigger the same action or it swallows the click. */}
+                        <div
+                          className={`footer-rsvp-text${infoActive ? " drop" : ""}`}
+                          style={{ ...labelStyle, cursor: "pointer" }}
+                          onClick={() => toggleCard("rsvp")}
+                        >
+                          RSVP
+                        </div>
                       </>
                     )}
 

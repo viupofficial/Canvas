@@ -30,6 +30,8 @@ export const FONT_GROUPS: FontGroup[] = [
     fonts: [
       "Playfair Display",
       "Cormorant Garamond",
+      "Alice",
+      "Alegreya",
       "Cinzel",
       "Bodoni Moda",
       "Libre Baskerville",

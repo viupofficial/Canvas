@@ -3,6 +3,7 @@
 import { useEffect, useState, useCallback } from "react";
 import RsvpPlayer from "@/src/components/RsvpPlayer";
 import EventFooter from "@/src/components/EventFooter";
+import PhonePreviewFrame from "@/src/components/PhonePreviewFrame";
 import { getCanvasGuestbook } from "@/src/lib/viupApi";
 import { getPackageRules } from "@/src/lib/packageRules";
 
@@ -62,6 +63,7 @@ export default function PreviewShell({ data }: { data: PreviewShellData }) {
   );
 
   return (
+    <PhonePreviewFrame>
     <main className="preview-local" style={{ width: "100%", position: "relative" }}>
       <RsvpPlayer
         pages={data.pages}
@@ -84,5 +86,6 @@ export default function PreviewShell({ data }: { data: PreviewShellData }) {
         showRsvpAndMoneyGift={getPackageRules(data.packageId).showRsvpAndMoneyGift}
       />
     </main>
+    </PhonePreviewFrame>
   );
 }

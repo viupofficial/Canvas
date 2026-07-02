@@ -11,6 +11,7 @@ import {
 import { FONT_GROUPS } from "@/src/lib/fonts";
 import LayersPanel from "@/src/components/canvas-editor/LayersPanel";
 import ArtboardPanel from "@/src/components/canvas-editor/ArtboardPanel";
+import Scrubbable from "@/src/components/canvas-editor/scrubbable";
 import type { LayerInfo } from "@/src/components/CanvasEditor";
 
 // Parse any CSS color (hex3/6/8, rgb, rgba) into { hex, opacity 0-100 }.
@@ -136,7 +137,13 @@ function ColorRow(props: {
             }}
           />
           <div className="w-[2px] self-stretch -my-2 bg-white shrink-0 ml-auto" />
-          <div className="flex items-baseline gap-0.5 shrink-0 pl-1">
+          <Scrubbable
+            className="flex items-baseline gap-0.5 shrink-0 pl-1"
+            min={0}
+            max={100}
+            value={opacity}
+            onScrub={(v) => props.onChange(buildRgba(hex, v))}
+          >
             <input
               className="w-[30px] bg-transparent outline-none text-right font-[600] text-[15px] leading-none text-[#7D5B59] [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
               type="number"
@@ -146,7 +153,7 @@ function ColorRow(props: {
               onChange={(e) => props.onChange(buildRgba(hex, Number(e.target.value)))}
             />
             <span className="font-[600] text-[15px] leading-none text-[#B98587]">%</span>
-          </div>
+          </Scrubbable>
         </div>
         {/* Revert / Invert buttons disabled per request — no longer needed.
         <button type="button" title={`Revert ${props.label}`} aria-label={`Revert ${props.label}`} onClick={props.onRevert} className={colorIconBtn}>
@@ -209,6 +216,18 @@ export default function Inspector(props: {
 
   // Images don't use a fill color — hide that row for them.
   const supportsFill = !!selected && selected.type !== 'image';
+
+  // A multi-selection (ActiveSelection) has no typography of its own; its child
+  // objects are carried in `selected.objects`. Derive the shown value from the
+  // children so the font controls reflect a shared value and edits apply to all.
+  const childObjects: any[] = Array.isArray(selected?.objects) ? selected.objects : [];
+  const sharedChildProp = (key: string) => {
+    const vals = childObjects.map((o) => o?.[key]).filter((v) => v !== undefined && v !== null);
+    if (!vals.length) return undefined;
+    return vals.every((v) => v === vals[0]) ? vals[0] : undefined;
+  };
+  const displayFontFamily = selected?.fontFamily ?? sharedChildProp('fontFamily') ?? 'Arial';
+  const displayFontWeight = selected?.fontWeight ?? sharedChildProp('fontWeight') ?? 'normal';
 
   // Capture the element's colors once per selection (keyed by a signature that
   // doesn't change when only colors are edited) so Revert restores the original.
@@ -317,7 +336,10 @@ export default function Inspector(props: {
             </div>
 
             <div className="grid grid-cols-2 gap-3">
-              <div>
+              <Scrubbable
+                value={Math.round(selected.left ?? 0)}
+                onScrub={(v) => updateSelected({ left: v })}
+              >
                 <label className={labelCls}>X</label>
                 <input
                   className={inputCls}
@@ -325,8 +347,11 @@ export default function Inspector(props: {
                   value={Math.round(selected.left ?? 0)}
                   onChange={(e) => updateSelected({ left: Number(e.target.value) })}
                 />
-              </div>
-              <div>
+              </Scrubbable>
+              <Scrubbable
+                value={Math.round(selected.top ?? 0)}
+                onScrub={(v) => updateSelected({ top: v })}
+              >
                 <label className={labelCls}>Y</label>
                 <input
                   className={inputCls}
@@ -334,14 +359,24 @@ export default function Inspector(props: {
                   value={Math.round(selected.top ?? 0)}
                   onChange={(e) => updateSelected({ top: Number(e.target.value) })}
                 />
-              </div>
+              </Scrubbable>
             </div>
 
             {/* Width / Height — drive Fabric's scaleX/scaleY so the displayed
                 size in the canvas matches the input. The lock on the right keeps
                 both axes scaled by the same factor (uniform resize). */}
             <div className="flex items-end gap-2">
-              <div className="flex-1">
+              <Scrubbable
+                className="flex-1"
+                min={1}
+                value={Math.round((selected.width ?? 0) * (selected.scaleX ?? 1))}
+                onScrub={(w) => {
+                  const base = selected.width ?? w;
+                  if (!base) return;
+                  const s = w / base;
+                  updateSelected(lockUniform ? { scaleX: s, scaleY: s } : { scaleX: s });
+                }}
+              >
                 <label className={labelCls}>Width</label>
                 <input
                   className={inputCls}
@@ -356,8 +391,18 @@ export default function Inspector(props: {
                     updateSelected(lockUniform ? { scaleX: s, scaleY: s } : { scaleX: s });
                   }}
                 />
-              </div>
-              <div className="flex-1">
+              </Scrubbable>
+              <Scrubbable
+                className="flex-1"
+                min={1}
+                value={Math.round((selected.height ?? 0) * (selected.scaleY ?? 1))}
+                onScrub={(h) => {
+                  const base = selected.height ?? h;
+                  if (!base) return;
+                  const s = h / base;
+                  updateSelected(lockUniform ? { scaleX: s, scaleY: s } : { scaleY: s });
+                }}
+              >
                 <label className={labelCls}>Height</label>
                 <input
                   className={inputCls}
@@ -372,7 +417,7 @@ export default function Inspector(props: {
                     updateSelected(lockUniform ? { scaleX: s, scaleY: s } : { scaleY: s });
                   }}
                 />
-              </div>
+              </Scrubbable>
               <button
                 type="button"
                 onClick={() => setLockUniform((v) => !v)}
@@ -397,7 +442,10 @@ export default function Inspector(props: {
             </div>
 
             {/* Angle / Rotation */}
-            <div>
+            <Scrubbable
+              value={Math.round(selected.angle ?? 0)}
+              onScrub={(v) => updateSelected({ angle: ((v % 360) + 360) % 360 })}
+            >
               <label className={labelCls}>Angle</label>
               <div className="flex items-center gap-2">
                 <input
@@ -410,7 +458,7 @@ export default function Inspector(props: {
                 />
                 <span className="text-[13px] text-[#B98587] font-[600]">°</span>
               </div>
-            </div>
+            </Scrubbable>
           </div>
 
           {/* ── Typography ─────────────────────────────────────── */}
@@ -470,7 +518,7 @@ export default function Inspector(props: {
                 <label className={labelCls}>Font Family</label>
                 <select
                   className={inputCls}
-                  value={selected.fontFamily ?? "Arial"}
+                  value={displayFontFamily}
                   onChange={(e) => updateSelected({ fontFamily: e.target.value })}
                 >
                   {FONT_GROUPS.map((group) => (
@@ -488,7 +536,7 @@ export default function Inspector(props: {
                 <label className={labelCls}>Weight</label>
                 <select
                   className={inputCls}
-                  value={selected.fontWeight ?? "normal"}
+                  value={displayFontWeight}
                   onChange={(e) => updateSelected({ fontWeight: e.target.value })}
                 >
                   <option value="100">Thin</option>
@@ -506,7 +554,11 @@ export default function Inspector(props: {
 
             {/* Font size + line height */}
             <div className="grid grid-cols-2 gap-3">
-              <div>
+              <Scrubbable
+                min={1}
+                value={selected.fontSize ?? 24}
+                onScrub={(v) => updateSelected({ fontSize: v })}
+              >
                 <label className={labelCls}>Font Size</label>
                 <input
                   className={inputCls}
@@ -514,7 +566,7 @@ export default function Inspector(props: {
                   value={selected.fontSize ?? 24}
                   onChange={(e) => updateSelected({ fontSize: Number(e.target.value) })}
                 />
-              </div>
+              </Scrubbable>
               <div>
                 <label className={labelCls}>Line Height</label>
                 <input
@@ -533,7 +585,10 @@ export default function Inspector(props: {
             </div>
 
             {/* Letter spacing */}
-            <div>
+            <Scrubbable
+              value={selected.charSpacing ?? 0}
+              onScrub={(v) => updateSelected({ charSpacing: v })}
+            >
               <label className={labelCls}>Letter Spacing</label>
               <input
                 className={inputCls}
@@ -542,7 +597,7 @@ export default function Inspector(props: {
                 value={selected.charSpacing ?? 0}
                 onChange={(e) => updateSelected({ charSpacing: Number(e.target.value) })}
               />
-            </div>
+            </Scrubbable>
 
             {/* Text align buttons */}
             <div>
@@ -704,7 +759,13 @@ export default function Inspector(props: {
 
           </div>
 
-          {/* ── Corner Radius ──────────────────────────────────── */}
+          {/* ── Corner Radius ────────────────────────────────────
+              Disabled: non-functional scaffold. Fabric has no per-corner
+              radius — cornerRadiusTR/BR/BL are inert made-up props, and rx
+              alone (without ry) renders square corners even on rects. To
+              revive: set rx+ry together for a uniform radius, or subclass
+              Rect for per-corner paths, and add the props to
+              SELECTION_PROPS/FABRIC_EXPORT_PROPS so they persist.
           <div className={sectionCls}>
             <h5 className="font-[600] text-[13px] text-[#7D5B59]">Corner Radius</h5>
             <div className="grid grid-cols-2 gap-3">
@@ -750,13 +811,18 @@ export default function Inspector(props: {
               </div>
             </div>
           </div>
+          */}
 
           {/* ── Border ─────────────────────────────────────────── */}
           <div className={sectionCls}>
             <h5 className="font-[600] text-[13px] text-[#7D5B59]">Border</h5>
 
             <div className="grid grid-cols-2 gap-3">
-              <div>
+              <Scrubbable
+                min={0}
+                value={selected.strokeWidth ?? 0}
+                onScrub={(v) => updateSelected({ strokeWidth: v })}
+              >
                 <label className={labelCls}>Width</label>
                 <input
                   className={inputCls}
@@ -765,7 +831,7 @@ export default function Inspector(props: {
                   value={selected.strokeWidth ?? 0}
                   onChange={(e) => updateSelected({ strokeWidth: Number(e.target.value) })}
                 />
-              </div>
+              </Scrubbable>
               <div>
                 <label className={labelCls}>Style</label>
                 <select

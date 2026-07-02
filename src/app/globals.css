@@ -89,7 +89,7 @@ body {
       .contact-card {
         position: sticky;
         bottom: 68px;
-        z-index: 20000;
+        z-index: 0;
         background: white;
         padding: 3rem;
         width: 100%;
@@ -935,7 +935,7 @@ star-fly-in {
     position: sticky;
     bottom: 68px;
     /* Make room for footer */
-    z-index: 20000;
+    z-index: 0;
     background: white;
     padding: 3rem;
 
@@ -1019,7 +1019,7 @@ star-fly-in {
   box-shadow: 0 8px 20px rgba(0, 0, 0, 0.2);
   font-family: 'Poppins', sans-serif;
   text-align: center;
-  z-index: 20000;
+  z-index: 0;
   /* above the RSVP button */
   animation: fadeIn 0.3s ease-in-out;
   max-width: 1000px;
@@ -1372,7 +1372,7 @@ star-fly-in {
   display: flex;
   flex-direction: row;
   gap: 1.4rem;
-  z-index: 1000;
+  z-index: 4;
   pointer-events: auto;
 }
 
@@ -2461,4 +2461,58 @@ img[alt="Mayaxasyraff"],
 /* No RSVP circle/notch in the Basic footer, so the Info-open shift is a no-op. */
 .footer-basic.bump-shift::before {
   left: 52%;
+}
+
+/* ──────────────────────────────────────────────────────────────────────────
+   Desktop phone-frame preview (PhonePreviewFrame)
+   The page loaded inside the ?__frame=1 iframe tags <html> with this class.
+   Desktop browsers paint the document scrollbar inside the 390px frame
+   (real phones overlay it invisibly), so hide it — scrolling still works.
+   ────────────────────────────────────────────────────────────────────────── */
+.phone-frame-inner,
+.phone-frame-inner body {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+/* ──────────────────────────────────────────────────────────────────────────
+   Info-open choreography fixes for the preview footer (.preview-local)
+   The preview re-anchors the right icon group to the border (see the
+   containment rules above), so the base 68% circle slot and the star offset
+   no longer line up at narrow widths: the moved circle sat left of the Info
+   slot and the star drifted right of the circle. Re-tune both to meet over
+   the Info slot, and lift the Calendar/Location chooser bubbles clear of the
+   nav bar border they were clashing with.
+   ────────────────────────────────────────────────────────────────────────── */
+.preview-local .footer-rsvp-wrapper.move-right {
+  left: 72%;
+}
+
+.preview-local .footer-container.bump-shift::before {
+  left: 72%;
+}
+
+/* Percentage is relative to .footer-side.right (the star's positioned
+   ancestor), whose left edge sits at ~72% of the preview width. The group is
+   border-anchored, so on wider previews the star needs to sit further left
+   and on narrow phones slightly right to stay centered on the moved circle. */
+.preview-local .floating-star.visible {
+  left: -4%;
+}
+
+@media (max-width: 390px) {
+  .preview-local .floating-star.visible {
+    left: 3%;
+  }
+}
+
+.preview-local #info-buttons {
+  bottom: 26px;
+}
+
+.phone-frame-inner::-webkit-scrollbar,
+.phone-frame-inner body::-webkit-scrollbar {
+  width: 0;
+  height: 0;
+  display: none;
 }
