@@ -31,7 +31,27 @@ type ApplyTarget =
   | { kind: "canvas" }
   | { kind: "sidebar"; onReplace: (dataUrl: string) => void };
 
-type SaveStatus = "idle" | "saving" | "saved";
+// "unsaved" = dirty (changes not yet persisted to the DB). Failures surface via
+// saveError while the status falls back to "unsaved" until a retry succeeds.
+type SaveStatus = "idle" | "unsaved" | "saving" | "saved";
+
+// ── Local draft fallback (recovery only) ────────────────────────────────────
+// On every canvas change the latest json_data is mirrored to localStorage under
+// this key, and cleared again after a successful DB save — so a draft that
+// survives to the next load means the previous session had unsaved changes.
+// Event-bound canvases only: the legacy project flow already persists to
+// localStorage via projectStorage.
+const draftStorageKey = (designId: number) => `viup_canvas_draft_${designId}`;
+
+// MySQL timestamps ("YYYY-MM-DD HH:MM:SS") carry no timezone; this best-effort
+// parse treats them as local time. It only guards against stale drafts from old
+// sessions — the primary signal is that drafts are cleared on successful save.
+function parseDbTime(s?: string | null): number | null {
+  if (!s) return null;
+  const str = String(s);
+  const t = Date.parse(str.includes("T") ? str : str.replace(" ", "T"));
+  return Number.isFinite(t) ? t : null;
+}
 
 export type ProjectEditorProps = {
   // Legacy project-id flow (localStorage + best-effort DB mirror).
@@ -50,10 +70,50 @@ export type ProjectEditorProps = {
   design?: ViupDesign | null;
   // Decoded json_data from the design record: { version, eventData, canvas }.
   initialDesignJson?: any;
+  // Internal: set by the outer wrapper when the user restored a local draft —
+  // the restored state is not on the server yet, so the editor starts dirty.
+  restoredFromDraft?: boolean;
 };
 
 export default function ProjectEditor(props: ProjectEditorProps) {
-  const { projectId, mode, designId, initialDesignJson } = props;
+  const { projectId, mode, designId, initialDesignJson, design } = props;
+  const isEventBound = !!mode && mode !== "designer" && designId != null;
+
+  // ── Unsaved-draft recovery ────────────────────────────────────────────────
+  // If a local draft outlived the last session (i.e. it was never cleared by a
+  // successful save) and it is not older than the server copy, offer to restore
+  // it. Restoring swaps the seed JSON and remounts the editor, so the normal
+  // JSON loading path applies the draft — no separate restore logic.
+  const [draftJson, setDraftJson] = useState<any | null>(null);
+  const [restoredJson, setRestoredJson] = useState<any | null>(null);
+
+  useEffect(() => {
+    if (!isEventBound || designId == null) return;
+    try {
+      const key = draftStorageKey(designId);
+      const raw = window.localStorage.getItem(key);
+      if (!raw) return;
+      const draft = JSON.parse(raw);
+      if (!draft?.json_data?.canvas) {
+        window.localStorage.removeItem(key);
+        return;
+      }
+      const serverTime = parseDbTime(design?.last_modified || design?.updated_at);
+      if (serverTime != null && Number(draft.savedAt || 0) <= serverTime) {
+        // Server copy is newer — the draft is stale, drop it.
+        window.localStorage.removeItem(key);
+        return;
+      }
+      setDraftJson(draft.json_data);
+    } catch {
+      /* corrupt draft — ignore */
+    }
+    // Runs once per design record.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [designId, isEventBound]);
+
+  const effectiveJson = restoredJson ?? initialDesignJson;
+
   // Event-based flows seed the event data from THIS design's DB record, never
   // from the shared localStorage draft. Even when the record has no eventData
   // yet (json_data is {} / []), pass an empty object — not null — so the provider
@@ -62,16 +122,50 @@ export default function ProjectEditor(props: ProjectEditorProps) {
   // so contacts/calendar/location/rsvp/gift leaked across all events.
   const seededEventData: Partial<EventData> | null =
     mode && mode !== "designer"
-      ? (initialDesignJson?.eventData ?? {})
+      ? (effectiveJson?.eventData ?? {})
       : null;
 
   // Remount the whole editor when the underlying record changes so the canvas
-  // fully re-initialises (per-project or per-design).
-  const remountKey = designId != null ? `design-${designId}` : projectId ?? "legacy";
+  // fully re-initialises (per-project or per-design). Restoring a draft also
+  // remounts so the draft JSON flows through the existing loading path.
+  const remountKey =
+    (designId != null ? `design-${designId}` : projectId ?? "legacy") +
+    (restoredJson ? "-draft" : "");
 
   return (
     <EventDataProvider initialEventData={seededEventData}>
-      <ProjectEditorInner key={remountKey} {...props} />
+      <ProjectEditorInner
+        key={remountKey}
+        {...props}
+        initialDesignJson={effectiveJson}
+        restoredFromDraft={!!restoredJson}
+      />
+      {draftJson && (
+        <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-[95] flex items-center gap-3 rounded-full bg-white/95 border border-[#EDE2DE] px-4 py-2 text-[12px] font-semibold text-[#7D5B59] shadow">
+          <span>We found an unsaved local draft. Restore it?</span>
+          <button
+            className="rounded-full bg-[#7D5B59] text-white px-3 py-1"
+            onClick={() => {
+              setRestoredJson(draftJson);
+              setDraftJson(null);
+            }}
+          >
+            Restore
+          </button>
+          <button
+            className="rounded-full border border-[#EDE2DE] px-3 py-1"
+            onClick={() => {
+              // Rejected — discard the draft so it isn't offered again.
+              if (designId != null) {
+                try { window.localStorage.removeItem(draftStorageKey(designId)); } catch {}
+              }
+              setDraftJson(null);
+            }}
+          >
+            Discard
+          </button>
+        </div>
+      )}
     </EventDataProvider>
   );
 }
@@ -86,6 +180,7 @@ function ProjectEditorInner({
   templateId,
   event,
   initialDesignJson,
+  restoredFromDraft,
 }: ProjectEditorProps) {
   const editorRef = useRef<EditorHandle | null>(null);
   const [previewMode, setPreviewMode] = useState<"desktop" | "phone">("desktop");
@@ -189,18 +284,31 @@ function ProjectEditorInner({
   const savedTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const autosaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  // ── Autosave reliability layer ────────────────────────────────────────────
+  // Wraps the existing persist() below with dirty tracking, a single-flight
+  // save queue and a localStorage fallback. persist() itself — the payload,
+  // endpoint and json_data shape — is unchanged.
+  const dirtyRef = useRef(false);
+  const changeSeqRef = useRef(0); // bumps on every canvas change
+  const saveInFlightRef = useRef(false); // only one persist() runs at a time
+  const pendingSaveRef = useRef(false); // a save was requested mid-flight
+  const pendingSyncTitleRef = useRef(false);
+  const retryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
   // `syncTitle` is only true for a manual Save: that's when we push the canvas
   // title back to events.event_name (the MyEvent card). Autosave never touches
   // the event title — it would fire on every canvas edit.
+  // Resolves true on success so the reliability wrapper (runSave) can clear the
+  // dirty flag / local draft; it never rejects.
   const persist = useCallback(
-    (opts?: { syncTitle?: boolean }) => {
+    (opts?: { syncTitle?: boolean }): Promise<boolean> => {
     const syncTitle = !!opts?.syncTitle;
     const data = editorRef.current?.getProjectData?.();
     const thumbnail = editorRef.current?.getThumbnail?.() ?? "";
 
     // ── Event-bound save → always scoped to this event/design ──────────────
     if (isEventMode) {
-      if (!data) return;
+      if (!data) return Promise.resolve(false);
 
       const cleanTitle = String(eventName || "").trim();
 
@@ -208,7 +316,7 @@ function ProjectEditorInner({
       // but the title must not be blank when we're syncing it to MyEvent.
       if (syncTitle && !cleanTitle) {
         setSaveError("Title cannot be empty.");
-        return;
+        return Promise.resolve(false);
       }
 
       setSaveError("");
@@ -242,7 +350,7 @@ function ProjectEditorInner({
               })
           : Promise.resolve();
 
-      titleStep
+      return titleStep
         .then(() =>
           updateDesign({
             user_id: num(userId),
@@ -266,24 +374,34 @@ function ProjectEditorInner({
           if (syncTitle) setEventName(cleanTitle);
           setSaveStatus("saved");
           if (savedTimerRef.current) clearTimeout(savedTimerRef.current);
-          savedTimerRef.current = setTimeout(() => setSaveStatus("idle"), 1500);
+          // Only fall back to idle if nothing new happened meanwhile (a fresh
+          // edit sets "unsaved"; a queued save sets "saving").
+          savedTimerRef.current = setTimeout(
+            () => setSaveStatus((s) => (s === "saved" ? "idle" : s)),
+            1500,
+          );
+          return true;
         })
         .catch((e) => {
           console.error("[ProjectEditor] event save failed", e);
-          setSaveStatus("idle");
-          setSaveError((e as Error)?.message || "Failed to save.");
+          // Still dirty — the local draft (written on every change) covers us
+          // until the retry succeeds.
+          setSaveStatus("unsaved");
+          setSaveError(
+            `${(e as Error)?.message || "Failed to save."} Your changes are saved locally — retrying…`,
+          );
+          return false;
         });
-      return;
     }
 
     // ── Legacy ephemeral editor (no project id) ────────────────────────────
     if (!projectId) {
       editorRef.current?.save();
-      return;
+      return Promise.resolve(true);
     }
 
     // ── Legacy project-id flow: localStorage + best-effort DB mirror ───────
-    if (!data) return;
+    if (!data) return Promise.resolve(false);
     setSaveStatus("saving");
     try {
       saveProject(projectId, { canvasJson: { ...data, eventName }, thumbnail });
@@ -295,11 +413,12 @@ function ProjectEditorInner({
     if (!user) {
       console.warn("[ProjectEditor] no viup_canvas_user — skipping DB save");
       setSaveStatus("idle");
-      return;
+      // Local save succeeded; in this flow localStorage IS the primary store.
+      return Promise.resolve(true);
     }
 
     const json_data = { version: 1, eventData, canvas: { ...data, eventName } };
-    fetch(`${API_BASE}/update_design.php`, {
+    return fetch(`${API_BASE}/update_design.php`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ design_id: Number(projectId), user_id: user.id, json_data }),
@@ -308,11 +427,18 @@ function ProjectEditorInner({
       .then(() => {
         setSaveStatus("saved");
         if (savedTimerRef.current) clearTimeout(savedTimerRef.current);
-        savedTimerRef.current = setTimeout(() => setSaveStatus("idle"), 1500);
+        savedTimerRef.current = setTimeout(
+          () => setSaveStatus((s) => (s === "saved" ? "idle" : s)),
+          1500,
+        );
+        return true;
       })
       .catch((e) => {
         console.error("[ProjectEditor] DB save failed", e);
         setSaveStatus("idle");
+        // The DB mirror is best-effort here — the localStorage save above is
+        // authoritative for the legacy flow, so treat this as a success.
+        return true;
       });
     },
     [isEventMode, projectId, eventName, eventData, userId, eventId, designId, event, featureUsage],
@@ -322,12 +448,165 @@ function ProjectEditorInner({
   const persistRef = useRef(persist);
   persistRef.current = persist;
 
+  // ── Local draft fallback (event mode only) ──────────────────────────────
+  // Mirrors the same json_data shape persist() sends — minus the thumbnail,
+  // which is the only sizeable base64 blob — for crash/offline recovery.
+  const localDraftKey = isEventMode && designId != null ? draftStorageKey(designId) : null;
+  const saveLocalDraft = useCallback(() => {
+    if (!localDraftKey) return;
+    const data = editorRef.current?.getProjectData?.();
+    if (!data) return;
+    try {
+      window.localStorage.setItem(
+        localDraftKey,
+        JSON.stringify({
+          savedAt: Date.now(),
+          json_data: {
+            version: 1,
+            eventData,
+            canvas: { ...data, eventName },
+            featureUsage,
+          },
+        }),
+      );
+    } catch {
+      /* quota exceeded / private mode — the draft is best-effort */
+    }
+  }, [localDraftKey, eventData, eventName, featureUsage]);
+  const saveLocalDraftRef = useRef(saveLocalDraft);
+  saveLocalDraftRef.current = saveLocalDraft;
+
+  const clearLocalDraft = useCallback(() => {
+    if (!localDraftKey) return;
+    try {
+      window.localStorage.removeItem(localDraftKey);
+    } catch {}
+  }, [localDraftKey]);
+  const clearLocalDraftRef = useRef(clearLocalDraft);
+  clearLocalDraftRef.current = clearLocalDraft;
+
+  // ── Single-flight save queue ─────────────────────────────────────────────
+  // All saves (autosave, manual, preview, retries) go through here so only one
+  // persist() runs at a time. persist() snapshots the canvas when it starts,
+  // so with saves serialized, an older response can never land after a newer
+  // one — and if edits arrive mid-flight we immediately save again, so the
+  // latest state always wins.
+  const runSaveRef = useRef<(opts?: { syncTitle?: boolean }) => void>(() => {});
+  const runSave = useCallback((opts?: { syncTitle?: boolean }) => {
+    if (saveInFlightRef.current) {
+      pendingSaveRef.current = true;
+      if (opts?.syncTitle) pendingSyncTitleRef.current = true;
+      return;
+    }
+    saveInFlightRef.current = true;
+    const seqAtStart = changeSeqRef.current;
+    persistRef
+      .current(opts)
+      .then((ok) => {
+        saveInFlightRef.current = false;
+        const changedDuringSave = changeSeqRef.current !== seqAtStart;
+        if (ok && !changedDuringSave) {
+          // The saved snapshot is the latest state → truly clean.
+          dirtyRef.current = false;
+          clearLocalDraftRef.current();
+        }
+        if (pendingSaveRef.current || (ok && changedDuringSave)) {
+          // Someone asked for a save mid-flight (or edits arrived) — save the
+          // latest state right away.
+          pendingSaveRef.current = false;
+          const syncTitle = pendingSyncTitleRef.current;
+          pendingSyncTitleRef.current = false;
+          runSaveRef.current(syncTitle ? { syncTitle } : undefined);
+        } else if (!ok && dirtyRef.current) {
+          // Failed save — make sure the latest state is in localStorage, then
+          // retry shortly. The 30s fallback interval also covers this if the
+          // timer is lost.
+          saveLocalDraftRef.current();
+          if (retryTimerRef.current) clearTimeout(retryTimerRef.current);
+          retryTimerRef.current = setTimeout(() => {
+            if (dirtyRef.current && !saveInFlightRef.current) runSaveRef.current();
+          }, 5000);
+        }
+      })
+      .catch(() => {
+        // persist() never rejects, but never leave the queue locked.
+        saveInFlightRef.current = false;
+      });
+  }, []);
+  runSaveRef.current = runSave;
+
+  // Manual Save / Preview path: skip the debounce and save immediately. If a
+  // save is mid-flight runSave queues it, so the latest state is still saved.
+  const forceSaveNow = useCallback(
+    (opts?: { syncTitle?: boolean }) => {
+      if (autosaveTimerRef.current) clearTimeout(autosaveTimerRef.current);
+      runSave(opts);
+    },
+    [runSave],
+  );
+
   // Autosave applies to any record-backed canvas (event or project id).
   const autosaveEnabled = isEventMode || !!projectId;
   const handleCanvasChange = useCallback(() => {
     if (!autosaveEnabled) return;
+    // Mark dirty + mirror to localStorage immediately; debounce the DB save so
+    // bursts (drag/resize/typing) collapse into one request ~2s after the last
+    // change.
+    changeSeqRef.current++;
+    dirtyRef.current = true;
+    setSaveStatus((s) => (s === "saving" ? s : "unsaved"));
+    saveLocalDraftRef.current();
     if (autosaveTimerRef.current) clearTimeout(autosaveTimerRef.current);
-    autosaveTimerRef.current = setTimeout(() => persistRef.current(), 1000);
+    autosaveTimerRef.current = setTimeout(() => runSaveRef.current(), 2000);
+  }, [autosaveEnabled]);
+
+  // A restored local draft is not on the server yet — start dirty and schedule
+  // a save so it persists even if the user never edits again.
+  useEffect(() => {
+    if (!restoredFromDraft || !autosaveEnabled) return;
+    dirtyRef.current = true;
+    setSaveStatus("unsaved");
+    autosaveTimerRef.current = setTimeout(() => runSaveRef.current(), 2000);
+    // Mount-only by design (restoredFromDraft is fixed per mount).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // ── Periodic fallback + emergency save triggers ──────────────────────────
+  useEffect(() => {
+    if (!autosaveEnabled) return;
+
+    // If the user edits non-stop the debounce keeps resetting; this guarantees
+    // a save at least every 30s while dirty.
+    const interval = setInterval(() => {
+      if (dirtyRef.current && !saveInFlightRef.current) runSaveRef.current();
+    }, 30000);
+
+    // Tab hidden → flush now (both locally and via the normal save path).
+    const onVisibility = () => {
+      if (document.visibilityState === "hidden" && dirtyRef.current) {
+        saveLocalDraftRef.current();
+        runSaveRef.current();
+      }
+    };
+    // Unload → synchronous localStorage write only; the API can't be relied on
+    // during unload. The draft prompt recovers it on the next visit.
+    const onBeforeUnload = () => {
+      if (dirtyRef.current) saveLocalDraftRef.current();
+    };
+    // Back online → retry pushing any unsaved changes to the server.
+    const onOnline = () => {
+      if (dirtyRef.current) runSaveRef.current();
+    };
+
+    document.addEventListener("visibilitychange", onVisibility);
+    window.addEventListener("beforeunload", onBeforeUnload);
+    window.addEventListener("online", onOnline);
+    return () => {
+      clearInterval(interval);
+      document.removeEventListener("visibilitychange", onVisibility);
+      window.removeEventListener("beforeunload", onBeforeUnload);
+      window.removeEventListener("online", onOnline);
+    };
   }, [autosaveEnabled]);
 
   // ── Feature-usage counters (24-hour rate limit) ────────────────────────────
@@ -355,6 +634,7 @@ function ProjectEditorInner({
     return () => {
       if (autosaveTimerRef.current) clearTimeout(autosaveTimerRef.current);
       if (savedTimerRef.current) clearTimeout(savedTimerRef.current);
+      if (retryTimerRef.current) clearTimeout(retryTimerRef.current);
     };
   }, []);
 
@@ -471,19 +751,19 @@ function ProjectEditorInner({
           homeHref={homeHref}
           onUndo={() => editorRef.current?.undo()}
           onRedo={() => editorRef.current?.redo()}
-          onSave={() => persist({ syncTitle: true })}
+          onSave={() => forceSaveNow({ syncTitle: true })}
           onUpgrade={openUpgrade}
           onPreview={() => {
             // Persist the design to the DB first (same path as Save/autosave),
             // then publish + open the hosted page. The save is fire-and-forget:
             // /e/[slug] reads the uploaded blob, not the designs row.
-            persist();
+            forceSaveNow();
             editorRef.current?.exportHTML(eventName).then((slug) => router.push(`/e/${slug}`));
           }}
           onPreviewLocal={() => {
             // Local preview reads IndexedDB, but still flush the design to the DB
             // so a preview always leaves a saved record behind.
-            persist();
+            forceSaveNow();
             editorRef.current?.previewLocal(eventName);
           }}
           teaser={teaser}
@@ -555,9 +835,15 @@ function ProjectEditorInner({
         />
       )}
 
-      {showRecordSaveStatus && saveStatus !== "idle" && (
+      {/* Hidden while saveError shows — the error alert occupies the same spot
+          and already says the draft is kept locally / retrying. */}
+      {showRecordSaveStatus && saveStatus !== "idle" && !saveError && (
         <div className="fixed bottom-4 right-4 z-[90] rounded-full bg-white/90 border border-[#EDE2DE] px-4 py-1.5 text-[12px] font-semibold text-[#7D5B59] shadow">
-          {saveStatus === "saving" ? "Saving…" : "Saved ✓"}
+          {saveStatus === "saving"
+            ? "Saving…"
+            : saveStatus === "unsaved"
+            ? "Unsaved changes"
+            : "Saved ✓"}
         </div>
       )}
 

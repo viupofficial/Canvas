@@ -105,6 +105,28 @@ export default function MusicPlayer({
     else p.pauseVideo();
   }, [ytId, start]);
 
+  // Mobile browsers pause audio when the tab is backgrounded — e.g. tapping the
+  // Waze / Google Maps buttons opens the app over the invite — and do NOT resume
+  // it when the guest returns. Re-assert playback whenever the page becomes
+  // visible again, but only if `start` still says the music should be playing.
+  useEffect(() => {
+    const resume = () => {
+      if (document.visibilityState !== "visible" || !startRef.current) return;
+      if (ytId) {
+        const p = ytPlayerRef.current;
+        if (p && typeof p.playVideo === "function") p.playVideo();
+      } else {
+        audioRef.current?.play().catch(() => {});
+      }
+    };
+    document.addEventListener("visibilitychange", resume);
+    window.addEventListener("pageshow", resume);
+    return () => {
+      document.removeEventListener("visibilitychange", resume);
+      window.removeEventListener("pageshow", resume);
+    };
+  }, [ytId]);
+
   if (!url) return null;
 
   if (ytId) {

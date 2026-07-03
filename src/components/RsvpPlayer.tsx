@@ -57,6 +57,10 @@ function posStyle(pos: EnvPos | undefined): React.CSSProperties {
     top: y,
     width: pos.width,
     height: pos.height,
+    // Tailwind preflight sets img { max-width: 100% }, which clamps parts wider
+    // than the 396px stage (the head/body overflow it by design) and squashes
+    // them out of alignment with the fabric-rendered editor canvas.
+    maxWidth: "none",
     transform: pos.angle ? `rotate(${pos.angle}deg)` : undefined,
     transformOrigin: "top left",
   };

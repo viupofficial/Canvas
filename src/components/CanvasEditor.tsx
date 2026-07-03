@@ -3756,6 +3756,7 @@ const applyBgToOtherPages = (patch: { backgroundImage?: any; backgroundColor?: a
             >
               <div
                 ref={footerScaleDivRef}
+                className="editor-footer"
                 style={{
                   position: 'absolute',
                   bottom: 0,

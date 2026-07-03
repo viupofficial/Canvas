@@ -1672,6 +1672,22 @@ star-fly-in {
   box-sizing: border-box;
 }
 
+/* Editor canvas: the floating footer preview lives inside a transform-scaled
+   wrapper (.editor-footer in CanvasEditor), and a transformed ancestor becomes
+   the containing block for position:fixed — so the viewport-tuned offsets
+   above (top:-361px, 40vh padding) resolve against the tiny footer strip and
+   throw the popup far above the artboard. Re-anchor it to the wrapper so it
+   sits just above the nav bar, matching the RSVP/contact cards. */
+.editor-footer .guestbook-overlay {
+  position: absolute;
+  top: auto;
+  bottom: 68px;
+  left: 0;
+  width: 100%;
+  height: auto;
+  padding-top: 0;
+}
+
 /* ──────────────────────────────────────────────────────────────────────────
    Preview UI fade in / out
    Animates ONLY the preview controls — the footer nav bar and its popup panels

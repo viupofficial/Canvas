@@ -4,6 +4,7 @@ import React, { useState, useRef } from "react"
 import { useEventDataOptional } from "@/src/store/EventDataContext"
 import { buildIcs, icsFilename } from "@/src/lib/calendar/icsBuilder"
 import { buildGoogleCalendarLink } from "@/src/lib/calendar/googleCalendarLink"
+import EventMiniCalendar from "@/src/components/EventMiniCalendar"
 import type { CalendarExportInput } from "@/src/lib/calendar/normalizeEvent"
 import { submitCanvasRSVP, submitCanvasGuestbook, getCanvasGuestbook } from "@/src/lib/viupApi"
 
@@ -209,16 +210,6 @@ const generateICS = (event: any, loc?: any) => {
   return input ? (buildIcs(input) ?? "") : "";
 };
 
-// Format a date as YYYYMMDD for Google Calendar embed's `dates=` parameter,
-// which navigates the iframe to that specific day.
-const formatEmbedDate = (dateStr: string) => {
-  const d = new Date(dateStr);
-  if (isNaN(d.getTime())) return null;
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, "0");
-  const day = String(d.getDate()).padStart(2, "0");
-  return `${y}${m}${day}`;
-};
     console.log("FOOTER contacts:", contacts);
     const [infoTab, setInfoTab] = useState<string | null>(null)
 
@@ -656,6 +647,20 @@ const formatEmbedDate = (dateStr: string) => {
                                 Calendar
                             </h2>
 
+                            {/* Dynamic event title from the Calendar sidebar. */}
+                            {calendar?.title?.trim() && (
+                              <p style={{
+                                textAlign: "center",
+                                fontFamily: "Montserrat",
+                                fontSize: "18px",
+                                fontWeight: 600,
+                                marginBottom: "6px",
+                                width: "100%",
+                              }}>
+                                {calendar.title}
+                              </p>
+                            )}
+
                             <p style={{
                                 textAlign: "center",
                                 fontFamily: "Montserrat",
@@ -683,25 +688,10 @@ const formatEmbedDate = (dateStr: string) => {
                               </p>
                             )}
 
-                            {(() => {
-                              const embedBase =
-                                "https://calendar.google.com/calendar/embed?src=ddefc266bd7c7842321350b3a6d56e76494d5e4cc97846120d26541d4c141c20%40group.calendar.google.com&ctz=Asia%2FKuala_Lumpur";
-                              const ymd = calendar?.date ? formatEmbedDate(calendar.date) : null;
-                              // Append `dates=YYYYMMDD/YYYYMMDD` so the iframe navigates
-                              // to the saved date (e.g. 30 May shows May with that day in view).
-                              const embedSrc = ymd
-                                ? `${embedBase}&dates=${ymd}/${ymd}`
-                                : embedBase;
-                              return (
-                                <iframe
-                                  key={ymd ?? "no-date"}
-                                  src={embedSrc}
-                                  style={{ border: 0 }}
-                                  width="350"
-                                  height="350"
-                                />
-                              );
-                            })()}
+                            {/* Self-rendered month grid (not the Google embed, which is
+                                cross-origin and can't pin arbitrary dates/titles). Shows
+                                the sidebar date highlighted with the title chip on it. */}
+                            <EventMiniCalendar date={calendar?.date} title={calendar?.title} />
 
                             <div className="calendar-links"
                                 style={{ gap: "5px", paddingTop: "20px", paddingBottom: "15px" }}>
