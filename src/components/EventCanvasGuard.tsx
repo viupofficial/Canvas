@@ -11,7 +11,6 @@ import {
   extractDesign,
   loadOrCreateEventDesign,
   parseJsonData,
-  canAccessEditor,
   canAccessDesigner,
   num,
   type ViupEvent,
@@ -23,8 +22,14 @@ import {
 //   /designer/e/[slug]?user_id=&event_id=  → mode="designer-event"
 //
 // Validates user_id + event_id against PHP (which confirms the event belongs to
-// the user), enforces the role for the route, then loads-or-creates the single
-// design tied to the event and hands it to the canvas. Never loads all designs.
+// the user), then loads-or-creates the single design tied to the event and
+// hands it to the canvas. Never loads all designs.
+//
+// Access model: /editor is ownership-based — any account whose user_id owns
+// event_id may open it (customers, editors, or a designer assigned to a client
+// event, where the URL carries the OWNER's user_id). No is_admin requirement.
+// /designer/e keeps the role-3 gate. Feature power comes from event.package_id
+// (see packageRules.ts), never from the role.
 export default function EventCanvasGuard({ mode }: { mode: EditorMode }) {
   const searchParams = useSearchParams();
   const userId = searchParams.get("user_id");
@@ -80,16 +85,13 @@ export default function EventCanvasGuard({ mode }: { mode: EditorMode }) {
           );
         }
 
-        // ── Role gate ────────────────────────────────────────────────────────
-        const allowed = isEditor
-          ? canAccessEditor(data.user)
-          : canAccessDesigner(data.user);
-        if (!allowed) {
+        // ── Role gate (designer route only) ──────────────────────────────────
+        // /editor/e needs no role: the ownership fetch above already proved
+        // user_id owns event_id, which is the whole access requirement.
+        if (!isEditor && !canAccessDesigner(data.user)) {
           return fail(
             "You do not have permission to access this canvas.",
-            isEditor
-              ? "This editor link is for assigned editors only."
-              : "Designer access only.",
+            "Designer access only.",
           );
         }
 

@@ -315,11 +315,9 @@ export async function getCanvasGuestbook({
 
 // ── Role guards ──────────────────────────────────────────────────────────────
 // is_admin: 0 = customer, 1 = admin dashboard, 2 = editor, 3 = designer.
-export function canAccessEditor(user?: { is_admin?: number | string | null } | null): boolean {
-  const role = Number(user?.is_admin);
-  return role === 2 || role === 3;
-}
-
+// Only /designer surfaces are role-gated. /editor/e access is ownership-based:
+// get_user(user_id, event_id) succeeding IS the access check (PHP confirms the
+// event belongs to the user). Feature power comes from event.package_id.
 export function canAccessDesigner(user?: { is_admin?: number | string | null } | null): boolean {
   return Number(user?.is_admin) === 3;
 }

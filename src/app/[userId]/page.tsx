@@ -8,11 +8,12 @@ import { LoadingState, ErrorState } from "@/src/components/canvas-states";
 
 // Backward-compatible login landing: vi-up.com used to redirect here as
 // /<userId> (e.g. https://canvas.vi-up.com/144). The canvas is now split by
-// role, so this route only routes designers onward and tells editors/customers
+// role, so this route only routes designers onward and tells everyone else
 // to use the proper entrypoint:
-//   - is_admin === 3 (designer) → /designer?user_id={userId}
-//   - is_admin === 2 (editor)   → must open a specific event from My Event
-//   - otherwise                 → blocked
+//   - is_admin === 3 (designer)  → /designer?user_id={userId}
+//   - everyone else (customers,
+//     editors)                   → must open a specific event from My Event
+//     (this legacy URL has no event_id, so there is nothing to open here)
 export default function CanvasUserPage() {
   const params = useParams();
   const router = useRouter();
@@ -43,8 +44,6 @@ export default function CanvasUserPage() {
           return;
         }
 
-        const role = Number(data.user.is_admin);
-
         if (canAccessDesigner(data.user)) {
           // Designer → hand off to the full dashboard.
           setCanvasUser(data.user);
@@ -53,19 +52,13 @@ export default function CanvasUserPage() {
           return;
         }
 
-        if (role === 2) {
-          setState({
-            kind: "error",
-            title: "Open your event from My Event",
-            message: "Editors must open a specific event from the My Event page on vi-up.com.",
-          });
-          return;
-        }
-
+        // Customers and editors alike open their canvas per-event from My
+        // Event — this legacy URL carries no event_id to open.
         setState({
           kind: "error",
-          title: "You do not have access to the canvas",
-          message: "This area is reserved for designers and assigned editors.",
+          title: "Open your event from My Event",
+          message:
+            "Open your canvas for a specific event from the My Event page on vi-up.com.",
         });
       } catch (err) {
         console.error("Failed to fetch user:", err);
