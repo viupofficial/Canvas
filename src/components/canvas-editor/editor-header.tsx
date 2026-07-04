@@ -190,8 +190,8 @@ export default function EditorHeader(props: {
     console.log('Preview (local) action triggered');
   };
 
-  // Opens the package upgrade modal (DUMMY PAYMENT TEST MODE — see
-  // PaymentUpgradeModal). No-op when no handler is wired (legacy/teaser).
+  // Opens the package upgrade modal (Stripe checkout — see PaymentUpgradeModal).
+  // No-op when no handler is wired (legacy/teaser).
   const handleUpgradeClick = () => {
     if (props.onUpgrade) return props.onUpgrade();
     console.log('Upgrade action triggered');

@@ -11,7 +11,7 @@ import { useRouter } from "next/navigation";
 import { EventDataProvider, useEventData, type EventData } from "@/src/store/EventDataContext";
 import { ensureProject, saveProject } from "@/src/lib/projectStorage";
 import { getCanvasUser } from "@/src/lib/userSession";
-import { updateDesign, syncCanvasTitle, getCanvasName, num, type ViupEvent, type ViupDesign } from "@/src/lib/viupApi";
+import { updateDesign, syncCanvasTitle, getCanvasName, getUser, num, type ViupEvent, type ViupDesign } from "@/src/lib/viupApi";
 import type { CanvasUser } from "@/src/lib/userSession";
 import { getPackageRules, readFeatureUsage, normalizeUsageCounter, type FeatureUsage } from "@/src/lib/packageRules";
 import { PackageToastHost, showPackageToast } from "@/src/components/PackageLimitToast";
@@ -194,12 +194,18 @@ function ProjectEditorInner({
   // ── Package gating ─────────────────────────────────────────────────────────
   // All package feature rules (RSVP/Money-Gift visibility, gallery/location/
   // music limits) come from the shared helper so every surface stays consistent.
-  const rules = getPackageRules(event?.package_id);
+  // `livePackageId` overrides the mount-time event prop once the post-Stripe
+  // poll below confirms the webhook applied an upgrade — features unlock without
+  // a page reload.
+  const [livePackageId, setLivePackageId] = useState<number | null>(null);
+  const effectivePackageId = livePackageId ?? event?.package_id ?? null;
+  const rules = getPackageRules(effectivePackageId);
 
-  // ── Package upgrade (DUMMY PAYMENT TEST MODE) ──────────────────────────────
-  // The modal only ever redirects to the PHP/iFastNet dummy checkout; Canvas
-  // never writes events.package_id itself. Opening the modal is gated so Premium
-  // events (nothing left to buy) just get a toast instead. See PaymentUpgradeModal.
+  // ── Package upgrade (Stripe) ───────────────────────────────────────────────
+  // The modal only ever form-POSTs to create_upgrade_checkout.php (same endpoint
+  // as the MyEvent.php upgrade modal — NEVER checkout.php, which creates new
+  // events); Canvas never writes events.package_id itself. Opening the modal is
+  // gated so Premium events (nothing left to buy) just get a toast instead.
   const [upgradeOpen, setUpgradeOpen] = useState(false);
   const openUpgrade = useCallback(() => {
     if (rules.isPremiumPackage) {
@@ -209,26 +215,94 @@ function ProjectEditorInner({
     setUpgradeOpen(true);
   }, [rules.isPremiumPackage]);
 
-  // Handle the return from the PHP dummy checkout. The actual package update
-  // happens server-side in dummy_upgrade_success.php — we never trust the URL
-  // alone. Because returning from PHP is a full page load, EventCanvasGuard has
-  // already refetched the event (and its new package_id) before we mount here;
-  // this effect just surfaces the result toast and scrubs the payment params.
+  // Handle the return from Stripe (create_upgrade_checkout.php). The actual
+  // package update happens server-side in the Stripe webhook — we never trust
+  // the URL alone. Returning from Stripe is a full page load, so
+  // EventCanvasGuard refetches the event before we mount; but the webhook can
+  // lag the redirect, so if package_id hasn't reached the ?target=… the upgrade
+  // modal embedded in return_to, poll get_user.php a few times before showing a
+  // soft "still processing" warning. package_id is the only source of truth.
   useEffect(() => {
     if (typeof window === "undefined") return;
     const params = new URLSearchParams(window.location.search);
-    if (params.get("upgrade") !== "1" || params.get("dummy") !== "1") return;
+    if (params.get("upgrade") !== "1") return;
 
     const status = params.get("payment");
-    if (status === "success") {
-      showPackageToast("Package upgraded successfully. Dummy test mode.");
-    } else if (status === "cancelled") {
+    const isDummy = params.get("dummy") === "1";
+    const target = num(params.get("target")) ?? 0;
+
+    // Drop only the payment-return params (keep user_id/event_id and friends)
+    // so a refresh doesn't re-toast or re-poll.
+    const scrubPaymentParams = () => {
+      const url = new URL(window.location.href);
+      ["payment", "upgrade", "dummy", "target"].forEach((k) => url.searchParams.delete(k));
+      window.history.replaceState({}, document.title, url.toString());
+    };
+
+    if (status === "cancelled") {
       showPackageToast("Payment cancelled. Your package was not changed.");
-    } else {
+      scrubPaymentParams();
       return;
     }
-    // Drop ?payment=…&upgrade=…&dummy=… so a refresh doesn't re-toast.
-    window.history.replaceState({}, document.title, window.location.pathname);
+    if (status !== "success") return;
+    scrubPaymentParams();
+
+    // Legacy dummy flow: the PHP endpoint updated package_id synchronously
+    // before redirecting, so the mount-time refetch is already current.
+    if (isDummy) {
+      showPackageToast("Package upgraded successfully. Dummy test mode.");
+      return;
+    }
+
+    const mountedPackageId = num(event?.package_id) ?? 0;
+    if (target > 0 && mountedPackageId >= target) {
+      // Webhook finished before this page load — nothing to wait for.
+      showPackageToast("Payment successful! Your package has been upgraded.");
+      return;
+    }
+
+    showPackageToast("Payment successful! Confirming your upgrade...");
+    if (userId == null || eventId == null) return;
+
+    let cancelled = false;
+    let attempts = 0;
+    const MAX_ATTEMPTS = 6;
+    const POLL_DELAY_MS = 2500;
+
+    const poll = async () => {
+      if (cancelled) return;
+      attempts += 1;
+      try {
+        const data = await getUser(userId, eventId);
+        if (cancelled) return;
+        const fetched = num(data.event?.package_id) ?? 0;
+        // With a target we wait for it exactly; without one (PHP stripped the
+        // param) any increase over the mount-time value counts as confirmed.
+        const confirmed = target > 0 ? fetched >= target : fetched > mountedPackageId;
+        if (confirmed) {
+          setLivePackageId(fetched);
+          showPackageToast("Upgrade confirmed! Your new features are unlocked.");
+          return;
+        }
+      } catch {
+        /* transient network/API error — retry below */
+      }
+      if (cancelled) return;
+      if (attempts >= MAX_ATTEMPTS) {
+        showPackageToast(
+          "Payment received — your upgrade is still processing. Refresh this page in a moment.",
+        );
+        return;
+      }
+      window.setTimeout(poll, POLL_DELAY_MS);
+    };
+    poll();
+
+    return () => {
+      cancelled = true;
+    };
+    // Mount-only: reads the one-shot payment params from the Stripe return.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Location/music change counters persisted inside designs.json_data (NOT the
@@ -815,7 +889,7 @@ function ProjectEditorInner({
               initialMusicUrl={initialMusicUrl}
               userId={userId}
               eventId={eventId}
-              packageId={event?.package_id ?? null}
+              packageId={effectivePackageId}
             />
           </div>
         </div>
@@ -824,7 +898,7 @@ function ProjectEditorInner({
       {/* Top toast for package-limit upgrade nudges (gallery/location/music). */}
       <PackageToastHost />
 
-      {/* DUMMY PAYMENT TEST MODE — redirects to PHP dummy checkout, never writes
+      {/* Stripe upgrade — form-POSTs to create_upgrade_checkout.php, never writes
           package_id from here. Only meaningful for event-bound canvases. */}
       {isEventMode && eventId != null && (
         <PaymentUpgradeModal

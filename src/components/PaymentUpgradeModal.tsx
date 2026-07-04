@@ -1,37 +1,33 @@
 "use client";
 
 // ─────────────────────────────────────────────────────────────────────────────
-// DUMMY PAYMENT TEST MODE
-// No real Stripe payment is made here.
-// This redirects to PHP/iFastNet dummy checkout.
+// REAL STRIPE UPGRADE FLOW
 //
 // PaymentUpgradeModal drives the package-upgrade flow from the canvas:
 //   1. User picks a higher package (Basic → Standard/Premium, Standard → Premium).
-//   2. User picks a payment method (decorative for dummy mode).
-//   3. On "Checkout" we POST a hidden HTML form to the PHP dummy endpoint, which
-//      handles the (fake) charge and updates events.package_id on iFastNet, then
-//      redirects back here with ?payment=success&upgrade=1&dummy=1.
+//   2. User picks a payment method (decorative — Stripe Checkout presents the
+//      actual payment options on its own page).
+//   3. On "Checkout" we POST a hidden HTML form to create_upgrade_checkout.php
+//      (the same endpoint the MyEvent.php upgrade modal uses), which creates a
+//      Stripe Checkout Session with metadata flow=upgrade. The Stripe webhook
+//      updates events.package_id, then Stripe redirects back to return_to with
+//      ?payment=success&upgrade=1.
+//
+// IMPORTANT: never point this at checkout.php — that endpoint is for NEW
+// event/package purchases (index_login / Digital-Cards-login) and creates new
+// events. Upgrades from the canvas must only upgrade the ONE existing event.
 //
 // Vercel/Canvas NEVER touches events.package_id directly — it only redirects to
 // PHP and refetches the event afterwards (see ProjectEditor return handling).
-//
-/*
-|--------------------------------------------------------------------------
-| REAL STRIPE MODE - FUTURE PHASE
-|--------------------------------------------------------------------------
-| Do not enable yet.
-| Later this can be changed to call the real Stripe upgrade checkout endpoint.
-| For now, keep using create_dummy_upgrade_checkout.php.
-|--------------------------------------------------------------------------
-*/
 // ─────────────────────────────────────────────────────────────────────────────
 
 import React, { useEffect, useMemo, useState } from "react";
 
-// PHP/iFastNet dummy checkout endpoint. This is the ONLY upgrade action Canvas
-// performs — a plain form POST (not fetch) so the PHP session/cross-origin flow
-// behaves like a normal browser navigation and CORS never gets in the way.
-const DUMMY_CHECKOUT_URL = "https://vi-up.com/create_dummy_upgrade_checkout.php";
+// PHP Stripe upgrade endpoint (shared with MyEvent.php). This is the ONLY
+// upgrade action Canvas performs — a plain form POST (not fetch) so the PHP
+// session/cross-origin flow behaves like a normal browser navigation and CORS
+// never gets in the way.
+const UPGRADE_CHECKOUT_URL = "https://vi-up.com/create_upgrade_checkout.php";
 
 // Vi-Up palette (matches the PHP payment modal).
 const PANEL_BG = "#F3E9E6";
@@ -70,13 +66,26 @@ const PAYMENT_METHODS: { id: PaymentMethod; label: string; hint: string }[] = [
 // Steps shown in the right-side decorative progress rail.
 const PROGRESS_STEPS = ["Purchase", "Payment Confirmation", "Create RSVP"] as const;
 
-// Strip any previous payment-return params from a URL so the return_url we hand
-// to PHP is clean (no stale ?payment=…&upgrade=…&dummy=…). Falls back to the raw
-// string if it isn't parseable.
+// Strip any previous payment-return params from a URL so the return_to we hand
+// to PHP is clean (no stale ?payment=…&upgrade=…&dummy=…&target=…). Falls back
+// to the raw string if it isn't parseable.
 function cleanReturnUrl(raw: string): string {
   try {
     const url = new URL(raw);
-    ["payment", "upgrade", "dummy"].forEach((k) => url.searchParams.delete(k));
+    ["payment", "upgrade", "dummy", "target"].forEach((k) => url.searchParams.delete(k));
+    return url.toString();
+  } catch {
+    return raw;
+  }
+}
+
+// Embed the upgrade target in the return_to URL. Stripe's return doesn't say
+// which package was bought, so ProjectEditor reads ?target=… after the redirect
+// to know when the webhook has finished applying the upgrade.
+function withTargetParam(raw: string, targetPackageId: number): string {
+  try {
+    const url = new URL(raw);
+    url.searchParams.set("target", String(targetPackageId));
     return url.toString();
   } catch {
     return raw;
@@ -135,10 +144,12 @@ export default function PaymentUpgradeModal({
 
   if (!isOpen) return null;
 
-  // ── Checkout: hidden form POST to the PHP dummy endpoint ────────────────────
+  // ── Checkout: hidden form POST to create_upgrade_checkout.php ───────────────
   // We build and submit a real <form> so the browser performs a top-level
-  // navigation to PHP (session cookies flow, no CORS preflight). PHP charges the
-  // dummy payment, updates package_id on iFastNet, then redirects to return_url.
+  // navigation to PHP (session cookies flow, no CORS preflight). PHP creates the
+  // Stripe Checkout Session (flow=upgrade) and redirects the browser to Stripe;
+  // after payment Stripe sends the user back to return_to with
+  // ?payment=success&upgrade=1 while the webhook updates package_id.
   const handleCheckout = () => {
     if (!canCheckout || !selectedPackage) return;
 
@@ -148,13 +159,13 @@ export default function PaymentUpgradeModal({
 
     const form = document.createElement("form");
     form.method = "POST";
-    form.action = DUMMY_CHECKOUT_URL;
+    form.action = UPGRADE_CHECKOUT_URL;
 
     const fields: Record<string, string> = {
       event_id: String(eventId),
       target_package_id: String(selectedPackage.id),
-      source: "canvas",
-      return_url: cleanCurrentUrl,
+      source: "vercel",
+      return_to: withTargetParam(cleanCurrentUrl, selectedPackage.id),
     };
 
     Object.entries(fields).forEach(([key, value]) => {
@@ -196,8 +207,7 @@ export default function PaymentUpgradeModal({
                 Upgrade your package
               </h2>
               <p className="text-[12.5px] mt-0.5" style={{ color: `${BRAND}B0` }}>
-                {/* DUMMY PAYMENT TEST MODE — no real charge is made. */}
-                Dummy test mode · no real payment is taken.
+                Secure payment powered by Stripe.
               </p>
             </div>
             <button
