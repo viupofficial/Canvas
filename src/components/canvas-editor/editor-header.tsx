@@ -138,6 +138,25 @@ export default function EditorHeader(props: {
     props.onEventNameChange?.(name);
   };
 
+  // ── CLOUD SAVE FLASH ─────────────────────────────────────────────────────
+  // Briefly tint the brown cloud-save icon green each time a title edit finishes
+  // syncing (titleSyncStatus flips to "saved"). Repeated saves reset the timer,
+  // and the pending timeout is cleared on unmount.
+  const [cloudFlashGreen, setCloudFlashGreen] = useState(false);
+  const cloudFlashTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => {
+    if (props.titleSyncStatus !== "saved") return;
+    setCloudFlashGreen(true);
+    if (cloudFlashTimer.current) clearTimeout(cloudFlashTimer.current);
+    cloudFlashTimer.current = setTimeout(() => setCloudFlashGreen(false), 1200);
+  }, [props.titleSyncStatus]);
+  useEffect(
+    () => () => {
+      if (cloudFlashTimer.current) clearTimeout(cloudFlashTimer.current);
+    },
+    [],
+  );
+
   const { editorRef, onUndo, onRedo, onSave, onPreview, onProfile, onShare, onLogin, teaser } = props;
 
   /**
@@ -337,7 +356,20 @@ export default function EditorHeader(props: {
         </span>
 
         <button onClick={handleSaveClick} className="rounded-full text-white flex items-center justify-center">
-          <img src="/cloud-save.svg" className="h-[23px] w-[33px]" />
+          <img
+            src="/cloud-save.svg"
+            className="h-[23px] w-[33px] transition-[filter] duration-200"
+            // The SVG has a fixed brown fill, so recolor via filter: normalise to
+            // black, then tint green while the post-save flash is active.
+            style={
+              cloudFlashGreen
+                ? {
+                    filter:
+                      "brightness(0) saturate(100%) invert(42%) sepia(93%) saturate(474%) hue-rotate(84deg) brightness(96%) contrast(88%)",
+                  }
+                : undefined
+            }
+          />
         </button>
       </div>
 
