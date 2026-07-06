@@ -1739,10 +1739,10 @@ export default function Sidebar({
   onEditImage,
   bgReadNonce,
   showRsvpAndMoneyGift = true,
+  teaser = false,
   rules,
   featureUsage,
   onLocationChanged,
-  onUpgrade,
 }: {
   editorRef?: React.RefObject<EditorHandle | null>;
   isPhonePreview?: boolean;
@@ -1753,8 +1753,11 @@ export default function Sidebar({
   // Package gating (Basic / package_id === 1 hides RSVP + Money Gift). Defaults
   // to true so non-event usages (free designer canvas) keep both tools visible.
   showRsvpAndMoneyGift?: boolean;
-  // Opens the package upgrade modal. On Basic, RSVP + Money Gift tabs are still
-  // visible but locked — clicking them fires this instead of opening the tab.
+  // Teaser (public "try the editor") mode. Like Basic, it greys out RSVP +
+  // Money Gift — but both stay fully functional (clicking still opens the tab).
+  teaser?: boolean;
+  // Opens the package upgrade modal. Accepted for compatibility with callers;
+  // the sidebar no longer gates RSVP / Money Gift behind it (both stay usable).
   onUpgrade?: () => void;
   // Full package rule set (gallery/location/music limits). Absent for free
   // designer canvases — defaults to full access (all limits Infinity).
@@ -1883,18 +1886,12 @@ export default function Sidebar({
     return () => window.removeEventListener('keydown', onKey);
   }, []);
 
-  // Basic package: RSVP + Money Gift stay visible but are locked behind an
-  // upgrade. `showRsvpAndMoneyGift` is false only on Basic.
-  const rsvpMoneyLocked = !pkgRules.showRsvpAndMoneyGift;
+  // Teaser + Basic grey out RSVP + Money Gift, but both stay fully functional —
+  // clicking still opens the tool panel. Other tiers show them normally.
+  const rsvpMoneyGreyed = teaser || pkgRules.isBasicPackage;
 
   const toggle = (id: Tab, disabled?: boolean) => {
     if (disabled) return;
-    // On Basic, clicking RSVP / Money Gift opens the upgrade modal instead of
-    // the tool panel. Falls through to normal behaviour when unlocked.
-    if ((id === 'rsvp' || id === 'money') && rsvpMoneyLocked) {
-      onUpgrade?.();
-      return;
-    }
     if (id === 'text') {
       setActive(null);
       // Drop a fresh text box in the centre of the canvas, ready to edit.
@@ -1913,8 +1910,8 @@ export default function Sidebar({
     <aside className="bg-brand-cream transition-all duration-200 w-30 h-full overflow-y-auto shrink-0">
       <nav className="flex flex-col gap-2 pt-4">
         {SIDEBAR_ITEMS.map((it) => {
-          // Basic locks RSVP + Money Gift: shown with a 🔒 badge, click upgrades.
-          const isLocked = (it.id === 'rsvp' || it.id === 'money') && rsvpMoneyLocked;
+          // Teaser + Basic grey out RSVP + Money Gift (still clickable/functional).
+          const isGreyed = (it.id === 'rsvp' || it.id === 'money') && rsvpMoneyGreyed;
           return (
             <button
               key={it.id}
@@ -1922,13 +1919,10 @@ export default function Sidebar({
               aria-pressed={active === it.id}
               className={`relative flex flex-col items-center justify-center gap-4 text-left text-[13px] text-nowrap font-semibold px-3 py-2 rounded hover:bg-brand-accent/30 cursor-pointer ${
                 it.disabled ? 'opacity-50 cursor-not-allowed' : ''
-              } ${active === it.id ? 'bg-brand-accent/40' : ''}`}
+              } ${isGreyed ? 'opacity-40' : ''} ${active === it.id ? 'bg-brand-accent/40' : ''}`}
             >
               <div className="flex items-center justify-center gap-4 relative">
-                <img src={it.icon} alt={it.label.toLowerCase()} className={`h-6 w-8.5 ${isLocked ? 'opacity-40' : ''}`} />
-                {isLocked && (
-                  <span className="absolute -top-1 -right-2 text-[10px]">🔒</span>
-                )}
+                <img src={it.icon} alt={it.label.toLowerCase()} className="h-6 w-8.5" />
               </div>
               {it.label}
             </button>

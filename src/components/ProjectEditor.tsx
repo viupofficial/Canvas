@@ -826,7 +826,10 @@ function ProjectEditorInner({
           onUndo={() => editorRef.current?.undo()}
           onRedo={() => editorRef.current?.redo()}
           onSave={() => forceSaveNow({ syncTitle: true })}
-          onUpgrade={openUpgrade}
+          // Premium is the highest tier — no upgrade path, so hide the button
+          // entirely by not wiring a handler (EditorHeader only renders it when
+          // onUpgrade is present).
+          onUpgrade={rules.isPremiumPackage ? undefined : openUpgrade}
           onPreview={() => {
             // Persist the design to the DB first (same path as Save/autosave),
             // then publish + open the hosted page. The save is fire-and-forget:
@@ -865,6 +868,7 @@ function ProjectEditorInner({
             onEditImage={handleSidebarEditImage}
             bgReadNonce={bgReadNonce}
             showRsvpAndMoneyGift={showRsvpAndMoneyGift}
+            teaser={teaser}
             rules={rules}
             featureUsage={featureUsage}
             onLocationChanged={handleLocationChanged}

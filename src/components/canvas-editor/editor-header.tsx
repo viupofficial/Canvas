@@ -2,7 +2,7 @@
 
 'use client';
 
-import { Upload, LogIn, Link2, FileText, Check, Loader2, AlertCircle, Gift } from 'lucide-react';
+import { Upload, LogIn, Link2, FileText, Check, Loader2, Gift } from 'lucide-react';
 import { RefObject, useState, useRef, useEffect } from "react";
 import { useRouter, usePathname } from "next/navigation"; // ✅ ADD THIS
 import { EditorHandle } from "@/src/components/CanvasEditor";
@@ -224,12 +224,20 @@ export default function EditorHeader(props: {
     console.log('Profile action triggered');
   };
 
+  // The share dropdown is only available in the designer flow. Everywhere else
+  // (editor mode, teaser, legacy non-/designer paths) the Share button is inert.
+  const canShare = mode
+    ? mode !== "editor"
+    : !!pathname && pathname.startsWith("/designer");
+
   /**
    * Handle the click event for the share button.
    * Opens the share dropdown (or defers to the onShare prop if provided).
    */
   const handleShareClick = (): void => {
     if (onShare) return onShare();
+    // Outside the designer flow, clicking Share does nothing (no dropdown).
+    if (!canShare) return;
     setShareOpen((o) => !o);
   };
 
@@ -330,7 +338,7 @@ export default function EditorHeader(props: {
        
       </div>
 
-      <div className="flex items-center justify-center gap-2 -translate-x-[105px]">
+      <div className="flex items-center justify-center gap-[5px] -translate-x-[105px]">
         <input
           type="text"
           value={eventName}
@@ -338,22 +346,6 @@ export default function EditorHeader(props: {
           className="font-bold text-[18px] text-right bg-transparent border-none outline-none w-[140px]"
           aria-label="Event name"
         />
-
-        {/* Title autosync status — saving / saved / failed (event-bound canvases). */}
-        <span className="flex w-4 items-center justify-center" aria-live="polite">
-          {props.titleSyncStatus === "saving" && (
-            <Loader2 className="w-4 h-4 animate-spin text-[#7D5B59]" aria-label="Saving title" />
-          )}
-          {props.titleSyncStatus === "saved" && (
-            <Check className="w-4 h-4 text-green-600" aria-label="Title saved" />
-          )}
-          {props.titleSyncStatus === "error" && (
-            <AlertCircle
-              className="w-4 h-4 text-[#B23B3B]"
-              aria-label={props.titleSyncError || "Title sync failed"}
-            />
-          )}
-        </span>
 
         <button onClick={handleSaveClick} className="rounded-full text-white flex items-center justify-center">
           <img
@@ -438,13 +430,13 @@ export default function EditorHeader(props: {
             onClick={handleUpgradeClick}
             className="border-3 border-[#7D5B59] text-[#7D5B59] rounded-[100px] px-[22px] py-[12px] flex items-center gap-2 h-[45px] text-[18px] font-bold hover:bg-[#7D5B59]/5"
           >
-            <Gift className="w-5" /> Upgrade Package
+            <Gift className="w-5 lg:hidden" /> Upgrade Package
           </button>
         )}
 
         {teaser ? (
           <button onClick={handleLoginClick} className="bg-[#5a2d2d] text-white px-[22px] py-[12px] rounded-[100px] flex items-center gap-2 h-[45px] text-[18px] font-bold">
-            <LogIn className="w-5" />
+            <LogIn className="w-5 lg:hidden" />
             Login
           </button>
         ) : (
@@ -455,7 +447,7 @@ export default function EditorHeader(props: {
               aria-expanded={shareOpen}
               className="bg-[#5a2d2d] text-white px-[22px] py-[12px] rounded-[100px] flex items-center gap-2 h-[45px] text-[18px] font-bold"
             >
-              <Upload className="w-5" />
+              <Upload className="w-5 lg:hidden" />
               Share
             </button>
 
@@ -531,7 +523,7 @@ export default function EditorHeader(props: {
             onClick={handleLoginClick}
             className="bg-[#5a2d2d] text-white px-[22px] py-[12px] rounded-[100px] flex items-center gap-2 h-[45px] text-[18px] font-bold"
           >
-            <LogIn className="w-5" />
+            <LogIn className="w-5 lg:hidden" />
             Login
           </button>
         )}

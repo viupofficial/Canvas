@@ -1650,6 +1650,15 @@ star-fly-in {
   max-width: 396px;
   margin: 0 auto;
   box-sizing: border-box;
+  /* The RsvpPlayer stage is a full-bleed `position:fixed; z-index:1` layer, so
+     these cards' base `z-index:0` renders them behind the invitation — the
+     button toggles the card open but it's hidden and unclickable. Lift them
+     above the stage (matching .info-popup) so Contact / Money Gift / RSVP
+     popups show, exactly like Info and Guestbook already do. This is scoped to
+     the preview/live shell (.preview-local) so the main-canvas footer, where
+     z-index:0 is correct, is untouched. .contact-card also covers the RSVP
+     popup (contact-card rsvp-popup). */
+  z-index: 20000;
 }
 
 /* Info popup spans the full width so its Calendar/Location bubbles (positioned by
