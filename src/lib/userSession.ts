@@ -19,7 +19,7 @@ export type CanvasUser = {
 };
 
 export const USER_KEY = "viup_canvas_user";
-const DEFAULT_AVATAR = "https://vi-up.com/uploads/users/default.png";
+const DEFAULT_AVATAR = "/placeholder_user2.png";
 
 const hasStorage = () => typeof window !== "undefined" && !!window.localStorage;
 
@@ -51,7 +51,9 @@ export function clearCanvasUser() {
   }
 }
 
-// Best avatar URL we can show, with a sensible fallback.
-export function avatarFor(user: CanvasUser | null): string {
-  return user?.avatar_url || user?.profile_pic || DEFAULT_AVATAR;
+// Avatar URL to display. The remote profile_pic/avatar_url URLs are unreliable
+// (see git history / diagnosis), so for now everyone shows the bundled
+// placeholder. `user` is kept in the signature so callers don't change.
+export function avatarFor(_user: CanvasUser | null): string {
+  return DEFAULT_AVATAR;
 }

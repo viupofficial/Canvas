@@ -206,7 +206,7 @@ export default function DesignerDashboard({ user }: { user: CanvasUser }) {
       <header className="flex items-center justify-between px-8 py-5 bg-[#EDE2DE] h-[111px]">
         <div className="flex items-center justify-start pl-[106px]">
           <a href="/" className="flex items-center justify-center gap-4 my-9 mr-[20px] ">
-            <img src="/Vi-Up Submark.png" alt="Vi-Up" className="h-[40px] w-[40px]" />
+            <img src="/Vi-Up Submark.png" alt="Vi-Up" className="h-[30px] w-[30px]" />
           </a>
         </div>
         <div className="flex items-center gap-5 mr-[90px]">

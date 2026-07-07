@@ -315,11 +315,11 @@ export default function EditorHeader(props: {
           // Teaser mode, or any route other than /designer: the logo is
           // decorative only — no link back to the homepage filing system.
           <div className="flex items-center justify-center gap-4 my-9 mr-[20px]">
-            <img src="/Vi-Up Submark.png" alt="Vi-Up" className="h-[40px] w-[40px]" />
+            <img src="/Vi-Up Submark.png" alt="Vi-Up" className="h-[30px] w-[30px]" />
           </div>
         ) : (
           <a href={resolvedHomeHref} className="flex items-center justify-center gap-4 my-9 mr-[20px] ">
-            <img src="/Vi-Up Submark.png" alt="Vi-Up" className="h-[40px] w-[40px]" />
+            <img src="/Vi-Up Submark.png" alt="Vi-Up" className="h-[30px] w-[30px]" />
           </a>
         )}
 
@@ -430,7 +430,9 @@ export default function EditorHeader(props: {
             onClick={handleUpgradeClick}
             className="border-3 border-[#7D5B59] text-[#7D5B59] rounded-[100px] px-[22px] py-[12px] flex items-center gap-2 h-[45px] text-[18px] font-bold hover:bg-[#7D5B59]/5"
           >
-            <Gift className="w-5 lg:hidden" /> Upgrade Package
+            {/* Teaser keeps the gift icon on every viewport (incl. laptop/PC);
+                elsewhere it only shows on smaller screens. */}
+            <Gift className={teaser ? "w-5" : "w-5 lg:hidden"} /> Upgrade Package
           </button>
         )}
 
