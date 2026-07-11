@@ -913,6 +913,19 @@ function ProjectEditorInner({
         />
       )}
 
+      {/* TODO(teaser upgrade): the teaser's Upgrade Package button is NOT wired
+          to Stripe yet. When ready, render the modal in teaser too — teaser has
+          no real event, so eventId falls back to 0:
+
+      {teaser && (
+        <PaymentUpgradeModal
+          isOpen={upgradeOpen}
+          onClose={() => setUpgradeOpen(false)}
+          eventId={eventId ?? 0}
+          currentPackageId={rules.packageId as number | null}
+        />
+      )} */}
+
       {/* Hidden while saveError shows — the error alert occupies the same spot
           and already says the draft is kept locally / retrying. */}
       {showRecordSaveStatus && saveStatus !== "idle" && !saveError && (
