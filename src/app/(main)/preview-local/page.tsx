@@ -59,6 +59,7 @@ export default function PreviewLocalPage() {
               titleStyle: env.titleStyle,
               subtitleStyle: env.subtitleStyle,
               pressStyle: env.pressStyle,
+              extras: env.extras,
             }
           : null,
         musicUrl: payload.musicUrl ?? null,

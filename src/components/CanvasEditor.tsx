@@ -2976,6 +2976,7 @@ const [currentPage, setCurrentPage] = useState(0);
           titleStyle: env.titleStyle,
           subtitleStyle: env.subtitleStyle,
           pressStyle: env.pressStyle,
+          extras: env.extras,
         }
       : null,
     musicUrl: musicUrl ?? null,

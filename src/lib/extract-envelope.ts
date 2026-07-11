@@ -22,6 +22,18 @@ function bbox(o: any): EnvPos {
 
 const EMPTY_POS: EnvPos = { left: 0, top: 0, width: 0, height: 0, angle: 0, originX: "left", originY: "top" };
 
+// Any element the user adds to the envelope page beyond the recognized parts
+// (head/seal/body/logo images + the three known texts). These are carried
+// through so the player's cover can render them — otherwise custom texts like
+// the couple's names would silently vanish from previews and the live page.
+export type EnvelopeExtra = {
+  kind: "text" | "image";
+  text?: string;
+  src?: string;
+  pos: EnvPos;
+  style?: any;
+};
+
 export type EnvelopeExtract = {
   hasEnvelope: boolean;
   headSrc: string;
@@ -42,6 +54,7 @@ export type EnvelopeExtract = {
   titleStyle: any;
   subtitleStyle: any;
   pressStyle: any;
+  extras: EnvelopeExtra[];
   remainingPages: any[];
 };
 
@@ -54,6 +67,7 @@ export function extractEnvelope(pages: any[]): EnvelopeExtract {
     headPos: EMPTY_POS, sealPos: EMPTY_POS, bodyPos: EMPTY_POS, logoPos: EMPTY_POS,
     titlePos: EMPTY_POS, subtitlePos: EMPTY_POS, pressPos: EMPTY_POS,
     titleStyle: null, subtitleStyle: null, pressStyle: null,
+    extras: [],
     remainingPages: pages ?? [],
   };
 
@@ -111,6 +125,34 @@ export function extractEnvelope(pages: any[]): EnvelopeExtract {
     };
   }
 
+  // Everything else on the envelope page (custom texts like the couple's
+  // names, decorative images) rides along so the cover can render it. The
+  // border overlay is excluded — the player draws it separately via borderUrl.
+  const consumed = new Set<any>(
+    [headObj, sealObj, bodyObj, logoObj, titleObj, subObj, pressObj].filter(Boolean)
+  );
+  const extras: EnvelopeExtra[] = objects
+    .map((o: any): EnvelopeExtra | null => {
+      if (consumed.has(o) || o?.isBorder) return null;
+      const t = String(o?.type ?? "").toLowerCase();
+      if (t === "textbox" || t === "text") {
+        const s = textStyle(o);
+        return {
+          kind: "text",
+          text: o.text ?? "",
+          pos: bbox(o),
+          // bbox() scales the box, so scale the font with it — fabric sizes
+          // text through scaleX/scaleY, not fontSize.
+          style: s ? { ...s, fontSize: (o.fontSize ?? 20) * (o.scaleY ?? 1) } : null,
+        };
+      }
+      if (t === "image" && o.src) {
+        return { kind: "image", src: toRelativeSrc(o.src), pos: bbox(o) };
+      }
+      return null;
+    })
+    .filter((e): e is EnvelopeExtra => e !== null);
+
   return {
     hasEnvelope: true,
     headSrc: toRelativeSrc(headSrc),
@@ -131,6 +173,7 @@ export function extractEnvelope(pages: any[]): EnvelopeExtract {
     titleStyle: textStyle(titleObj),
     subtitleStyle: textStyle(subObj),
     pressStyle: textStyle(pressObj),
+    extras,
     remainingPages: pages.slice(1),
   };
 }

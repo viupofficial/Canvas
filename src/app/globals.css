@@ -996,10 +996,25 @@ star-fly-in {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  gap: 1rem;
   margin: 1rem 1rem;
   font-size: 18px;
   color: #000;
   font-family: 'Montserrat', sans-serif;
+}
+
+/* Long names wrap onto extra lines inside the flexible span; the icons keep
+   their own row and never get squeezed into a vertical stack. */
+.contact-person > span {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow-wrap: break-word;
+}
+
+.contact-person .icons {
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
 }
 
 .contact-person .icons a {
@@ -1653,21 +1668,25 @@ star-fly-in {
   /* The RsvpPlayer stage is a full-bleed `position:fixed; z-index:1` layer, so
      these cards' base `z-index:0` renders them behind the invitation — the
      button toggles the card open but it's hidden and unclickable. Lift them
-     above the stage (matching .info-popup) so Contact / Money Gift / RSVP
-     popups show, exactly like Info and Guestbook already do. This is scoped to
-     the preview/live shell (.preview-local) so the main-canvas footer, where
-     z-index:0 is correct, is untouched. .contact-card also covers the RSVP
-     popup (contact-card rsvp-popup). */
-  z-index: 20000;
+     above the stage so Contact / Money Gift / RSVP popups show, but keep them
+     BELOW the footer nav bar (z-index:999) so they slide out from behind it,
+     matching the Guestbook overlay. This is scoped to the preview/live shell
+     (.preview-local) so the main-canvas footer, where z-index:0 is correct, is
+     untouched. .contact-card also covers the RSVP popup (contact-card
+     rsvp-popup). */
+  z-index: 500;
 }
 
 /* Info popup spans the full width so its Calendar/Location bubbles (positioned by
-   percentage) stay aligned with the now-full-width footer's Info slot. */
+   percentage) stay aligned with the now-full-width footer's Info slot. Its base
+   z-index (20000) would paint it over the footer nav bar — pull it under the
+   footer (999) like the other popup cards, but keep it above the stage (1). */
 .preview-local .info-popup {
   width: 100%;
   max-width: none;
   margin: 0 auto;
   box-sizing: border-box;
+  z-index: 500;
 }
 
 /* Guestbook overlay is position:fixed (viewport-wide by default) — re-anchor it

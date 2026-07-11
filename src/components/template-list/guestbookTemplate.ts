@@ -102,13 +102,7 @@ export const guestbookPage = {
     }
   ]
 };// Guestbook template (visual only)
-// Dynamic content (messages, pagination) handled via JS
-
-const guestMessages = [
-  { message: "Semoga bahagia hingga ke syurga ❤️", sender: "Ali" },
-  { message: "Congrats! Stay strong together 💍", sender: "Siti" },
-  { message: "Love you guys!! 🎉", sender: "Aiman" }
-];
-
-let currentIndex = 0;
+// Dynamic content (messages, pagination) handled via JS — see startGuestbook
+// in RsvpPlayer, which fills guestMessage/guestSender with real entries (or a
+// neutral "No guestbook entries yet." placeholder when there are none).
 

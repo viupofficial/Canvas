@@ -14,6 +14,16 @@ export type EnvPos = {
   originY: "top" | "center" | "bottom";
 };
 
+// Custom element on the envelope page beyond the recognized parts (e.g. the
+// couple's names) — extracted by extract-envelope.ts and rendered on the cover.
+export type EnvelopeExtraItem = {
+  kind: "text" | "image";
+  text?: string;
+  src?: string;
+  pos?: EnvPos;
+  style?: any;
+};
+
 export type EnvelopeData = {
   headSrc: string;
   sealSrc: string;
@@ -33,6 +43,7 @@ export type EnvelopeData = {
   titleStyle?: any;
   subtitleStyle?: any;
   pressStyle?: any;
+  extras?: EnvelopeExtraItem[];
 };
 
 const STAGE_W = 396;
@@ -84,11 +95,10 @@ export type RsvpPlayerProps = {
   fillMode?: "fit" | "cover";
 };
 
-const DEFAULT_GUEST_MESSAGES = [
-  { message: "Semoga bahagia hingga ke syurga ❤️", sender: "Ali" },
-  { message: "Congrats! Stay strong together 💍", sender: "Siti" },
-  { message: "Love you guys!! 🎉", sender: "Aiman" },
-];
+// Shown by the on-page Guestbook element while the event has no wishes yet.
+// Deliberately neutral — fake sample wishes (Ali/Siti/…) read as real entries
+// to guests on a live invite.
+const GUESTBOOK_EMPTY_TEXT = "No guestbook entries yet.";
 
 export default function RsvpPlayer({ pages, envelope, musicUrl, borderUrl, eventDate, guestMessages, fillMode = "fit" }: RsvpPlayerProps) {
   const rootRef = useRef<HTMLDivElement>(null);
@@ -125,6 +135,22 @@ export default function RsvpPlayer({ pages, envelope, musicUrl, borderUrl, event
   // the latest values without re-binding on every change.
   useEffect(() => { currentRef.current = current; }, [current]);
   useEffect(() => { goneRef.current = gone; }, [gone]);
+
+  // The envelope cover is DOM text, and its page was extracted OUT of `pages`,
+  // so the per-page canvas font preloading below never sees its families —
+  // request them here or the cover renders in the fallback serif. Being DOM,
+  // the spans re-render themselves automatically once each font arrives.
+  useEffect(() => {
+    if (!envelope) return;
+    const families = new Set<string>();
+    for (const s of [envelope.titleStyle, envelope.subtitleStyle, envelope.pressStyle]) {
+      if (s?.fontFamily) families.add(String(s.fontFamily));
+    }
+    for (const ex of envelope.extras ?? []) {
+      if (ex?.style?.fontFamily) families.add(String(ex.style.fontFamily));
+    }
+    if (families.size) preloadFonts([...families]);
+  }, [envelope]);
 
   useEffect(() => {
     if (!envelope) return;
@@ -462,13 +488,22 @@ export default function RsvpPlayer({ pages, envelope, musicUrl, borderUrl, event
 
     // Guestbook: cycle the wishes through the message/sender textboxes (tagged
     // name = guestMessage / guestSender) every 4s. No-op on pages without one.
+    // With no real entries yet, show a neutral placeholder instead — it is
+    // replaced automatically once entries arrive (the guestMessages prop change
+    // rebuilds the canvases), so the template wording never shows alongside
+    // real wishes.
     const startGuestbook = (rc: any) => {
       const objs = rc.getObjects();
       const msgBox = objs.find((o: any) => o?.name === "guestMessage");
       const senderBox = objs.find((o: any) => o?.name === "guestSender");
       if (!msgBox && !senderBox) return;
-      const list = (guestMessages && guestMessages.length ? guestMessages : DEFAULT_GUEST_MESSAGES);
-      if (!list.length) return;
+      const list = guestMessages && guestMessages.length ? guestMessages : null;
+      if (!list) {
+        msgBox?.set("text", GUESTBOOK_EMPTY_TEXT);
+        senderBox?.set("text", "");
+        rc.requestRenderAll();
+        return;
+      }
       let i = 0;
       const show = () => {
         const entry = list[i];
@@ -573,12 +608,36 @@ export default function RsvpPlayer({ pages, envelope, musicUrl, borderUrl, event
             startGuestbook(rc);
             rc.requestRenderAll();
             // Webfonts used by this page may not be ready at first paint; load
-            // them, then repaint so text renders with the correct family.
+            // them, then repaint so text renders with the correct family. A
+            // plain repaint isn't enough: fabric caches per-character widths
+            // measured with whatever font was active at first paint, so the
+            // cache must be cleared and every text object re-measured or line
+            // wrapping stays computed against the fallback serif.
             const families = collectFontFamilies(pageData);
             if (families.length) {
-              preloadFonts(families).then(() => {
-                if (!cancelled) rc.requestRenderAll();
-              });
+              const refreshText = (obj: any) => {
+                const t = String(obj?.type ?? "").toLowerCase();
+                if (t === "textbox" || t === "text" || t === "i-text") {
+                  obj.initDimensions?.();
+                  obj.setCoords?.();
+                }
+                (obj?._objects ?? []).forEach(refreshText);
+              };
+              const repaintWithFonts = () => {
+                if (cancelled) return;
+                for (const f of families) {
+                  // v6/7 exposes cache.clearFontCache; v5 used util.clearFabricFontCache.
+                  try { fabric.cache?.clearFontCache?.(f); } catch {}
+                  try { fabric.util?.clearFabricFontCache?.(f); } catch {}
+                }
+                rc.forEachObject(refreshText);
+                rc.requestRenderAll();
+              };
+              preloadFonts(families).then(repaintWithFonts);
+              // Safety net: some faces (e.g. weights we didn't explicitly ask
+              // for) can land after preloadFonts resolves — repaint once more
+              // when the document's font loading fully settles.
+              (document as any).fonts?.ready?.then?.(repaintWithFonts);
             }
           });
         }
@@ -675,6 +734,57 @@ export default function RsvpPlayer({ pages, envelope, musicUrl, borderUrl, event
                   style={{ ...posStyle(envelope.logoPos), zIndex: 5 }}
                 />
               )}
+
+              {/* Custom elements the user placed on the envelope page (e.g. the
+                  couple's names). Elements in the top half exit upward with the
+                  head/seal, bottom-half ones exit downward with the body. */}
+              {(envelope.extras ?? []).map((ex, i) => {
+                if (!ex?.pos || ex.pos.width <= 0) return null;
+                const { y } = originOffset(ex.pos);
+                const exitCls =
+                  y + ex.pos.height / 2 < STAGE_H / 2 ? " env-move-up" : " env-move-down";
+                const cls = `env-part${animating ? exitCls : ""}`;
+                if (ex.kind === "image" && ex.src) {
+                  return (
+                    <img
+                      key={`extra-${i}`}
+                      className={cls}
+                      src={ex.src}
+                      alt=""
+                      style={{ ...posStyle(ex.pos), zIndex: 5, pointerEvents: "none" }}
+                    />
+                  );
+                }
+                if (ex.kind !== "text") return null;
+                return (
+                  <span
+                    key={`extra-${i}`}
+                    className={cls}
+                    style={{
+                      ...posStyle(ex.pos),
+                      zIndex: 5,
+                      display: "flex",
+                      alignItems: "flex-start",
+                      justifyContent:
+                        ex.style?.textAlign === "center"
+                          ? "center"
+                          : ex.style?.textAlign === "right"
+                          ? "flex-end"
+                          : "flex-start",
+                      fontFamily: ex.style?.fontFamily ?? "serif",
+                      fontStyle: ex.style?.fontStyle ?? "normal",
+                      fontWeight: ex.style?.fontWeight ?? "normal",
+                      fontSize: ex.style?.fontSize ?? 20,
+                      color: ex.style?.fill ?? "#2f2f2f",
+                      lineHeight: ex.style?.lineHeight ?? 1.16,
+                      textAlign: (ex.style?.textAlign as any) ?? "left",
+                      whiteSpace: "pre-wrap",
+                    }}
+                  >
+                    {ex.text}
+                  </span>
+                );
+              })}
 
               <span
                 className={`env-part${animating ? " env-move-down" : ""}`}
