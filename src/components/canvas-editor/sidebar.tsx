@@ -838,6 +838,9 @@ function RSVPTab() {
   const [navOpacity, setNavOpacity] = useState(current?.navOpacity ?? 100);
   const [textColor, setTextColor] = useState(current?.textColor ?? '#000000');
   const [textOpacity, setTextOpacity] = useState(current?.textOpacity ?? 100);
+  // The small half-circle "notch" behind the RSVP circle (defaults to white).
+  const [circleColor, setCircleColor] = useState(current?.circleColor ?? '#ffffff');
+  const [circleOpacity, setCircleOpacity] = useState(current?.circleOpacity ?? 100);
 
   const pushField = <K extends keyof NonNullable<typeof current>>(
     field: K,
@@ -851,6 +854,8 @@ function RSVPTab() {
   const origNavOpacity = React.useRef(current?.navOpacity ?? 100);
   const origTextColor = React.useRef(current?.textColor ?? '#000000');
   const origTextOpacity = React.useRef(current?.textOpacity ?? 100);
+  const origCircleColor = React.useRef(current?.circleColor ?? '#ffffff');
+  const origCircleOpacity = React.useRef(current?.circleOpacity ?? 100);
 
   const revertNav = () => {
     setNavColor(origNavColor.current);
@@ -874,13 +879,24 @@ function RSVPTab() {
     setTextColor(inv);
     pushField('textColor', inv);
   };
+  const revertCircle = () => {
+    setCircleColor(origCircleColor.current);
+    pushField('circleColor', origCircleColor.current);
+    setCircleOpacity(origCircleOpacity.current);
+    pushField('circleOpacity', origCircleOpacity.current);
+  };
+  const invertCircle = () => {
+    const inv = invertHex(circleColor);
+    setCircleColor(inv);
+    pushField('circleColor', inv);
+  };
 
   const handleSave = () => {
     if (!maxGuest) {
       alert("Please enter max guest");
       return;
     }
-    setSection('rsvpConfig', { enabled: rsvpOn, maxGuest, navColor, navOpacity, textColor, textOpacity });
+    setSection('rsvpConfig', { enabled: rsvpOn, maxGuest, navColor, navOpacity, textColor, textOpacity, circleColor, circleOpacity });
   };
 
   return (
@@ -1051,6 +1067,71 @@ function RSVPTab() {
               <RevertIcon />
             </button>
             <button type="button" title="Invert Text and Icon" aria-label="Invert Text and Icon" onClick={invertText} className={colorIconBtnCls}>
+              <InvertIcon />
+            </button>
+          </div>
+        </div>
+        <div>
+          <label className="block text-[11px] text-[#7D5B5980] font-[600] mb-1">Circle</label>
+          <div className="flex items-center gap-2">
+            <div className="flex items-center gap-3 bg-[#F2E8E6] rounded-[12px] px-3 py-2 flex-1 min-w-0">
+              <label
+                className="relative inline-block w-6 h-6 rounded-[5px] border border-[#EDE2DE] cursor-pointer overflow-hidden shrink-0"
+                style={{ backgroundColor: circleColor }}
+              >
+                <input
+                  type="color"
+                  className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                  value={circleColor}
+                  onChange={(e) => {
+                    setCircleColor(e.target.value);
+                    pushField('circleColor', e.target.value);
+                  }}
+                />
+              </label>
+              <input
+                className="flex-1 min-w-0 bg-transparent outline-none uppercase tracking-tight font-[600] text-[13px] leading-none text-[#7D5B59]"
+                value={circleColor.replace('#', '').toUpperCase()}
+                onChange={(e) => {
+                  const hex = e.target.value.replace('#', '');
+                  if (/^[0-9a-fA-F]{6}$/.test(hex)) {
+                    const next = '#' + hex;
+                    setCircleColor(next);
+                    pushField('circleColor', next);
+                  }
+                }}
+                maxLength={6}
+              />
+              <div className="w-[2px] self-stretch -my-2 bg-white shrink-0 ml-auto" />
+              <Scrubbable
+                className="flex items-baseline gap-0.5 shrink-0 pl-1"
+                min={0}
+                max={100}
+                value={circleOpacity}
+                onScrub={(v) => {
+                  setCircleOpacity(v);
+                  pushField('circleOpacity', v);
+                }}
+              >
+                <input
+                  className="w-[32px] bg-transparent outline-none text-right font-[600] text-[16px] leading-none text-[#7D5B59] [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                  type="number"
+                  min={0}
+                  max={100}
+                  value={circleOpacity}
+                  onChange={(e) => {
+                    const v = Number(e.target.value);
+                    setCircleOpacity(v);
+                    pushField('circleOpacity', v);
+                  }}
+                />
+                <span className="font-[600] text-[16px] leading-none text-[#B98587]">%</span>
+              </Scrubbable>
+            </div>
+            <button type="button" title="Revert Circle" aria-label="Revert Circle" onClick={revertCircle} className={colorIconBtnCls}>
+              <RevertIcon />
+            </button>
+            <button type="button" title="Invert Circle" aria-label="Invert Circle" onClick={invertCircle} className={colorIconBtnCls}>
               <InvertIcon />
             </button>
           </div>
@@ -2057,9 +2138,16 @@ export default function Sidebar({
                           try { e.dataTransfer.setData('application/json', payload); e.dataTransfer.effectAllowed = 'copy'; } catch (err) { }
                         }}
                         onClick={() => {
-                          if (editorRef?.current?.addShape) editorRef.current.addShape(String(item).toLowerCase());
+                          const shape = String(item).toLowerCase();
+                          // Line is a draw tool, not a drop-in shape: click the
+                          // canvas to anchor, drag to stretch, release to place.
+                          if (shape === 'line' && editorRef?.current?.enterLineTool) {
+                            editorRef.current.enterLineTool();
+                            return;
+                          }
+                          if (editorRef?.current?.addShape) editorRef.current.addShape(shape);
                         }}
-                        title={String(item)}
+                        title={String(item) === 'Line' ? 'Line — click the canvas, move, click again (or drag)' : String(item)}
                         aria-label={String(item)}
                         className="h-20 bg-gray-100 rounded flex items-center justify-center text-xs text-gray-600 hover:bg-gray-200"
                       >

@@ -168,6 +168,116 @@ function ColorRow(props: {
   );
 }
 
+/**
+ * Figma-style "Spacing" control for a multi-selection (≥2 elements): shows the
+ * gap between adjacent elements along their dominant layout axis, or "Mixed"
+ * when the gaps differ. Typing a number standardises every gap to that value;
+ * dragging (scrub) or the hover ‹ › steppers adjust each gap RELATIVELY, so
+ * mixed gaps grow/shrink together while staying different. All measuring and
+ * moving lives in the editor (editorRef.getSelectionSpacing / adjust / set).
+ */
+function SpacingRow(props: { editorRef?: React.RefObject<any> }) {
+  const { editorRef } = props;
+  const info = editorRef?.current?.getSelectionSpacing?.() ?? null;
+  const display = info ? (info.mixed ? "Mixed" : String(info.value)) : "";
+
+  // Local text state so typing isn't overwritten by re-renders; synced back to
+  // the measured value whenever the field isn't being edited.
+  const [text, setText] = React.useState(display);
+  const [focused, setFocused] = React.useState(false);
+  React.useEffect(() => {
+    if (!focused) setText(display);
+  }, [display, focused]);
+
+  if (!info) return null;
+
+  const adjust = (d: number) => editorRef?.current?.adjustSelectionSpacing?.(d);
+  const commit = () => {
+    const v = Number(text);
+    if (text.trim() !== "" && Number.isFinite(v)) {
+      editorRef?.current?.setSelectionSpacing?.(Math.round(v));
+    } else {
+      setText(display); // invalid input → snap back to the measured value
+    }
+  };
+
+  const stepBtnCls =
+    "absolute top-1/2 -translate-y-1/2 h-[22px] w-[22px] rounded-full flex items-center justify-center " +
+    "text-[#7D5B59] opacity-0 group-hover:opacity-100 hover:bg-[#EDE2DE] transition-opacity cursor-pointer";
+
+  return (
+    <Scrubbable
+      value={info.value}
+      onScrub={(v) => {
+        // Scrubbable hands us an absolute target for the first gap; convert it
+        // to a RELATIVE delta (read live, so it stays correct while dragging)
+        // and shift every gap by it — "Mixed" gaps grow/shrink together.
+        const cur = editorRef?.current?.getSelectionSpacing?.();
+        if (!cur) return;
+        const delta = v - cur.value;
+        if (delta) adjust(delta);
+      }}
+    >
+      <label className="block text-[11px] text-[#7D5B5980] font-[600] mb-1">
+        Spacing {info.axis === "x" ? "(horizontal)" : "(vertical)"}
+      </label>
+      <div className="group relative flex items-center rounded-[100px] bg-[#F2E8E6B2]">
+        {/* Spacing glyph (two bars) — makes way for the left stepper on hover */}
+        <span className="absolute left-[10px] top-1/2 -translate-y-1/2 text-[#7D5B59] opacity-100 group-hover:opacity-0 transition-opacity pointer-events-none">
+          <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden>
+            <rect x="2" y="2" width="12" height="3" rx="1" fill="currentColor" />
+            <rect x="2" y="11" width="12" height="3" rx="1" fill="currentColor" />
+            <path d="M8 6v4" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" />
+          </svg>
+        </span>
+        <button
+          type="button"
+          title="Decrease spacing"
+          aria-label="Decrease spacing"
+          onClick={() => adjust(-1)}
+          className={`${stepBtnCls} left-[3px]`}
+        >
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+            <path d="M15 18l-6-6 6-6" />
+          </svg>
+        </button>
+        <input
+          className="w-full bg-transparent outline-none text-center px-[28px] py-[6px] text-[13px] text-[#7D5B59] font-[600]"
+          type="text"
+          inputMode="numeric"
+          value={text}
+          placeholder="Mixed"
+          onFocus={(e) => {
+            setFocused(true);
+            e.target.select();
+          }}
+          onBlur={() => {
+            setFocused(false);
+            commit();
+          }}
+          onChange={(e) => setText(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") (e.target as HTMLInputElement).blur();
+            else if (e.key === "ArrowUp") { e.preventDefault(); adjust(1); }
+            else if (e.key === "ArrowDown") { e.preventDefault(); adjust(-1); }
+          }}
+        />
+        <button
+          type="button"
+          title="Increase spacing"
+          aria-label="Increase spacing"
+          onClick={() => adjust(1)}
+          className={`${stepBtnCls} right-[3px]`}
+        >
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+            <path d="M9 6l6 6-6 6" />
+          </svg>
+        </button>
+      </div>
+    </Scrubbable>
+  );
+}
+
 /*************  ✨ Windsurf Command 🌟  *************/
 /**
  * Inspector component
@@ -459,6 +569,9 @@ export default function Inspector(props: {
                 <span className="text-[13px] text-[#B98587] font-[600]">°</span>
               </div>
             </Scrubbable>
+
+            {/* Spacing between selected elements — multi-selection only */}
+            {childObjects.length >= 2 && <SpacingRow editorRef={editorRef} />}
           </div>
 
           {/* ── Typography ─────────────────────────────────────── */}

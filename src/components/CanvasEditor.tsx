@@ -113,6 +113,10 @@ export type EditorHandle = {
   addText: (text?: string, opts?: Record<string, any>) => void;
   enterTextTool: () => void;
   exitTextTool: () => void;
+  // Vector-style line tool: press on the canvas to anchor the first point, drag
+  // to stretch the line, release to place it. Escape cancels.
+  enterLineTool: () => void;
+  exitLineTool: () => void;
   uploadImage: () => void;
   addImageFromUrl: (url: string) => void;
   addMusicFromUrl: (url: string) => void;
@@ -161,6 +165,13 @@ export type EditorHandle = {
   // for fewer than 3 selected. Wire these to toolbar buttons if desired.
   distributeHorizontally: () => void;
   distributeVertically: () => void;
+  // ── Spacing (active multi-selection of ≥2 objects) ───────────────────────────
+  // Gaps between adjacent elements along their dominant layout axis. `mixed` is
+  // true when the gaps differ; `value` is the shared gap (or the first one when
+  // mixed). adjust shifts EVERY gap by a delta (relative); set standardises them.
+  getSelectionSpacing: () => { axis: 'x' | 'y'; gaps: number[]; mixed: boolean; value: number } | null;
+  adjustSelectionSpacing: (delta: number) => void;
+  setSelectionSpacing: (value: number) => void;
   // Align the current selection to the active frame/artboard (object alignment,
   // not text paragraph align). Scene-coordinate based, so zoom-safe.
   alignSelected: (
@@ -298,6 +309,8 @@ const CanvasEditor = forwardRef<
       navOpacity: number;
       textColor: string;
       textOpacity: number;
+      circleColor?: string;
+      circleOpacity?: number;
     };
     userId?: string | number | null;
     eventId?: string | number | null;
@@ -376,6 +389,12 @@ const [currentPage, setCurrentPage] = useState(0);
   const textToolRef = useRef(false);
   const textToolStartRef = useRef<{ x: number; y: number } | null>(null);
   const textToolDraggedRef = useRef(false);
+  // Line tool (vector-style): press to anchor the first point, drag to stretch
+  // the line, release to place it. `lineDraftRef` holds the live fabric.Line
+  // being stretched during the drag.
+  const lineToolRef = useRef(false);
+  const lineToolStartRef = useRef<{ x: number; y: number } | null>(null);
+  const lineDraftRef = useRef<any>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
   const hasHydratedRef = useRef(false);
   // In-flight animation preview on the editor canvas. previewRestoreRef snaps the
@@ -799,6 +818,93 @@ const [currentPage, setCurrentPage] = useState(0);
     }
   }
 
+  // ── Selection spacing (Figma-style "space between") ──────────────────────────
+  // Boxes/axis/gaps for a set of selection children. getBoundingRect() is scene-
+  // space in Fabric v7 even while the objects sit inside the ActiveSelection, so
+  // this works for both reading (selection intact) and writing (after discard).
+  // The dominant axis is the one the element centers spread most along; gaps are
+  // measured between adjacent bounding boxes in that order (negative = overlap).
+  function computeSpacingLayout(objs: any[]) {
+    const items = objs.map((o) => {
+      const r = o.getBoundingRect();
+      return { obj: o, left: r.left, top: r.top, width: r.width, height: r.height };
+    });
+    const cxs = items.map((i) => i.left + i.width / 2);
+    const cys = items.map((i) => i.top + i.height / 2);
+    const axis: 'x' | 'y' =
+      Math.max(...cxs) - Math.min(...cxs) >= Math.max(...cys) - Math.min(...cys) ? 'x' : 'y';
+    items.sort((a, b) => (axis === 'x' ? a.left - b.left : a.top - b.top));
+    const gaps: number[] = [];
+    for (let i = 1; i < items.length; i++) {
+      const prev = items[i - 1];
+      gaps.push(
+        axis === 'x'
+          ? items[i].left - (prev.left + prev.width)
+          : items[i].top - (prev.top + prev.height)
+      );
+    }
+    return { items, axis, gaps };
+  }
+
+  function getSelectionSpacing() {
+    const canvas = fabricRef.current;
+    if (!canvas) return null;
+    const active = canvas.getActiveObject() as any;
+    if (!active || active.type !== 'activeselection') return null;
+    const objs: any[] = [...(active.getObjects?.() ?? [])];
+    if (objs.length < 2) return null;
+    const { axis, gaps } = computeSpacingLayout(objs);
+    const rounded = gaps.map((g) => Math.round(g));
+    const mixed = rounded.some((g) => g !== rounded[0]);
+    return { axis, gaps: rounded, mixed, value: rounded[0] };
+  }
+
+  // Rewrite the gaps of the active multi-selection: the first element (in axis
+  // order) stays fixed and each following element is shifted so gap i becomes
+  // makeGaps(gaps)[i]. Same discard→move→re-select pattern as distribute/align
+  // so the new positions serialize correctly.
+  function applySelectionSpacing(makeGaps: (gaps: number[]) => number[]) {
+    const canvas = fabricRef.current;
+    const fabric = fabricModuleRef.current;
+    if (!canvas || !fabric) return;
+    const active = canvas.getActiveObject() as any;
+    if (!active || active.type !== 'activeselection') return;
+    const objs: any[] = [...(active.getObjects?.() ?? [])];
+    if (objs.length < 2) return;
+
+    canvas.discardActiveObject();
+    objs.forEach((o) => o.setCoords?.());
+    const { items, axis, gaps } = computeSpacingLayout(objs);
+    const newGaps = makeGaps(gaps);
+
+    let cursor = axis === 'x' ? items[0].left + items[0].width : items[0].top + items[0].height;
+    for (let i = 1; i < items.length; i++) {
+      const it = items[i];
+      const start = axis === 'x' ? it.left : it.top;
+      const target = cursor + newGaps[i - 1];
+      const d = target - start;
+      if (d) {
+        if (axis === 'x') it.obj.set('left', (it.obj.left ?? 0) + d);
+        else it.obj.set('top', (it.obj.top ?? 0) + d);
+        it.obj.setCoords?.();
+      }
+      cursor = target + (axis === 'x' ? it.width : it.height);
+    }
+
+    const sel = new fabric.ActiveSelection(objs, { canvas });
+    canvas.setActiveObject(sel);
+    canvas.requestRenderAll();
+    // Scrubbing calls this per pixel of drag, so keep the per-call work at the
+    // level of a normal object drag: debounced history push + selection refresh.
+    // No saveCurrentPage here — like updateActiveObject, the page JSON is
+    // re-serialized from the live canvas on save/page-switch/export.
+    pushSnapshot();
+    updateOverlayFromActive();
+    if (typeof props.onSelectionChange === 'function') {
+      props.onSelectionChange(sel.toObject([...SELECTION_PROPS]));
+    }
+  }
+
   useImperativeHandle(ref, () => ({
     undo,
     redo,
@@ -806,6 +912,9 @@ const [currentPage, setCurrentPage] = useState(0);
     canRedo,
     distributeHorizontally: () => distributeSelection('x'),
     distributeVertically: () => distributeSelection('y'),
+    getSelectionSpacing,
+    adjustSelectionSpacing: (delta) => applySelectionSpacing((gaps) => gaps.map((g) => g + delta)),
+    setSelectionSpacing: (value) => applySelectionSpacing((gaps) => gaps.map(() => value)),
     alignSelected: (alignment) => alignSelectedToFrame(alignment),
     save: saveLocal,
     
@@ -973,6 +1082,12 @@ const [currentPage, setCurrentPage] = useState(0);
     },
     exitTextTool: () => {
       exitTextTool();
+    },
+    enterLineTool: () => {
+      enterLineTool();
+    },
+    exitLineTool: () => {
+      exitLineTool();
     },
     uploadImage: () => {
       triggerImageUpload();
@@ -1874,6 +1989,76 @@ const [currentPage, setCurrentPage] = useState(0);
           schedulePush();
         });
 
+        // Line tool — supports BOTH gestures:
+        //   • press, drag, release
+        //   • click, move (the line follows the cursor), click again to finish
+        // The first press anchors x1/y1 and adds a live draft; mouse:move
+        // stretches its x2/y2 whether or not the button is held, which is what
+        // makes the click-move-click flow work with the same handler.
+        const placeLineDraft = () => {
+          const draft = lineDraftRef.current;
+          if (!draft) return;
+          lineToolStartRef.current = null;
+          lineDraftRef.current = null;
+          draft.set({ selectable: true, evented: true, excludeFromExport: false });
+          draft.setCoords();
+          canvas.setActiveObject(draft);
+          exitLineTool();
+          canvas.requestRenderAll();
+          schedulePush();
+          saveCurrentPage(currentPageRef.current);
+        };
+        canvas.on('mouse:down', (opt: any) => {
+          if (!lineToolRef.current) return;
+          const fabric = fabricModuleRef.current;
+          if (!fabric) return;
+          const p = opt.scenePoint ?? getScenePoint(opt.e);
+          const start = lineToolStartRef.current;
+
+          // Second click of click-move-click → finish here (ignore a click
+          // that hasn't left the anchor yet, e.g. an accidental double-click).
+          if (lineDraftRef.current && start) {
+            if (Math.hypot(p.x - start.x, p.y - start.y) < 4) return;
+            lineDraftRef.current.set({ x2: p.x, y2: p.y });
+            placeLineDraft();
+            return;
+          }
+
+          lineToolStartRef.current = { x: p.x, y: p.y };
+          const draft = new fabric.Line([p.x, p.y, p.x, p.y], {
+            stroke: '#111827',
+            strokeWidth: 3,
+            strokeLineCap: 'round',
+            selectable: false,
+            evented: false,
+            // Keep the in-progress draft out of history snapshots / page saves
+            // (object:added schedules both); cleared when the line is placed.
+            excludeFromExport: true,
+          });
+          lineDraftRef.current = draft;
+          canvas.add(draft);
+          canvas.requestRenderAll();
+        });
+        canvas.on('mouse:move', (opt: any) => {
+          if (!lineToolRef.current || !lineDraftRef.current) return;
+          const p = opt.scenePoint ?? getScenePoint(opt.e);
+          // Setting x2/y2 re-derives the line's bounding box (fabric v7 Line._set),
+          // which is safe here because the draft carries no extra transforms yet.
+          lineDraftRef.current.set({ x2: p.x, y2: p.y });
+          lineDraftRef.current.setCoords();
+          canvas.requestRenderAll();
+        });
+        canvas.on('mouse:up', (opt: any) => {
+          if (!lineToolRef.current || !lineDraftRef.current || !lineToolStartRef.current) return;
+          const start = lineToolStartRef.current;
+          const p = opt.scenePoint ?? getScenePoint(opt.e);
+          // Released without dragging → the user is doing click-move-click:
+          // keep the draft following the cursor until the second click.
+          if (Math.hypot(p.x - start.x, p.y - start.y) < 4) return;
+          // Press-drag-release → the drag already stretched the draft; place it.
+          placeLineDraft();
+        });
+
         // Delete / Backspace key to remove the selected object; Ctrl+/- to zoom
         const handleKeyDown = (e: KeyboardEvent) => {
           if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
@@ -1889,6 +2074,12 @@ const [currentPage, setCurrentPage] = useState(0);
           if (e.key === 'Escape' && textToolRef.current) {
             e.preventDefault();
             exitTextTool();
+            return;
+          }
+
+          if (e.key === 'Escape' && lineToolRef.current) {
+            e.preventDefault();
+            exitLineTool();
             return;
           }
 
@@ -2263,6 +2454,13 @@ const [currentPage, setCurrentPage] = useState(0);
   const enterTextTool = useCallback(() => {
     const canvas = fabricRef.current;
     if (!canvas) return;
+    // The two draw tools are mutually exclusive — cancel any in-progress line.
+    lineToolRef.current = false;
+    lineToolStartRef.current = null;
+    if (lineDraftRef.current) {
+      canvas.remove(lineDraftRef.current);
+      lineDraftRef.current = null;
+    }
     textToolRef.current = true;
     textToolStartRef.current = null;
     textToolDraggedRef.current = false;
@@ -2282,6 +2480,39 @@ const [currentPage, setCurrentPage] = useState(0);
     canvas.defaultCursor = 'default';
     canvas.hoverCursor = 'move';
     canvas.selection = true;
+    canvas.requestRenderAll();
+  }, []);
+
+  // Line tool — same enter/exit pattern as the text tool (crosshair cursor,
+  // marquee selection off so the press-drag draws instead of rubber-banding).
+  const exitLineTool = useCallback(() => {
+    const canvas = fabricRef.current;
+    lineToolRef.current = false;
+    lineToolStartRef.current = null;
+    // A draft still on the canvas means the tool was cancelled mid-drag.
+    if (canvas && lineDraftRef.current) canvas.remove(lineDraftRef.current);
+    lineDraftRef.current = null;
+    if (!canvas) return;
+    canvas.defaultCursor = 'default';
+    canvas.hoverCursor = 'move';
+    canvas.selection = true;
+    canvas.requestRenderAll();
+  }, []);
+
+  const enterLineTool = useCallback(() => {
+    const canvas = fabricRef.current;
+    if (!canvas) return;
+    // The two draw tools are mutually exclusive.
+    textToolRef.current = false;
+    textToolStartRef.current = null;
+    textToolDraggedRef.current = false;
+    lineToolRef.current = true;
+    lineToolStartRef.current = null;
+    lineDraftRef.current = null;
+    canvas.defaultCursor = 'crosshair';
+    canvas.hoverCursor = 'crosshair';
+    canvas.selection = false;
+    canvas.discardActiveObject();
     canvas.requestRenderAll();
   }, []);
 

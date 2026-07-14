@@ -37,6 +37,9 @@ export type RSVPConfig = {
   navOpacity?: number;
   textColor?: string;
   textOpacity?: number;
+  // The half-circle "notch" behind the RSVP circle (.footer-container::before).
+  circleColor?: string;
+  circleOpacity?: number;
 } | null;
 
 export type EventData = {

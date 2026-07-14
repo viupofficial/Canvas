@@ -229,7 +229,8 @@ body {
   transform: translateX(-50%);
   width: 60px;
   height: 40px;
-  background: white;
+  /* Editable via the RSVP sidebar "Circle" picker (EventFooter sets the var). */
+  background: var(--rsvp-notch-bg, white);
   border-bottom-left-radius: 90px;
   border-bottom-right-radius: 90px;
   z-index: 1;

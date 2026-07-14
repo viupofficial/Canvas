@@ -43,6 +43,8 @@ export default function EventFooter({
     navOpacity?: number;
     textColor?: string;
     textOpacity?: number;
+    circleColor?: string;
+    circleOpacity?: number;
   } | null;
   userId?: string | number | null;
   eventId?: string | number | null;
@@ -140,6 +142,13 @@ export default function EventFooter({
     ? `${rsvpConfig.navColor}${navOpacityHex}`
     : "rgba(0,0,0,0.85)";
   const rsvpCircleBg = rsvpConfig?.navColor ?? "#000000";
+  // White half-circle "notch" behind the RSVP circle — painted by
+  // .footer-container::before, which reads this CSS variable (defaults to white).
+  const circleOpacityHex = Math.round(((rsvpConfig?.circleOpacity ?? 100) / 100) * 255)
+    .toString(16).padStart(2, "0");
+  const notchBg = rsvpConfig?.circleColor
+    ? `${rsvpConfig.circleColor}${circleOpacityHex}`
+    : "white";
   const labelColor = rsvpConfig?.textColor ?? "white";
   const labelOpacity = (rsvpConfig?.textOpacity ?? 100) / 100;
   const labelStyle: React.CSSProperties = { color: labelColor, opacity: labelOpacity };
@@ -810,7 +819,7 @@ const generateICS = (event: any, loc?: any) => {
             )}
 
             {/* FOOTER */}
-            <div className={`footer-container preview-footer-enter${infoActive ? " bump-shift" : ""}${showRsvpAndMoneyGift ? "" : " footer-basic"}${rsvpEnabled ? "" : " footer-no-rsvp"}`} style={{ background: footerBg }}>
+            <div className={`footer-container preview-footer-enter${infoActive ? " bump-shift" : ""}${showRsvpAndMoneyGift ? "" : " footer-basic"}${rsvpEnabled ? "" : " footer-no-rsvp"}`} style={{ background: footerBg, "--rsvp-notch-bg": notchBg } as React.CSSProperties}>
                 {showRsvpAndMoneyGift ? (
                   <>
                     {rsvpEnabled && (
