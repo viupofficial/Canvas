@@ -1,6 +1,7 @@
 "use client";
 
 import { useEventDataOptional } from "@/src/store/EventDataContext";
+import { cssBackground, firstColorHex, type GradientDescriptor } from "@/src/lib/gradient";
 
 type PreviewTab = "contact" | "location" | "calendar" | "rsvp" | "money";
 
@@ -186,13 +187,16 @@ function RSVPCard({
 }: {
   rsvpConfig: {
     maxGuest?: number;
-    navColor?: string;
+    navColor?: string | GradientDescriptor;
     navOpacity?: number;
     textColor?: string;
     textOpacity?: number;
   } | null;
 }) {
-  const navColor = rsvpConfig?.navColor || "#000000";
+  // navColor may be a gradient — Accept's background can render it directly;
+  // Decline's text/border take a representative solid color instead.
+  const navBg = cssBackground(rsvpConfig?.navColor ?? "#000000");
+  const navColor = firstColorHex(rsvpConfig?.navColor, "#000000");
   const navOpacity = (rsvpConfig?.navOpacity ?? 100) / 100;
   const textColor = rsvpConfig?.textColor || "#000000";
   const textOpacity = (rsvpConfig?.textOpacity ?? 100) / 100;
@@ -209,7 +213,7 @@ function RSVPCard({
       <div className="flex gap-2 mb-2">
         <button
           className="flex-1 py-1 rounded text-[10px] font-bold text-white"
-          style={{ backgroundColor: navColor, opacity: navOpacity }}
+          style={{ background: navBg, opacity: navOpacity }}
         >
           Accept
         </button>

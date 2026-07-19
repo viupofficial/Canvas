@@ -9,6 +9,7 @@ import React, {
   useRef,
   useState,
 } from "react";
+import type { GradientDescriptor } from "@/src/lib/gradient";
 
 export type ContactItem = { name: string; phone: string };
 export type LocationData = { address: string } | null;
@@ -33,12 +34,14 @@ export type RSVPConfig = {
   // pre-existing designs (saved before this toggle existed) keep showing RSVP.
   enabled?: boolean;
   maxGuest?: number;
-  navColor?: string;
+  // Nav bar / circle colors accept a solid CSS color string or a gradient
+  // descriptor (see src/lib/gradient.ts); consumers render via cssBackground().
+  navColor?: string | GradientDescriptor;
   navOpacity?: number;
   textColor?: string;
   textOpacity?: number;
   // The half-circle "notch" behind the RSVP circle (.footer-container::before).
-  circleColor?: string;
+  circleColor?: string | GradientDescriptor;
   circleOpacity?: number;
 } | null;
 

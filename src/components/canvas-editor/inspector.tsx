@@ -12,46 +12,17 @@ import { FONT_GROUPS } from "@/src/lib/fonts";
 import LayersPanel from "@/src/components/canvas-editor/LayersPanel";
 import ArtboardPanel from "@/src/components/canvas-editor/ArtboardPanel";
 import Scrubbable from "@/src/components/canvas-editor/scrubbable";
+import GradientEditor, { FillTypeSelect } from "@/src/components/canvas-editor/GradientEditor";
+import {
+  type GradientDescriptor,
+  isGradientValue,
+  parseColor,
+  buildRgba,
+  invertHex,
+  solidToGradient,
+  gradientToSolid,
+} from "@/src/lib/gradient";
 import type { LayerInfo } from "@/src/components/CanvasEditor";
-
-// Parse any CSS color (hex3/6/8, rgb, rgba) into { hex, opacity 0-100 }.
-function parseColor(color: string | undefined | null, defaultHex = '#000000'): { hex: string; opacity: number } {
-  if (!color) return { hex: defaultHex, opacity: 100 };
-  const rgba = color.match(/^rgba?\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*(?:,\s*([\d.]+))?\s*\)$/);
-  if (rgba) {
-    const r = parseInt(rgba[1]), g = parseInt(rgba[2]), b = parseInt(rgba[3]);
-    const a = rgba[4] !== undefined ? parseFloat(rgba[4]) : 1;
-    const hex = '#' + [r, g, b].map(v => v.toString(16).padStart(2, '0')).join('');
-    return { hex, opacity: Math.round(a * 100) };
-  }
-  if (/^#[0-9a-fA-F]{8}$/.test(color)) {
-    const a = parseInt(color.slice(7, 9), 16) / 255;
-    return { hex: color.slice(0, 7), opacity: Math.round(a * 100) };
-  }
-  if (/^#[0-9a-fA-F]{6}$/.test(color)) return { hex: color, opacity: 100 };
-  if (/^#[0-9a-fA-F]{3}$/.test(color)) {
-    const h = '#' + color[1] + color[1] + color[2] + color[2] + color[3] + color[3];
-    return { hex: h, opacity: 100 };
-  }
-  return { hex: defaultHex, opacity: 100 };
-}
-
-// Combine a 6-digit hex and opacity (0-100) into an rgba() string (or plain hex when fully opaque).
-function buildRgba(hex: string, opacity: number): string {
-  const r = parseInt(hex.slice(1, 3), 16);
-  const g = parseInt(hex.slice(3, 5), 16);
-  const b = parseInt(hex.slice(5, 7), 16);
-  const a = Math.max(0, Math.min(100, opacity)) / 100;
-  return a >= 1 ? hex : `rgba(${r}, ${g}, ${b}, ${a})`;
-}
-
-// Invert a 6-digit hex color (Adobe-style negative).
-function invertHex(hex: string): string {
-  const r = 255 - parseInt(hex.slice(1, 3), 16);
-  const g = 255 - parseInt(hex.slice(3, 5), 16);
-  const b = 255 - parseInt(hex.slice(5, 7), 16);
-  return '#' + [r, g, b].map((v) => v.toString(16).padStart(2, '0')).join('');
-}
 
 // Revert (undo) icon.
 function RevertIcon() {
@@ -94,13 +65,19 @@ const colorIconBtn =
  */
 function ColorRow(props: {
   label: string;
-  value: string | undefined | null;
+  value: string | GradientDescriptor | undefined | null;
   displayDefault: string;
-  onChange: (color: string) => void;
+  onChange: (color: string | GradientDescriptor) => void;
   onRevert: () => void;
   onInvert: () => void;
+  // Fill and Stroke render through fabric's toLive() and support gradients;
+  // object backgroundColor is painted as a raw ctx.fillStyle string, so it
+  // stays solid-only.
+  allowGradient?: boolean;
 }) {
-  const { hex, opacity } = parseColor(props.value, props.displayDefault);
+  const grad = props.allowGradient && isGradientValue(props.value) ? props.value : null;
+
+  const { hex, opacity } = parseColor(grad ? null : (props.value as any), props.displayDefault);
   const display = hex.replace("#", "").toUpperCase();
 
   // Local text state lets the user type a partial hex without it being
@@ -110,9 +87,28 @@ function ColorRow(props: {
     setText(display);
   }, [display]);
 
+  const setMode = (mode: 'solid' | 'linear' | 'radial') => {
+    if (mode === 'solid') {
+      if (grad) props.onChange(gradientToSolid(grad, props.displayDefault));
+    } else if (grad) {
+      if (grad.type !== mode) props.onChange({ ...grad, type: mode });
+    } else {
+      props.onChange(solidToGradient(buildRgba(hex, opacity), mode));
+    }
+  };
+
   return (
     <div>
-      <label className="block text-[11px] text-[#7D5B5980] font-[600] mb-1">{props.label}</label>
+      <div className="flex items-center justify-between mb-1">
+        <label className="block text-[11px] text-[#7D5B5980] font-[600]">{props.label}</label>
+        {props.allowGradient && (
+          <FillTypeSelect label={props.label} value={grad ? grad.type : 'solid'} onChange={setMode} />
+        )}
+      </div>
+
+      {grad ? (
+        <GradientEditor value={grad} onChange={props.onChange} />
+      ) : (
       <div className="flex items-center gap-2">
         <div className="flex items-center gap-3 bg-[#F2E8E6] rounded-[12px] px-3 py-2 flex-1 min-w-0">
           <label
@@ -164,6 +160,7 @@ function ColorRow(props: {
         </button>
         */}
       </div>
+      )}
     </div>
   );
 }
@@ -1032,9 +1029,11 @@ export default function Inspector(props: {
                   title="Swap Fill & Stroke colors"
                   aria-label="Swap Fill and Stroke colors"
                   onClick={() =>
+                    // Swap the raw values so gradient fills survive the swap
+                    // (the editor revives serialized gradients on either key).
                     updateSelected({
-                      fill: buildRgba(strokeParsed.hex, strokeParsed.opacity),
-                      stroke: buildRgba(fillParsed.hex, fillParsed.opacity),
+                      fill: selected.stroke ?? buildRgba(strokeParsed.hex, strokeParsed.opacity),
+                      stroke: selected.fill ?? buildRgba(fillParsed.hex, fillParsed.opacity),
                     })
                   }
                   className={colorIconBtn}
@@ -1072,6 +1071,7 @@ export default function Inspector(props: {
                 label="Fill"
                 value={selected.fill}
                 displayDefault={DEFAULT_FILL}
+                allowGradient
                 onChange={(c) => updateSelected({ fill: c })}
                 onRevert={() => updateSelected({ fill: orig?.fill ?? DEFAULT_FILL })}
                 onInvert={() => updateSelected({ fill: buildRgba(invertHex(fillParsed.hex), fillParsed.opacity) })}
@@ -1082,6 +1082,7 @@ export default function Inspector(props: {
               label="Stroke"
               value={selected.stroke}
               displayDefault={DEFAULT_STROKE}
+              allowGradient
               onChange={(c) => updateSelected({ stroke: c })}
               onRevert={() => updateSelected({ stroke: orig?.stroke ?? DEFAULT_STROKE })}
               onInvert={() => updateSelected({ stroke: buildRgba(invertHex(strokeParsed.hex), strokeParsed.opacity) })}

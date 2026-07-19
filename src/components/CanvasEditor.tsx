@@ -9,6 +9,7 @@ import React, {
   useState,
 } from "react";
 import type { Canvas as FabricCanvas } from "fabric";
+import type { GradientDescriptor } from "@/src/lib/gradient";
 import { Copy, Trash, Trash2, ClipboardPaste, ArrowUpToLine, ArrowDownToLine, Eye, EyeOff, X, Pencil, Crop, ImageUp, ArrowUp, ArrowDown, Type, Layers, ChevronDown, Group as GroupIcon, Ungroup as UngroupIcon } from "lucide-react";
 import EventFooter from "../components/EventFooter";
 import MusicPlayer from "../components/MusicPlayer";
@@ -234,6 +235,41 @@ export type LayerInfo = {
   isImage: boolean;
 };
 
+// A gradient arriving from the Inspector as plain JSON — either the compact
+// descriptor it builds ({ type, angle, colorStops }) or a fabric-serialized
+// gradient (has coords). Fabric only paints Gradient *instances* (it calls
+// fill.toLive()), so these must be revived before being set on an object.
+const isGradientDescriptor = (v: any): boolean =>
+  !!v && typeof v === "object" && Array.isArray(v.colorStops);
+
+const makeFabricGradient = (fabric: any, desc: any) => {
+  const type = desc.type === "radial" ? "radial" : "linear";
+  let coords = desc.coords;
+  if (!coords) {
+    if (type === "radial") {
+      coords = { x1: 0.5, y1: 0.5, r1: 0, x2: 0.5, y2: 0.5, r2: 0.5 };
+    } else {
+      // Angle in degrees, 0 = left→right, measured clockwise. Coords are in
+      // percentage units so the same gradient fits any object size.
+      const rad = ((desc.angle ?? 0) * Math.PI) / 180;
+      const dx = Math.cos(rad) / 2;
+      const dy = Math.sin(rad) / 2;
+      coords = { x1: 0.5 - dx, y1: 0.5 - dy, x2: 0.5 + dx, y2: 0.5 + dy };
+    }
+  }
+  return new fabric.Gradient({
+    type,
+    gradientUnits: desc.gradientUnits ?? "percentage",
+    coords,
+    colorStops: (desc.colorStops ?? []).map((s: any) => ({
+      offset: s.offset ?? 0,
+      color: s.color ?? "#000000",
+    })),
+    offsetX: desc.offsetX ?? 0,
+    offsetY: desc.offsetY ?? 0,
+  });
+};
+
 // Stable, collision-resistant id for Fabric objects that don't already have one.
 // Persisted via FABRIC_EXPORT_PROPS ("id"), so it survives page save/reload.
 let layerIdSeq = 0;
@@ -305,11 +341,12 @@ const CanvasEditor = forwardRef<
     calendar: any;
     location: any;
     rsvpConfig?: {
-      navColor: string;
+      // Solid CSS color or gradient descriptor (src/lib/gradient.ts).
+      navColor: string | GradientDescriptor;
       navOpacity: number;
       textColor: string;
       textOpacity: number;
-      circleColor?: string;
+      circleColor?: string | GradientDescriptor;
       circleOpacity?: number;
     };
     userId?: string | number | null;
@@ -967,6 +1004,17 @@ const [currentPage, setCurrentPage] = useState(0);
       if (!canvas) return;
       const active = canvas.getActiveObject() as any;
       if (!active) return;
+
+      // Revive plain gradient descriptors (from the Inspector's gradient picker
+      // or a raw fill↔stroke swap) into live fabric Gradient instances.
+      const fabric = fabricModuleRef.current;
+      if (fabric?.Gradient) {
+        for (const key of ["fill", "stroke"]) {
+          if (isGradientDescriptor(props[key])) {
+            props = { ...props, [key]: makeFabricGradient(fabric, props[key]) };
+          }
+        }
+      }
 
       // Geometry lives on the selection group; everything else (typography,
       // colors, …) should fan out to each child so a multi-selection can be

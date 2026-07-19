@@ -7,6 +7,7 @@ import { buildGoogleCalendarLink } from "@/src/lib/calendar/googleCalendarLink"
 import EventMiniCalendar from "@/src/components/EventMiniCalendar"
 import type { CalendarExportInput } from "@/src/lib/calendar/normalizeEvent"
 import { submitCanvasRSVP, submitCanvasGuestbook, getCanvasGuestbook } from "@/src/lib/viupApi"
+import { cssBackground, type GradientDescriptor } from "@/src/lib/gradient"
 
 
 export default function EventFooter({
@@ -39,11 +40,12 @@ export default function EventFooter({
   rsvpConfig?: {
     enabled?: boolean;
     maxGuest?: number;
-    navColor?: string;
+    // Solid CSS color or gradient descriptor (src/lib/gradient.ts).
+    navColor?: string | GradientDescriptor;
     navOpacity?: number;
     textColor?: string;
     textOpacity?: number;
-    circleColor?: string;
+    circleColor?: string | GradientDescriptor;
     circleOpacity?: number;
   } | null;
   userId?: string | number | null;
@@ -135,19 +137,17 @@ export default function EventFooter({
     }
   };
 
-  // Compute footer nav bar styles from rsvpConfig
-  const navOpacityHex = Math.round(((rsvpConfig?.navOpacity ?? 100) / 100) * 255)
-    .toString(16).padStart(2, "0");
+  // Compute footer nav bar styles from rsvpConfig. Colors may be solid strings
+  // or gradient descriptors — cssBackground() turns either into a CSS
+  // `background` value with the stored opacity multiplied in.
   const footerBg = rsvpConfig?.navColor
-    ? `${rsvpConfig.navColor}${navOpacityHex}`
+    ? cssBackground(rsvpConfig.navColor, rsvpConfig?.navOpacity ?? 100)
     : "rgba(0,0,0,0.85)";
-  const rsvpCircleBg = rsvpConfig?.navColor ?? "#000000";
+  const rsvpCircleBg = cssBackground(rsvpConfig?.navColor ?? "#000000");
   // White half-circle "notch" behind the RSVP circle — painted by
   // .footer-container::before, which reads this CSS variable (defaults to white).
-  const circleOpacityHex = Math.round(((rsvpConfig?.circleOpacity ?? 100) / 100) * 255)
-    .toString(16).padStart(2, "0");
   const notchBg = rsvpConfig?.circleColor
-    ? `${rsvpConfig.circleColor}${circleOpacityHex}`
+    ? cssBackground(rsvpConfig.circleColor, rsvpConfig?.circleOpacity ?? 100)
     : "white";
   const labelColor = rsvpConfig?.textColor ?? "white";
   const labelOpacity = (rsvpConfig?.textOpacity ?? 100) / 100;
@@ -161,7 +161,7 @@ export default function EventFooter({
   // Calendar/Location bubbles: circle follows the Navigation Bar color, while the
   // icon+label (which inherit the button's `color`) follow Text and Icon. Opacity
   // is left to the inner glyph so it doesn't fade the circle.
-  const bubbleStyle: React.CSSProperties = { backgroundColor: rsvpCircleBg, color: labelColor };
+  const bubbleStyle: React.CSSProperties = { background: rsvpCircleBg, color: labelColor };
   const bubbleGlyphStyle: React.CSSProperties = { opacity: labelOpacity };
   // When the Info panel is open we run the prototype's choreography: the RSVP
   // circle slides over to the Info slot (move-right), the white bump follows it
@@ -828,7 +828,7 @@ const generateICS = (event: any, loc?: any) => {
                             {/* Circle is just the colored bubble; the single "RSVP" label
                                 is rendered once by .footer-rsvp-text below (which also
                                 follows the Text and Icon color picker). */}
-                            <div className="footer-rsvp" style={{ backgroundColor: rsvpCircleBg }} onClick={() => toggleCard("rsvp")} />
+                            <div className="footer-rsvp" style={{ background: rsvpCircleBg }} onClick={() => toggleCard("rsvp")} />
                         </div>
 
                         {/* The label overlays the circle (z-index 3), so it must

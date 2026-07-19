@@ -14,6 +14,14 @@ import { galleryPage } from "@/src/components/template-list/galleryTemplate";
 import { envelopePage } from "@/src/components/template-list/EnvelopeTemplate";
 import { downscaleImageFile } from "@/src/lib/imageDownscale";
 import Scrubbable from "@/src/components/canvas-editor/scrubbable";
+import GradientEditor, { FillTypeSelect } from "@/src/components/canvas-editor/GradientEditor";
+import {
+  type GradientDescriptor,
+  isGradientValue,
+  solidToGradient,
+  firstColorHex,
+  invertColorValue,
+} from "@/src/lib/gradient";
 import { Play, Pause } from "lucide-react";
 import {
   getPackageRules,
@@ -834,12 +842,15 @@ function RSVPTab() {
   };
 
   const [maxGuest, setMaxGuest] = useState<number | ''>(current?.maxGuest ?? '');
-  const [navColor, setNavColor] = useState(current?.navColor ?? '#000000');
+  // navColor / circleColor accept a solid hex string OR a gradient descriptor
+  // (rendered via cssBackground in the footer). textColor stays solid-only —
+  // it feeds CSS `color` and currentColor icon masks, which can't take a gradient.
+  const [navColor, setNavColor] = useState<string | GradientDescriptor>(current?.navColor ?? '#000000');
   const [navOpacity, setNavOpacity] = useState(current?.navOpacity ?? 100);
   const [textColor, setTextColor] = useState(current?.textColor ?? '#000000');
   const [textOpacity, setTextOpacity] = useState(current?.textOpacity ?? 100);
   // The small half-circle "notch" behind the RSVP circle (defaults to white).
-  const [circleColor, setCircleColor] = useState(current?.circleColor ?? '#ffffff');
+  const [circleColor, setCircleColor] = useState<string | GradientDescriptor>(current?.circleColor ?? '#ffffff');
   const [circleOpacity, setCircleOpacity] = useState(current?.circleOpacity ?? 100);
 
   const pushField = <K extends keyof NonNullable<typeof current>>(
@@ -864,9 +875,29 @@ function RSVPTab() {
     pushField('navOpacity', origNavOpacity.current);
   };
   const invertNav = () => {
-    const inv = invertHex(navColor);
+    const inv = invertColorValue(navColor);
     setNavColor(inv);
     pushField('navColor', inv);
+  };
+  // Switch a color field between solid and gradient modes (Figma-style picker).
+  const changeColorMode = (
+    field: 'navColor' | 'circleColor',
+    value: string | GradientDescriptor,
+    set: (v: string | GradientDescriptor) => void,
+    mode: 'solid' | 'linear' | 'radial',
+  ) => {
+    let next: string | GradientDescriptor;
+    if (mode === 'solid') {
+      if (!isGradientValue(value)) return;
+      next = firstColorHex(value, '#000000');
+    } else if (isGradientValue(value)) {
+      if (value.type === mode) return;
+      next = { ...value, type: mode };
+    } else {
+      next = solidToGradient(value, mode);
+    }
+    set(next);
+    pushField(field, next);
   };
   const revertText = () => {
     setTextColor(origTextColor.current);
@@ -886,7 +917,7 @@ function RSVPTab() {
     pushField('circleOpacity', origCircleOpacity.current);
   };
   const invertCircle = () => {
-    const inv = invertHex(circleColor);
+    const inv = invertColorValue(circleColor);
     setCircleColor(inv);
     pushField('circleColor', inv);
   };
@@ -942,7 +973,33 @@ function RSVPTab() {
           />
         </div>
         <div>
-          <label className="block text-[11px] text-[#7D5B5980] font-[600] mb-1">Navigation Bar</label>
+          <div className="flex items-center justify-between mb-1">
+            <label className="block text-[11px] text-[#7D5B5980] font-[600]">Navigation Bar</label>
+            <FillTypeSelect
+              label="Navigation Bar"
+              value={isGradientValue(navColor) ? navColor.type : 'solid'}
+              onChange={(mode) => changeColorMode('navColor', navColor, setNavColor, mode)}
+            />
+          </div>
+          {isGradientValue(navColor) ? (
+            <div className="flex items-start gap-2">
+              <div className="flex-1 min-w-0">
+                <GradientEditor
+                  value={navColor}
+                  onChange={(g) => {
+                    setNavColor(g);
+                    pushField('navColor', g);
+                  }}
+                />
+              </div>
+              <button type="button" title="Revert Navigation Bar" aria-label="Revert Navigation Bar" onClick={revertNav} className={colorIconBtnCls}>
+                <RevertIcon />
+              </button>
+              <button type="button" title="Invert Navigation Bar" aria-label="Invert Navigation Bar" onClick={invertNav} className={colorIconBtnCls}>
+                <InvertIcon />
+              </button>
+            </div>
+          ) : (
           <div className="flex items-center gap-2">
             <div className="flex items-center gap-3 bg-[#F2E8E6] rounded-[12px] px-3 py-2 flex-1 min-w-0">
               <label
@@ -1005,6 +1062,7 @@ function RSVPTab() {
               <InvertIcon />
             </button>
           </div>
+          )}
         </div>
         <div>
           <label className="block text-[11px] text-[#7D5B5980] font-[600] mb-1">Text and Icon</label>
@@ -1072,7 +1130,33 @@ function RSVPTab() {
           </div>
         </div>
         <div>
-          <label className="block text-[11px] text-[#7D5B5980] font-[600] mb-1">Circle</label>
+          <div className="flex items-center justify-between mb-1">
+            <label className="block text-[11px] text-[#7D5B5980] font-[600]">Circle</label>
+            <FillTypeSelect
+              label="Circle"
+              value={isGradientValue(circleColor) ? circleColor.type : 'solid'}
+              onChange={(mode) => changeColorMode('circleColor', circleColor, setCircleColor, mode)}
+            />
+          </div>
+          {isGradientValue(circleColor) ? (
+            <div className="flex items-start gap-2">
+              <div className="flex-1 min-w-0">
+                <GradientEditor
+                  value={circleColor}
+                  onChange={(g) => {
+                    setCircleColor(g);
+                    pushField('circleColor', g);
+                  }}
+                />
+              </div>
+              <button type="button" title="Revert Circle" aria-label="Revert Circle" onClick={revertCircle} className={colorIconBtnCls}>
+                <RevertIcon />
+              </button>
+              <button type="button" title="Invert Circle" aria-label="Invert Circle" onClick={invertCircle} className={colorIconBtnCls}>
+                <InvertIcon />
+              </button>
+            </div>
+          ) : (
           <div className="flex items-center gap-2">
             <div className="flex items-center gap-3 bg-[#F2E8E6] rounded-[12px] px-3 py-2 flex-1 min-w-0">
               <label
@@ -1135,6 +1219,7 @@ function RSVPTab() {
               <InvertIcon />
             </button>
           </div>
+          )}
         </div>
         <button
           onClick={handleSave}
