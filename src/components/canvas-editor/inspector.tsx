@@ -331,10 +331,13 @@ export default function Inspector(props: {
   // objects are carried in `selected.objects`. Derive the shown value from the
   // children so the font controls reflect a shared value and edits apply to all.
   const childObjects: any[] = Array.isArray(selected?.objects) ? selected.objects : [];
+  // Distinguishes "children disagree" (mixed) from "children have no such prop",
+  // so the dropdowns can show a Mixed placeholder instead of a wrong default.
+  const MIXED = '__mixed__';
   const sharedChildProp = (key: string) => {
     const vals = childObjects.map((o) => o?.[key]).filter((v) => v !== undefined && v !== null);
     if (!vals.length) return undefined;
-    return vals.every((v) => v === vals[0]) ? vals[0] : undefined;
+    return vals.every((v) => v === vals[0]) ? vals[0] : MIXED;
   };
   const displayFontFamily = selected?.fontFamily ?? sharedChildProp('fontFamily') ?? 'Arial';
   const displayFontWeight = selected?.fontWeight ?? sharedChildProp('fontWeight') ?? 'normal';
@@ -634,6 +637,11 @@ export default function Inspector(props: {
                   value={displayFontFamily}
                   onChange={(e) => updateSelected({ fontFamily: e.target.value })}
                 >
+                  {displayFontFamily === MIXED && (
+                    <option value={MIXED} disabled hidden>
+                      Mixed
+                    </option>
+                  )}
                   {FONT_GROUPS.map((group) => (
                     <optgroup key={group.label} label={group.label}>
                       {group.fonts.map((f) => (
@@ -652,6 +660,11 @@ export default function Inspector(props: {
                   value={displayFontWeight}
                   onChange={(e) => updateSelected({ fontWeight: e.target.value })}
                 >
+                  {displayFontWeight === MIXED && (
+                    <option value={MIXED} disabled hidden>
+                      Mixed
+                    </option>
+                  )}
                   <option value="100">Thin</option>
                   <option value="200">ExtraLight</option>
                   <option value="300">Light</option>

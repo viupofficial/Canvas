@@ -1010,6 +1010,13 @@ const [currentPage, setCurrentPage] = useState(0);
         loadGoogleFont(props.fontFamily).then(() => {
           const reflow = (o: any) => {
             if (o && o.fontFamily === props.fontFamily) {
+              // Chromium caches font resolution per 2D context and font string:
+              // a cache canvas that painted the fallback while the webfont was
+              // still in flight keeps resolving to the fallback forever. Drop
+              // the cache canvas so fabric creates a fresh context that picks
+              // up the now-loaded face.
+              o._cacheCanvas = undefined;
+              o._cacheContext = undefined;
               o.initDimensions?.();
               o.dirty = true;
               o.setCoords?.();
@@ -1026,9 +1033,10 @@ const [currentPage, setCurrentPage] = useState(0);
     deleteActiveObject: () => {
       const canvas = fabricRef.current;
       if (!canvas) return;
-      const active = canvas.getActiveObject();
-      if (!active) return;
-      canvas.remove(active);
+      const targets = canvas.getActiveObjects();
+      if (targets.length === 0) return;
+      targets.forEach((o: any) => canvas.remove(o));
+      canvas.discardActiveObject();
       canvas.requestRenderAll();
       pushSnapshot();
     },
@@ -1660,6 +1668,7 @@ const [currentPage, setCurrentPage] = useState(0);
         const initialHeight = CANVAS_REF_HEIGHT;
         canvas.setDimensions({ width: initialWidth, height: initialHeight });
         fabricRef.current = canvas;
+        if (process.env.NODE_ENV === 'development') (window as any).__canvas = canvas;
 
         // Load first page after canvas is ready. replaceCanvasContent guards the restore
         // flag so object:added events fired during enliven don't enter history.
@@ -2214,7 +2223,7 @@ const [currentPage, setCurrentPage] = useState(0);
             e.preventDefault();
             active.clone().then((cloned: any) => {
               clipboardRef.current = cloned;
-              c.remove(active);
+              c.getActiveObjects().forEach((o: any) => c.remove(o));
               c.discardActiveObject();
               c.requestRenderAll();
               schedulePush();
@@ -2242,7 +2251,9 @@ const [currentPage, setCurrentPage] = useState(0);
 
           if (e.key === 'Delete' || e.key === 'Backspace') {
             e.preventDefault();
-            c.remove(active);
+            // getActiveObjects() unwraps a multi-select ActiveSelection; removing
+            // the wrapper itself would leave its children on the canvas.
+            c.getActiveObjects().forEach((o: any) => c.remove(o));
             c.discardActiveObject();
             c.requestRenderAll();
             schedulePush();
@@ -2587,9 +2598,10 @@ const [currentPage, setCurrentPage] = useState(0);
   const deleteFromOverlay = useCallback(() => {
     const canvas = fabricRef.current;
     if (!canvas) return;
-    const active = canvas.getActiveObject();
-    if (!active) return;
-    canvas.remove(active);
+    const targets = canvas.getActiveObjects();
+    if (targets.length === 0) return;
+    targets.forEach((o: any) => canvas.remove(o));
+    canvas.discardActiveObject();
     canvas.requestRenderAll();
     pushSnapshot();
     setOverlay(null);
