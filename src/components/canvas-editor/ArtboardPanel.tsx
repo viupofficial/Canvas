@@ -18,8 +18,14 @@ export default function ArtboardPanel({
   const [draggingIndex, setDraggingIndex] = React.useState<number | null>(null);
   const [dropIndex, setDropIndex] = React.useState<number | null>(null);
 
+  // The envelope page is always at index 0 and cannot be moved
+  const isEnvelopePage = (index: number) => index === 0;
+  const canDragPage = (index: number) => !isEnvelopePage(index);
+
   const onDragOverRow = (e: React.DragEvent, index: number) => {
     if (draggingIndex === null) return;
+    // Prevent dropping on or near the envelope page
+    if (isEnvelopePage(index) || isEnvelopePage(draggingIndex)) return;
     e.preventDefault();
     e.dataTransfer.dropEffect = "move";
     const rect = e.currentTarget.getBoundingClientRect();
@@ -29,6 +35,12 @@ export default function ArtboardPanel({
 
   const commitDrop = () => {
     if (draggingIndex === null || dropIndex === null) return;
+    // Safety check: prevent envelope page movement
+    if (isEnvelopePage(draggingIndex) || isEnvelopePage(dropIndex)) {
+      setDraggingIndex(null);
+      setDropIndex(null);
+      return;
+    }
     let to = dropIndex;
     if (to > draggingIndex) to -= 1;
     if (to !== draggingIndex) {
@@ -59,8 +71,9 @@ export default function ArtboardPanel({
           <React.Fragment key={pageIndex}>
             {dropIndex === pageIndex && dropLine}
             <div
-              draggable
+              draggable={canDragPage(pageIndex)}
               onDragStart={(e) => {
+                if (!canDragPage(pageIndex)) return;
                 setDraggingIndex(pageIndex);
                 e.dataTransfer.effectAllowed = "move";
                 e.dataTransfer.setData("text/plain", String(pageIndex));
@@ -87,14 +100,21 @@ export default function ArtboardPanel({
             >
               <div className="flex items-center gap-2">
                 <span
-                  className="shrink-0 flex items-center justify-center text-[#7D5B59]/60 cursor-grab active:cursor-grabbing"
-                  title="Drag to reorder"
+                  className={`shrink-0 flex items-center justify-center text-[#7D5B59]/60 ${
+                    canDragPage(pageIndex) ? "cursor-grab active:cursor-grabbing" : "cursor-not-allowed opacity-30"
+                  }`}
+                  title={canDragPage(pageIndex) ? "Drag to reorder" : "Envelope page cannot be reordered"}
                 >
                   <GripVertical size={15} />
                 </span>
                 <FileText size={15} className="shrink-0 text-[#7D5B59]" />
                 <span className="flex-1 text-[13px] font-[600] text-[#7D5B59]">
                   Page {pageIndex + 1}
+                  {isEnvelopePage(pageIndex) && (
+                    <span className="ml-2 text-[10px] font-[600] text-orange-600 bg-orange-50 px-1.5 py-0.5 rounded-full">
+                      Envelope
+                    </span>
+                  )}
                 </span>
                 {isActive && (
                   <span className="text-[10px] font-[600] text-[#7D5B59]/60 bg-[#7D5B59]/10 px-1.5 py-0.5 rounded-full">

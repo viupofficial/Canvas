@@ -233,6 +233,7 @@ export type LayerInfo = {
   visible: boolean;
   locked: boolean;
   isImage: boolean;
+  isEnvelope?: boolean;
 };
 
 // A gradient arriving from the Inspector as plain JSON — either the compact
@@ -569,6 +570,22 @@ const [currentPage, setCurrentPage] = useState(0);
     const finish = () => {
       canvas.renderAll();
       isRestoringRef.current = false;
+
+      // Lock envelope objects so they cannot be moved, scaled, or rotated (but can be styled)
+      if (isCurrentPageEnvelope()) {
+        canvas.forEachObject((obj: any) => {
+          if (isEnvelopeObj(obj)) {
+            // Allow selection for styling (color, texture, etc) but prevent geometry changes
+            obj.lockMovementX = true;
+            obj.lockMovementY = true;
+            obj.lockScalingX = true;
+            obj.lockScalingY = true;
+            obj.lockRotation = true;
+            obj.hasControls = false;
+          }
+        });
+      }
+
       // The active page's object list just changed (page switch, undo/redo,
       // template load) — refresh the Layer tab.
       onLayersChangeRef.current?.();
@@ -1386,6 +1403,7 @@ const [currentPage, setCurrentPage] = useState(0);
 
     // ── Layer tab ───────────────────────────────────────────────────────────
     getLayers: () => {
+      const isCurrentEnvelope = isCurrentPageEnvelope();
       const canvas = fabricRef.current;
       if (!canvas) return [];
       // Borders are managed separately (single, non-interactive, pinned to back).
@@ -1406,6 +1424,7 @@ const [currentPage, setCurrentPage] = useState(0);
           visible: o.visible !== false,
           locked: !!o.locked,
           isImage: o.type === "image",
+          isEnvelope: isCurrentEnvelope && isEnvelopeObj(o),
         };
       });
     },
@@ -1551,6 +1570,11 @@ const [currentPage, setCurrentPage] = useState(0);
       if (!canvas) return;
       const obj = canvas.getObjects().find((o: any) => o.id === id) as any;
       if (!obj) return;
+      // Prevent deletion of envelope elements on the envelope page
+      if (isCurrentPageEnvelope() && isEnvelopeObj(obj)) {
+        alert("Envelope elements cannot be deleted. You can only change their color and texture.");
+        return;
+      }
       if (canvas.getActiveObject() === obj) {
         canvas.discardActiveObject();
         props.onSelectionChange?.(null);
@@ -1565,6 +1589,11 @@ const [currentPage, setCurrentPage] = useState(0);
     goToPage,
     reorderPages: (from: number, to: number) => {
       if (from === to || from < 0 || to < 0 || from >= pages.length || to >= pages.length) return;
+      // Envelope page cannot be moved — prevent reordering if envelope is involved
+      if (isEnvelopePage(from) || isEnvelopePage(to)) {
+        alert("The envelope page cannot be reordered. It must remain as the first page.");
+        return;
+      }
       const canvas = fabricRef.current;
       if (!canvas) return;
       flushPending();
@@ -3480,6 +3509,11 @@ const applyBgToOtherPages = (patch: { backgroundImage?: any; backgroundColor?: a
     const canvas = fabricRef.current;
     if (!canvas) return;
     if (pages.length <= 1) return; // keep at least one page
+    // Envelope page is permanent and cannot be deleted
+    if (isCurrentPageEnvelope()) {
+      alert("The envelope page cannot be deleted. You can only change its color and texture.");
+      return;
+    }
     if (typeof window !== 'undefined' && !window.confirm(`Delete page ${currentPage + 1}? This cannot be undone.`)) return;
     flushPending();
     const removedIndex = currentPage;
@@ -3506,6 +3540,31 @@ const applyBgToOtherPages = (patch: { backgroundImage?: any; backgroundColor?: a
         fabricRef.current?.requestRenderAll();
       });
     }, 0);
+  };
+
+  // ── Envelope page detection ──────────────────────────────────────────────────
+  // The envelope page is always the first page and contains structural elements like
+  // "envelope-body", "envelope-head", "envelope-seal". Users cannot delete or reorder it,
+  // and can only edit color/texture of the page and related styling options.
+  const isEnvelopeObj = (o: any): boolean =>
+    typeof o?.name === 'string' && (
+      o.name === 'envelope-body' ||
+      o.name === 'envelope-head' ||
+      o.name === 'envelope-seal'
+    );
+
+  const isEnvelopePageData = (data: any): boolean => {
+    const objs = Array.isArray(data?.objects) ? data.objects : null;
+    if (!objs) return false;
+    return objs.some(isEnvelopeObj);
+  };
+
+  const isEnvelopePage = (index: number): boolean => {
+    return isEnvelopePageData(pages[index]);
+  };
+
+  const isCurrentPageEnvelope = (): boolean => {
+    return isEnvelopePage(currentPageRef.current);
   };
 
   // ── Gallery page (toggle from the Photos sidebar) ──────────────────────────
@@ -4279,8 +4338,9 @@ const applyBgToOtherPages = (patch: { backgroundImage?: any; backgroundColor?: a
   </button>
   <button
     onClick={removePage}
-    disabled={pages.length <= 1}
+    disabled={pages.length <= 1 || isCurrentPageEnvelope()}
     className="disabled:opacity-40 disabled:cursor-not-allowed"
+    title={isCurrentPageEnvelope() ? "Cannot delete the envelope page" : "Delete current page"}
   >
     − Page
   </button>

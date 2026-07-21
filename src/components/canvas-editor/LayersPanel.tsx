@@ -211,11 +211,16 @@ export default function LayersPanel(props: {
                 >
                   <LayerTypeIcon type={layer.type} isImage={layer.isImage} />
                   <span
-                    className={`truncate text-[13px] font-[600] ${
+                    className={`truncate text-[13px] font-semibold ${
                       layer.visible ? "text-[#7D5B59]" : "text-[#7D5B59]/40 line-through"
                     }`}
                   >
                     {layer.label}
+                    {layer.isEnvelope && (
+                      <span className="ml-2 text-[10px] font-semibold text-orange-600 bg-orange-50 px-1.5 py-0.5 rounded-full">
+                        Envelope
+                      </span>
+                    )}
                   </span>
                 </button>
               )}
@@ -245,9 +250,14 @@ export default function LayersPanel(props: {
               {/* Delete */}
               <button
                 type="button"
-                className="shrink-0 h-7 w-7 rounded-[8px] flex items-center justify-center text-red-500 hover:bg-red-50 transition-colors"
-                title="Delete layer"
-                aria-label="Delete layer"
+                className={`shrink-0 h-7 w-7 rounded-[8px] flex items-center justify-center transition-colors ${
+                  layer.isEnvelope
+                    ? "text-orange-500 hover:bg-orange-50 opacity-50 cursor-not-allowed"
+                    : "text-red-500 hover:bg-red-50"
+                }`}
+                title={layer.isEnvelope ? "Cannot delete envelope elements" : "Delete layer"}
+                aria-label={layer.isEnvelope ? "Cannot delete envelope elements" : "Delete layer"}
+                disabled={layer.isEnvelope}
                 onClick={() => handle()?.deleteLayer(layer.id)}
               >
                 <Trash2 size={15} />
@@ -259,9 +269,9 @@ export default function LayersPanel(props: {
               <button
                 type="button"
                 className={iconBtn}
-                title="Send to back"
+                title={layer.isEnvelope ? "Cannot reorder envelope elements" : "Send to back"}
                 aria-label="Send to back"
-                disabled={isBottom}
+                disabled={isBottom || layer.isEnvelope}
                 onClick={() => handle()?.moveLayerToBack(layer.id)}
               >
                 <ArrowDownToLine size={14} />
@@ -269,9 +279,9 @@ export default function LayersPanel(props: {
               <button
                 type="button"
                 className={iconBtn}
-                title="Move down"
+                title={layer.isEnvelope ? "Cannot reorder envelope elements" : "Move down"}
                 aria-label="Move down"
-                disabled={isBottom}
+                disabled={isBottom || layer.isEnvelope}
                 onClick={() => handle()?.moveLayerDown(layer.id)}
               >
                 <ChevronDown size={15} />
@@ -279,9 +289,9 @@ export default function LayersPanel(props: {
               <button
                 type="button"
                 className={iconBtn}
-                title="Move up"
+                title={layer.isEnvelope ? "Cannot reorder envelope elements" : "Move up"}
                 aria-label="Move up"
-                disabled={isTop}
+                disabled={isTop || layer.isEnvelope}
                 onClick={() => handle()?.moveLayerUp(layer.id)}
               >
                 <ChevronUp size={15} />
@@ -289,9 +299,9 @@ export default function LayersPanel(props: {
               <button
                 type="button"
                 className={iconBtn}
-                title="Bring to front"
+                title={layer.isEnvelope ? "Cannot reorder envelope elements" : "Bring to front"}
                 aria-label="Bring to front"
-                disabled={isTop}
+                disabled={isTop || layer.isEnvelope}
                 onClick={() => handle()?.moveLayerToFront(layer.id)}
               >
                 <ArrowUpToLine size={14} />
