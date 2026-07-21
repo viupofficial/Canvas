@@ -309,23 +309,28 @@ export default function EditorHeader(props: {
   };
 
   return (
-    <header className="grid grid-cols-[1fr_auto_1fr] h-[111px] w-full items-center gap-4 bg-[#EDE2DE]">
-      <div className="flex items-center justify-start pl-[106px]">
+    <header className="grid lg:grid-cols-[1fr_auto_1fr] h-auto lg:h-[111px] w-full items-center gap-2 lg:gap-4 bg-[#EDE2DE] p-3 lg:p-0">
+      <div className="flex items-center justify-start lg:pl-[106px] gap-2 lg:gap-0">
         {teaser || !canGoHome ? (
           // Teaser mode, or any route other than /designer: the logo is
           // decorative only — no link back to the homepage filing system.
-          <div className="flex items-center justify-center gap-4 my-9 mr-[20px]">
+          <div className="flex items-center justify-center gap-4 my-9 mr-[20px] hidden lg:flex">
             <img src="/Vi-Up Submark.png" alt="Vi-Up" className="h-[30px] w-[30px]" />
           </div>
         ) : (
-          <a href={resolvedHomeHref} className="flex items-center justify-center gap-4 my-9 mr-[20px] ">
+          <a href={resolvedHomeHref} className="flex items-center justify-center gap-4 my-9 mr-[20px] hidden lg:flex">
             <img src="/Vi-Up Submark.png" alt="Vi-Up" className="h-[30px] w-[30px]" />
           </a>
         )}
 
+        {/* Hamburger Menu - Mobile Only */}
+        <button className="lg:hidden p-2 hover:bg-[#D4C9C4] rounded-lg transition-colors">
+          <svg className="w-6 h-6 text-[#7D5B59]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
+          </svg>
+        </button>
 
-
-        <div className="flex items-center gap-[35px]">
+        <div className="flex items-center gap-[35px] hidden lg:flex">
           <button onClick={handleUndoClick}>
             <img src="/Undo.svg" alt="Undo" className="w-[23px] h-[23px]" />
           </button>
@@ -335,10 +340,19 @@ export default function EditorHeader(props: {
           </button>
         </div>
 
-       
+        {/* Mobile Undo/Redo */}
+        <div className="flex items-center gap-2 lg:hidden">
+          <button onClick={handleUndoClick} className="p-2 hover:bg-[#D4C9C4] rounded-lg transition-colors">
+            <img src="/Undo.svg" alt="Undo" className="w-[18px] h-[18px]" />
+          </button>
+
+          <button onClick={handleRedoClick} className="p-2 hover:bg-[#D4C9C4] rounded-lg transition-colors">
+            <img src="/Redo.svg" alt="Redo" className="w-[18px] h-[18px]" />
+          </button>
+        </div>
       </div>
 
-      <div className="flex items-center justify-center gap-[5px] -translate-x-[105px]">
+      <div className="hidden lg:flex items-center justify-center gap-[5px] -translate-x-[105px]">
         <input
           type="text"
           value={eventName}
@@ -365,7 +379,32 @@ export default function EditorHeader(props: {
         </button>
       </div>
 
-      <div className="flex items-center justify-end gap-4 mr-[130px]">
+      {/* Mobile Event Name (compact) */}
+      <div className="flex lg:hidden items-center gap-2 flex-1 justify-center order-3 lg:order-none w-full lg:w-auto">
+        <input
+          type="text"
+          value={eventName}
+          onChange={(event) => setEventName(event.target.value)}
+          className="font-bold text-[14px] text-center bg-transparent border-none outline-none flex-1 max-w-[150px]"
+          aria-label="Event name"
+        />
+        <button onClick={handleSaveClick} className="p-2 hover:bg-[#D4C9C4] rounded-lg transition-colors">
+          <img
+            src="/cloud-save.svg"
+            className="h-[18px] w-[24px] transition-[filter] duration-200"
+            style={
+              cloudFlashGreen
+                ? {
+                    filter:
+                      "brightness(0) saturate(100%) invert(42%) sepia(93%) saturate(474%) hue-rotate(84deg) brightness(96%) contrast(88%)",
+                  }
+                : undefined
+            }
+          />
+        </button>
+      </div>
+
+      <div className="hidden lg:flex items-center justify-end gap-4 mr-[130px]">
         <div className="relative" ref={previewRef}>
           <button
             onClick={() => setPreviewOpen((o) => !o)}
@@ -623,6 +662,48 @@ export default function EditorHeader(props: {
         )}
         {/* ─────────────────────────────────────────────────────────────── */}
       </div>
+
+      {/* Mobile Right Section */}
+      <div className="flex lg:hidden items-center justify-end gap-2 order-4">
+        <button
+          onClick={() => setPreviewOpen((o) => !o)}
+          className="p-2 hover:bg-[#D4C9C4] rounded-lg transition-colors"
+          title="Preview"
+        >
+          <img src="/preview.svg" alt="Preview" className="h-5 w-5" />
+        </button>
+
+        {/* More Options Menu */}
+        <button className="p-2 hover:bg-[#D4C9C4] rounded-lg transition-colors">
+          <svg className="w-5 h-5 text-[#7D5B59]" fill="currentColor" viewBox="0 0 24 24">
+            <path d="M12 8c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2zm0 2c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm0 6c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2z"/>
+          </svg>
+        </button>
+      </div>
+
+      {/* Mobile Preview Dropdown */}
+      {previewOpen && (
+        <nav className="lg:hidden absolute right-2 top-[calc(100%+8px)] min-w-[200px] bg-white rounded-[15px] shadow-lg p-2 z-[1000]">
+          <button
+            type="button"
+            role="menuitem"
+            onClick={handlePreviewLive}
+            className="w-full flex items-center gap-2 px-3 py-2 text-[#7D5B59] font-semibold rounded-[10px] hover:bg-[#f7f2f1] text-left text-sm"
+          >
+            <Link2 className="w-4 flex-shrink-0" />
+            <span>Live Preview</span>
+          </button>
+          <button
+            type="button"
+            role="menuitem"
+            onClick={handlePreviewLocal}
+            className="w-full flex items-center gap-2 px-3 py-2 text-[#7D5B59] font-semibold rounded-[10px] hover:bg-[#f7f2f1] text-left text-sm"
+          >
+            <FileText className="w-4 flex-shrink-0" />
+            <span>Local Preview</span>
+          </button>
+        </nav>
+      )}
     </header>
   );
 }

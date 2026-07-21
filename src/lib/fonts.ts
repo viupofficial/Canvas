@@ -47,6 +47,7 @@ export const FONT_GROUPS: FontGroup[] = [
       "Allura",
       "Alex Brush",
       "Pacifico",
+      "Edwardian Script ITC",
     ],
   },
   {
@@ -93,7 +94,7 @@ export const FONT_GROUPS: FontGroup[] = [
 export const ALL_FONTS: string[] = FONT_GROUPS.flatMap((g) => g.fonts);
 
 // Locally available / system fonts — never need a Google Fonts request.
-const SYSTEM_FONTS = new Set(["Arial", "Times New Roman", "Georgia", "Helvetica", "serif", "sans-serif", "monospace"]);
+const SYSTEM_FONTS = new Set(["Arial", "Times New Roman", "Georgia", "Helvetica", "serif", "sans-serif", "monospace", "Edwardian Script ITC"]);
 
 // Families already declared in globals.css; still safe to (re)load dynamically,
 // but we skip them to avoid a redundant network request.

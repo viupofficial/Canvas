@@ -4,6 +4,7 @@ import React, { useCallback, useRef, useState } from "react";
 import CanvasEditor, { EditorHandle, LayerInfo } from "./CanvasEditor";
 import Inspector from "./canvas-editor/inspector";
 import PhonePreviewWrapper from "./canvas-editor/PhonePreviewWrapper";
+import MobileToolbar from "./canvas-editor/mobile-toolbar";
 import { Monitor, Smartphone } from "lucide-react";
 
 
@@ -50,6 +51,7 @@ export default function EditorLayoutClient({
   const [layers, setLayers] = useState<LayerInfo[]>([]);
   const [pagesInfo, setPagesInfo] = useState({ count: 1, current: 0 });
   const [internalPreviewMode, setInternalPreviewMode] = useState<"desktop" | "phone">("desktop");
+  const [mobileActiveTab, setMobileActiveTab] = useState<any>(null);
 
   const previewMode = previewModeProp ?? internalPreviewMode;
   const setPreviewMode = setPreviewModeProp ?? setInternalPreviewMode;
@@ -101,12 +103,11 @@ export default function EditorLayoutClient({
   const labelCls = "block text-[11px] text-[#7D5B5980] font-[600] mb-1";
 
   return (
-    <div className="flex gap-6 h-full">
-      <div className="flex-1 h-full overflow-y-auto">
+    <>
+      <div className="flex flex-col lg:flex-row gap-6 h-full">
+        {/* Main canvas area */}
+        <div className="flex-1 h-full overflow-y-auto pb-[180px] lg:pb-0">
         <div className="bg-white border rounded-lg shadow-sm flex flex-col h-full">
-          {/* Toolbar row */}
-         
-
           {/* Canvas area */}
           {previewMode === "phone" ? (
             <PhonePreviewWrapper>
@@ -120,9 +121,9 @@ export default function EditorLayoutClient({
         </div>
       </div>
 
-      {/* Inspector — hidden in phone preview, replaced by compact position panel */}
+      {/* Inspector — hidden in phone preview and on mobile, replaced by mobile toolbar */}
       {previewMode === "phone" ? (
-        <div className="w-72 bg-brand-cream border-[#EDE2DE] border rounded-lg overflow-y-auto h-full shrink-0">
+        <div className="hidden lg:block w-72 bg-brand-cream border-[#EDE2DE] border rounded-lg overflow-y-auto h-full shrink-0">
           <div className="border-b border-[#EDE2DE] pb-3 p-4">
             <h3 className="font-semibold text-[16px] text-[#7D5B59]">
               {selected?.type ?? "Position"}
@@ -196,8 +197,14 @@ export default function EditorLayoutClient({
           )}
         </div>
       ) : (
-        <Inspector selected={selected} updateSelected={updateSelected} editorRef={editorRef} layers={layers} pageCount={pagesInfo.count} currentPageIndex={pagesInfo.current} />
+        <div className="hidden lg:block">
+          <Inspector selected={selected} updateSelected={updateSelected} editorRef={editorRef} layers={layers} pageCount={pagesInfo.count} currentPageIndex={pagesInfo.current} />
+        </div>
       )}
-    </div>
+
+      {/* Mobile Toolbar */}
+      <MobileToolbar activeTab={mobileActiveTab} onTabChange={setMobileActiveTab} />
+      </div>
+    </>
   );
 }

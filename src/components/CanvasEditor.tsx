@@ -193,6 +193,7 @@ const FABRIC_EXPORT_PROPS = [
   "musicUrl",
   "linkUrl",
   "url",
+  "src",
   "targetPage",
   "pageIndex",
   "name",
@@ -3062,10 +3063,12 @@ const [currentPage, setCurrentPage] = useState(0);
         scaleX: oldW > 0 ? oldW / nW : (obj.scaleX ?? 1),
         scaleY: oldH > 0 ? oldH / nH : (obj.scaleY ?? 1),
       });
-      // Preserve exported metadata (action, animation, id, name, etc.).
+      // Preserve exported metadata (action, animation, id, name, etc.) and src for image retrieval.
       FABRIC_EXPORT_PROPS.forEach((p) => {
         if ((obj as any)[p] !== undefined) (img as any)[p] = (obj as any)[p];
       });
+      // Explicitly set src so it serializes correctly for envelope extraction
+      (img as any).src = dataUrl;
       canvas.remove(obj);
       canvas.add(img);
       if (idx >= 0) (canvas as any).moveObjectTo?.(img, idx);

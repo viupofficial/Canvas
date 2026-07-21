@@ -1,4 +1,12 @@
 @import url('https://fonts.googleapis.com/css2?family=Montserrat&family=Poppins&family=Roboto&family=Inter&family=Open+Sans&family=Playfair+Display&family=Pacifico&family=Alex+Brush&family=Lato&family=Oswald&display=swap');
+
+@font-face {
+  font-family: 'Edwardian Script ITC';
+  src: url('/fonts/edwardianscriptitc.ttf') format('truetype');
+  font-weight: normal;
+  font-style: normal;
+}
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;

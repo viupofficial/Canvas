@@ -2375,7 +2375,7 @@ export default function Sidebar({
   }
 
   return (
-    <div className="flex h-full">
+    <div className="hidden md:flex h-full">
       {iconNav}
       {tabPanel}
     </div>
