@@ -38,6 +38,7 @@ import { extractEnvelope } from "@/src/lib/extract-envelope";
 import { slugify } from "@/src/lib/slug";
 import { getPackageRules } from "@/src/lib/packageRules";
 import { upload } from "@vercel/blob/client";
+import { showPackageToast } from "@/src/components/PackageLimitToast";
 import {
   ENABLE_SMART_SNAPPING,
   ENABLE_RESIZE_SNAPPING,
@@ -125,6 +126,10 @@ export type EditorHandle = {
   playMusic: () => void;
   pauseMusic: () => void;
   getMusicUrl: () => string | null;
+  // True while a music file is still streaming to blob storage. Preview/Save
+  // read this to avoid publishing before the upload finishes (which would drop
+  // the track from the published page and the saved design).
+  isMusicUploading: () => boolean;
   loadTemplate: (pages: any[]) => void;
   addGalleryPage: () => void;
   removeGalleryPage: () => void;
@@ -373,6 +378,9 @@ const [currentPage, setCurrentPage] = useState(0);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [isLoaded, setIsLoaded] = useState(false);
   const [musicUrl, setMusicUrl] = useState<string | null>(props.initialMusicUrl ?? null);
+  // True while a music file is streaming to blob storage. A ref (not state) so
+  // Preview/Save can read the live value synchronously at click time.
+  const musicUploadingRef = useRef(false);
   // Drives the in-editor preview player (and the sidebar play/pause button).
   const [musicPlaying, setMusicPlaying] = useState(true);
   // Per-page history. Map<pageIndex, {undo, redo}>. Top of `undo` is always the CURRENT state.
@@ -1178,6 +1186,7 @@ const [currentPage, setCurrentPage] = useState(0);
     playMusic: () => setMusicPlaying(true),
     pauseMusic: () => setMusicPlaying(false),
     getMusicUrl: () => musicUrl,
+    isMusicUploading: () => musicUploadingRef.current,
     addBorder: (url: string) => {
       addBorder(url);
     },
@@ -3159,6 +3168,11 @@ const [currentPage, setCurrentPage] = useState(0);
 
     const input = e.currentTarget;
 
+    // Mark the upload in flight so Preview/Save can wait for it (see
+    // isMusicUploading). Toast up-front so the user knows a full-length song is
+    // still transferring even though the file dialog has closed.
+    musicUploadingRef.current = true;
+    showPackageToast("Uploading music…", "warn");
     try {
       // Stream straight to blob storage (no 4.5MB serverless body limit), so
       // full-length songs upload as reliably as short clips.
@@ -3176,10 +3190,15 @@ const [currentPage, setCurrentPage] = useState(0);
       setMusicPlaying(true);
       // Upload succeeded — count it (a cancelled file dialog never reaches here).
       props.onMusicChange?.(blob.url);
+      showPackageToast("Music uploaded — it's ready to save.", "success");
     } catch (err: any) {
       console.error("Music upload failed", err);
-      alert("Music upload failed: " + (err?.message ?? "unknown error"));
+      showPackageToast(
+        "Music upload failed — please try again. " + (err?.message ?? ""),
+        "error",
+      );
     } finally {
+      musicUploadingRef.current = false;
       input.value = "";
     }
   }, [props.onMusicChange]);

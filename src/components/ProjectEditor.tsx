@@ -43,6 +43,13 @@ type SaveStatus = "idle" | "unsaved" | "saving" | "saved";
 // localStorage via projectStorage.
 const draftStorageKey = (designId: number) => `viup_canvas_draft_${designId}`;
 
+// The whole design (every gallery photo lives inside it as a base64 data URL) is
+// POSTed to update_design.php as one JSON body. Shared PHP hosting typically caps
+// post_max_size at ~8MB and silently drops a body that exceeds it — the classic
+// "some photos didn't save". Warn well before that so the user can trim images
+// while the save can still succeed. Measured on the JSON string length (≈ bytes).
+const SAVE_SIZE_WARN_BYTES = 6 * 1024 * 1024;
+
 // MySQL timestamps ("YYYY-MM-DD HH:MM:SS") carry no timezone; this best-effort
 // parse treats them as local time. It only guards against stale drafts from old
 // sessions — the primary signal is that drafts are cleared on successful save.
@@ -368,6 +375,9 @@ function ProjectEditorInner({
   const pendingSaveRef = useRef(false); // a save was requested mid-flight
   const pendingSyncTitleRef = useRef(false);
   const retryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Latches the oversized-payload warning so autosave (every ~2s) doesn't spam
+  // the toast; re-arms once the design shrinks back under the threshold.
+  const largeSaveWarnedRef = useRef(false);
 
   // `syncTitle` is only true for a manual Save: that's when we push the canvas
   // title back to events.event_name (the MyEvent card). Autosave never touches
@@ -401,6 +411,21 @@ function ProjectEditorInner({
         canvas: { ...data, eventName: cleanTitle || eventName },
         featureUsage,
       };
+
+      // Warn once when the design gets large enough that PHP may reject the save
+      // (dropping recently added photos). Re-arms if the user trims it back down.
+      const approxBytes = JSON.stringify(json_data).length;
+      if (approxBytes > SAVE_SIZE_WARN_BYTES) {
+        if (!largeSaveWarnedRef.current) {
+          largeSaveWarnedRef.current = true;
+          showPackageToast(
+            "This design is very large — some photos may not save. Try removing a few gallery images.",
+            "warn",
+          );
+        }
+      } else {
+        largeSaveWarnedRef.current = false;
+      }
 
       // Flush the title to PHP first (manual save only) so events.event_name +
       // designs.name are guaranteed in sync even if the debounced autosync hasn't
@@ -825,12 +850,25 @@ function ProjectEditorInner({
           homeHref={homeHref}
           onUndo={() => editorRef.current?.undo()}
           onRedo={() => editorRef.current?.redo()}
-          onSave={() => forceSaveNow({ syncTitle: true })}
+          onSave={() => {
+            // Don't save mid-upload — the track wouldn't be in the design yet.
+            if (editorRef.current?.isMusicUploading?.()) {
+              showPackageToast("Music is still uploading — please wait a moment.", "warn");
+              return;
+            }
+            forceSaveNow({ syncTitle: true });
+          }}
           // Premium is the highest tier — no upgrade path, so hide the button
           // entirely by not wiring a handler (EditorHeader only renders it when
           // onUpgrade is present).
           onUpgrade={rules.isPremiumPackage ? undefined : openUpgrade}
           onPreview={() => {
+            // Music still transferring? Publishing now would bake a design with
+            // no track into the blob /e/[slug] reads — wait for it to finish.
+            if (editorRef.current?.isMusicUploading?.()) {
+              showPackageToast("Music is still uploading — please wait a moment before previewing.", "warn");
+              return;
+            }
             // Persist the design to the DB first (same path as Save/autosave),
             // then publish + open the hosted page. The save is fire-and-forget:
             // /e/[slug] reads the uploaded blob, not the designs row.
@@ -838,6 +876,10 @@ function ProjectEditorInner({
             editorRef.current?.exportHTML(eventName).then((slug) => router.push(`/e/${slug}`));
           }}
           onPreviewLocal={() => {
+            if (editorRef.current?.isMusicUploading?.()) {
+              showPackageToast("Music is still uploading — please wait a moment before previewing.", "warn");
+              return;
+            }
             // Local preview reads IndexedDB, but still flush the design to the DB
             // so a preview always leaves a saved record behind.
             forceSaveNow();

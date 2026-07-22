@@ -216,6 +216,10 @@ function PhotoTab({
     // drop stops exactly at the limit instead of overshooting.
     let projected = editorRef?.current?.getGalleryCount?.() ?? 0;
     let blocked = false;
+    // Tallies drive the summary toast so the user always knows whether each
+    // photo actually made it into the gallery (added) or fell over (failed).
+    let added = 0;
+    let failed = 0;
     Array.from(files).forEach((file) => {
       if (!file.type.startsWith('image/')) return;
       if (galleryOn && galleryLimited && projected >= galleryLimit) {
@@ -231,9 +235,29 @@ function PhotoTab({
           // No-op if no gallery page exists.
           editorRef?.current?.addPhotoToGallery?.(dataUrl);
           refreshGalleryCount();
+          added += 1;
+        })
+        .catch((err) => {
+          console.error('[PhotoTab] failed to add image', file?.name, err);
+          failed += 1;
         });
     });
-    if (blocked) showPackageToast(UPGRADE_MESSAGES.gallery(galleryLimit));
+    // Summarise once the whole batch settles (the toast host shows one message
+    // at a time, so we fold the outcome into a single, prioritised toast:
+    // failures first — they're the actionable half — then the package-limit
+    // nudge, then a plain success). Deferring to the chain keeps a late success
+    // from overwriting the limit warning.
+    chain.then(() => {
+      if (failed > 0 && added > 0) {
+        showPackageToast(`${added} photo${added === 1 ? '' : 's'} added, ${failed} failed — please retry the failed one${failed === 1 ? '' : 's'}.`, 'error');
+      } else if (failed > 0) {
+        showPackageToast(failed === 1 ? "That photo couldn't be added — please try again." : `${failed} photos couldn't be added — please try again.`, 'error');
+      } else if (blocked) {
+        showPackageToast(UPGRADE_MESSAGES.gallery(galleryLimit));
+      } else if (added > 0) {
+        showPackageToast(added === 1 ? 'Photo added to your gallery.' : `${added} photos added to your gallery.`, 'success');
+      }
+    });
   };
 
   const addToCanvas = (src: string) => {
@@ -1400,6 +1424,16 @@ function WishlistTab({ editorRef: _editorRef }: { editorRef?: React.RefObject<Ed
 type BgFit = 'cover' | 'contain' | 'stretch';
 type BgMirror = 'none' | 'horizontal' | 'vertical' | 'both';
 
+// Backstore size of the editor canvas (mirror of CANVAS_REF_* in CanvasEditor).
+// Background offsets are stored in canvas pixels, so a drag inside the small
+// sidebar preview is scaled by (canvas width / preview width) to move the real
+// background 1:1 with the pointer.
+const BG_CANVAS_W = 396;
+// Zoom (scroll) clamps for the interactive background pad.
+const BG_SCALE_MIN = 10;
+const BG_SCALE_MAX = 1000;
+const clampBgScale = (v: number) => Math.max(BG_SCALE_MIN, Math.min(BG_SCALE_MAX, v));
+
 const BG_SWATCHES = [
   '#ffffff', '#f5e8dd', '#fde2e4', '#fad2e1',
   '#e2eafc', '#d0f4de', '#fff1ba', '#1f2937',
@@ -1574,6 +1608,110 @@ function BackgroundTab({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [readNonce]);
 
+  // ── Drag-to-position / scroll-to-zoom pad ──────────────────────────────────
+  // The client found the numeric Scale/Offset fields fiddly, so the preview box
+  // doubles as an interactive pad: dragging pans the background (updates offset),
+  // scrolling zooms it (updates scale). Both feed the same state the numeric
+  // fields use AND push to the canvas live (rAF-throttled) during the gesture —
+  // the applyKey effect's debounce only fires after motion stops, which would
+  // leave the canvas frozen mid-drag.
+  const padRef = React.useRef<HTMLDivElement>(null);
+  const [padW, setPadW] = useState(0);
+  const dragRef = React.useRef<{ px: number; py: number; ox: number; oy: number; factor: number } | null>(null);
+  // Refs mirror the latest scale + opts builder so the native wheel listener
+  // (bound once per src) never reads a stale closure after other edits.
+  const scaleXRef = React.useRef(scaleX);
+  const scaleYRef = React.useRef(scaleY);
+  scaleXRef.current = scaleX;
+  scaleYRef.current = scaleY;
+  const buildOptsRef = React.useRef<(() => ReturnType<typeof buildOpts>) | undefined>(undefined);
+  const liveRafRef = React.useRef<number | null>(null);
+  const liveOptsRef = React.useRef<ReturnType<typeof buildOpts> | null>(null);
+
+  // Coalesce live canvas updates to one per animation frame during a gesture.
+  const scheduleLiveApply = (opts: ReturnType<typeof buildOpts>) => {
+    liveOptsRef.current = opts;
+    if (liveRafRef.current != null) return;
+    liveRafRef.current = requestAnimationFrame(() => {
+      liveRafRef.current = null;
+      if (src && liveOptsRef.current) editorRef?.current?.setBackgroundImage?.(src, liveOptsRef.current);
+    });
+  };
+  useEffect(() => () => {
+    if (liveRafRef.current != null) cancelAnimationFrame(liveRafRef.current);
+  }, []);
+
+  // Keep the drag→canvas scale factor current with the pad's rendered width.
+  useEffect(() => {
+    const el = padRef.current;
+    if (!el) return;
+    const measure = () => setPadW(el.getBoundingClientRect().width);
+    measure();
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [src]);
+
+  // Scroll-to-zoom. Registered natively (not via onWheel) so preventDefault can
+  // stop the sidebar from scrolling under the gesture — React wheel handlers are
+  // passive and can't cancel.
+  useEffect(() => {
+    const el = padRef.current;
+    if (!el || !src) return;
+    const onWheel = (e: WheelEvent) => {
+      e.preventDefault();
+      const step = e.deltaY < 0 ? 1.05 : 1 / 1.05;
+      const nsx = clampBgScale(Math.round(scaleXRef.current * step));
+      const nsy = clampBgScale(Math.round(scaleYRef.current * step));
+      scaleXRef.current = nsx;
+      scaleYRef.current = nsy;
+      setScaleX(nsx);
+      setScaleY(nsy);
+      scheduleLiveApply({ ...(buildOptsRef.current?.() ?? buildOpts()), scaleX: nsx / 100, scaleY: nsy / 100 });
+    };
+    el.addEventListener('wheel', onWheel, { passive: false });
+    return () => el.removeEventListener('wheel', onWheel);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [src]);
+
+  const onPadPointerDown = (e: React.PointerEvent) => {
+    // Let the Replace/Remove buttons keep working — don't start a drag on them.
+    if ((e.target as HTMLElement).closest('button')) return;
+    const rect = padRef.current?.getBoundingClientRect();
+    const factor = rect && rect.width ? BG_CANVAS_W / rect.width : 1;
+    dragRef.current = { px: e.clientX, py: e.clientY, ox: offsetX, oy: offsetY, factor };
+    (e.currentTarget as HTMLElement).setPointerCapture?.(e.pointerId);
+  };
+  const onPadPointerMove = (e: React.PointerEvent) => {
+    const d = dragRef.current;
+    if (!d) return;
+    const nox = Math.round(d.ox + (e.clientX - d.px) * d.factor);
+    const noy = Math.round(d.oy + (e.clientY - d.py) * d.factor);
+    setOffsetX(nox);
+    setOffsetY(noy);
+    scheduleLiveApply({ ...buildOpts(), offsetX: nox, offsetY: noy });
+  };
+  const onPadPointerUp = (e: React.PointerEvent) => {
+    dragRef.current = null;
+    (e.currentTarget as HTMLElement).releasePointerCapture?.(e.pointerId);
+  };
+  // Double-click recenters + resets zoom, an easy escape from an awkward drag.
+  const resetPadTransform = () => {
+    setOffsetX(0);
+    setOffsetY(0);
+    setScaleX(100);
+    setScaleY(100);
+    scaleXRef.current = 100;
+    scaleYRef.current = 100;
+  };
+
+  // Approximate the canvas transform inside the preview so the little image moves
+  // 1:1 with the pointer while dragging (offset px ÷ the same drag factor).
+  const padTransform =
+    padW > 0
+      ? `translate(${(offsetX * padW) / BG_CANVAS_W}px, ${(offsetY * padW) / BG_CANVAS_W}px) scale(${scaleX / 100}, ${scaleY / 100})`
+      : undefined;
+
   // The current adjustment controls packaged for the editor API.
   const buildOpts = () => ({
     tile,
@@ -1586,6 +1724,8 @@ function BackgroundTab({
     flipX: mirror === 'horizontal' || mirror === 'both',
     flipY: mirror === 'vertical' || mirror === 'both',
   });
+  // Expose the freshest opts builder to the wheel listener (bound once per src).
+  buildOptsRef.current = buildOpts;
 
   // Background changes affect ONLY the active page by default; "Apply to all
   // pages" re-runs the current fill across every page.
@@ -1743,8 +1883,23 @@ function BackgroundTab({
               Click to upload a background picture
             </button>
           ) : (
-            <div className="relative h-28 rounded border border-gray-200 overflow-hidden">
-              <img src={src} alt="Current background" className="w-full h-full object-cover" />
+            <div
+              ref={padRef}
+              onPointerDown={onPadPointerDown}
+              onPointerMove={onPadPointerMove}
+              onPointerUp={onPadPointerUp}
+              onPointerCancel={onPadPointerUp}
+              onDoubleClick={resetPadTransform}
+              title="Drag to move · Scroll to zoom · Double-click to reset"
+              className="relative h-28 rounded border border-gray-200 overflow-hidden bg-gray-50 cursor-grab active:cursor-grabbing touch-none select-none"
+            >
+              <img
+                src={src}
+                alt="Current background"
+                draggable={false}
+                style={{ transform: padTransform }}
+                className="w-full h-full object-cover pointer-events-none will-change-transform"
+              />
               <div className="absolute top-1 right-1 flex gap-1">
                 <button
                   type="button"
@@ -1761,6 +1916,11 @@ function BackgroundTab({
                 >
                   Remove
                 </button>
+              </div>
+              <div className="absolute bottom-1 left-1 right-1 flex justify-center pointer-events-none">
+                <span className="rounded bg-black/40 text-white text-[9px] font-semibold px-1.5 py-0.5">
+                  Drag to move · Scroll to zoom
+                </span>
               </div>
             </div>
           )}
