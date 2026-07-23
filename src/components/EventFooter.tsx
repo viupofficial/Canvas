@@ -404,7 +404,7 @@ const generateICS = (event: any, loc?: any) => {
 
                     {/* Step 2: Form shown after choosing Accept or Decline */}
                     {rsvpStatus !== null && !rsvpMessage && (
-                        <form className="rsvp-form" style={{ display: "flex", marginTop: "1rem" }}
+                        <form className="rsvp-form" style={{ display: "flex", marginTop: "0.5rem" }}
                             onSubmit={async (e) => {
                                 e.preventDefault();
                                 if (!hasEventInfo) return;
