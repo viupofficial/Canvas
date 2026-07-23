@@ -337,7 +337,7 @@ const generateICS = (event: any, loc?: any) => {
                             textAlign: "center",
                             fontFamily: "Montserrat",
                             fontSize: "20px",
-                            paddingBottom: "20px",
+                            paddingBottom: "12px",
                         }}
                     >
                         RSVP
@@ -349,7 +349,7 @@ const generateICS = (event: any, loc?: any) => {
                             textAlign: "center",
                             fontWeight: 100,
                             fontStyle: "italic",
-                            paddingBottom: "15px",
+                            paddingBottom: "10px",
                         }}
                     >
                         Will you attend the event?
@@ -475,7 +475,7 @@ const generateICS = (event: any, loc?: any) => {
                                 <button type="submit" disabled={rsvpSubmitting || !hasEventInfo}>
                                     {rsvpSubmitting ? "Submitting..." : "Submit"}
                                 </button>
-                                <button type="button" onClick={() => setRsvpStatus(null)} disabled={rsvpSubmitting}>Back</button>
+                                <button type="button" onClick={() => setRsvpStatus(null)} disabled={rsvpSubmitting}>Cancel</button>
                             </div>
                         </form>
                     )}

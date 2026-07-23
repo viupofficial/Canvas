@@ -1274,13 +1274,13 @@ star-fly-in {
   display: none;
   flex-direction: column;
   align-items: center;
-  gap: 1rem;
-  margin-bottom: 4rem;
+  gap: 0.6rem;
+  margin-bottom: 2rem;
   /* ← make room for buttons to breathe */
 }
 
 .rsvp-form .form-group {
-  margin-bottom: 1rem;
+  margin-bottom: 0.5rem;
 }
 
 .rsvp-form input,
