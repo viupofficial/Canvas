@@ -38,6 +38,7 @@ import { extractEnvelope } from "@/src/lib/extract-envelope";
 import { slugify } from "@/src/lib/slug";
 import { getPackageRules } from "@/src/lib/packageRules";
 import { upload } from "@vercel/blob/client";
+import { uploadEditedImage } from "@/src/lib/uploadEditedImage";
 import { showPackageToast } from "@/src/components/PackageLimitToast";
 import {
   ENABLE_SMART_SNAPPING,
@@ -3061,54 +3062,62 @@ const [currentPage, setCurrentPage] = useState(0);
     const oldW = typeof obj.getScaledWidth === 'function' ? obj.getScaledWidth() : (obj.width ?? 0) * (obj.scaleX ?? 1);
     const oldH = typeof obj.getScaledHeight === 'function' ? obj.getScaledHeight() : (obj.height ?? 0) * (obj.scaleY ?? 1);
 
-    fabric.Image.fromURL(dataUrl).then((img: any) => {
-      const nW = img.width || 1;
-      const nH = img.height || 1;
-      console.log("[replaceObjectImage] loaded new image, dimensions:", nW, "x", nH);
+    // If dataUrl is a data: URL (from editor), upload it first. Otherwise it's already a URL.
+    const imageUrlPromise = dataUrl.startsWith('data:')
+      ? uploadEditedImage(dataUrl)
+      : Promise.resolve(dataUrl);
 
-      img.set({
-        left: obj.left,
-        top: obj.top,
-        angle: obj.angle ?? 0,
-        originX: obj.originX ?? 'left',
-        originY: obj.originY ?? 'top',
-        flipX: obj.flipX ?? false,
-        flipY: obj.flipY ?? false,
-        skewX: obj.skewX ?? 0,
-        skewY: obj.skewY ?? 0,
-        scaleX: oldW > 0 ? oldW / nW : (obj.scaleX ?? 1),
-        scaleY: oldH > 0 ? oldH / nH : (obj.scaleY ?? 1),
+    imageUrlPromise
+      .then((imageUrl) => {
+        console.log("[replaceObjectImage] using image URL:", imageUrl.substring(0, 50) + "...");
+        return fabric.Image.fromURL(imageUrl).then((img: any) => ({ img, imageUrl }));
+      })
+      .then(({ img, imageUrl }) => {
+        const nW = img.width || 1;
+        const nH = img.height || 1;
+        console.log("[replaceObjectImage] loaded new image, dimensions:", nW, "x", nH);
+
+        img.set({
+          left: obj.left,
+          top: obj.top,
+          angle: obj.angle ?? 0,
+          originX: obj.originX ?? 'left',
+          originY: obj.originY ?? 'top',
+          flipX: obj.flipX ?? false,
+          flipY: obj.flipY ?? false,
+          skewX: obj.skewX ?? 0,
+          skewY: obj.skewY ?? 0,
+          scaleX: oldW > 0 ? oldW / nW : (obj.scaleX ?? 1),
+          scaleY: oldH > 0 ? oldH / nH : (obj.scaleY ?? 1),
+        });
+        // Preserve exported metadata (action, animation, id, name, etc.) and src for image retrieval.
+        FABRIC_EXPORT_PROPS.forEach((p) => {
+          if ((obj as any)[p] !== undefined) (img as any)[p] = (obj as any)[p];
+        });
+        // Store the uploaded URL (or provided URL) as src. This is now much smaller than a base64 string
+        // and won't hit upload size limits. The URL points to the persistent blob storage.
+        (img as any).src = imageUrl;
+        console.log("[replaceObjectImage] set src to URL:", imageUrl.substring(0, 50) + "...");
+
+        canvas.remove(obj);
+        canvas.add(img);
+        if (idx >= 0) (canvas as any).moveObjectTo?.(img, idx);
+        canvas.setActiveObject(img);
+
+        canvas.requestRenderAll();
+        pushSnapshot();
+        saveCurrentPage(currentPageRef.current);
+        editingImageRef.current = null;
+        console.log("[replaceObjectImage] complete");
+      })
+      .catch((err: any) => {
+        console.error('[replaceObjectImage] Failed to replace image', err);
+        showPackageToast(
+          "Failed to apply image edits — please try again. " + (err?.message ?? ""),
+          "error",
+        );
+        editingImageRef.current = null;
       });
-      // Preserve exported metadata (action, animation, id, name, etc.) and src for image retrieval.
-      FABRIC_EXPORT_PROPS.forEach((p) => {
-        if ((obj as any)[p] !== undefined) (img as any)[p] = (obj as any)[p];
-      });
-      // Store the edited dataUrl in a custom property that won't be intercepted by Fabric
-      // The src property gets overwritten by Fabric's internal image handling, so we use
-      // a different property name to preserve the full edited image data
-      (img as any).src = dataUrl;
-      (img as any)._editedSrc = dataUrl;
-      console.log("[replaceObjectImage] set src, src length:", (img as any).src?.length, "_editedSrc length:", (img as any)._editedSrc?.length);
-
-      canvas.remove(obj);
-      canvas.add(img);
-      if (idx >= 0) (canvas as any).moveObjectTo?.(img, idx);
-      canvas.setActiveObject(img);
-
-      // Force update both src and _editedSrc after adding to canvas to ensure
-      // the dataUrl is preserved during serialization
-      setTimeout(() => {
-        (img as any).src = dataUrl;
-        (img as any)._editedSrc = dataUrl;
-        console.log("[replaceObjectImage] force-updated src after canvas add, src length:", (img as any).src?.length);
-      }, 0);
-
-      canvas.requestRenderAll();
-      pushSnapshot();
-      saveCurrentPage(currentPageRef.current);
-      editingImageRef.current = null;
-      console.log("[replaceObjectImage] complete");
-    }).catch((err: any) => console.error('[replaceObjectImage] Failed to replace image', err));
   }, []);
 
   // Open the external editor modal for the active image (or a right-clicked one).
