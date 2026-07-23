@@ -167,7 +167,7 @@ export default function ImageEditorModal({
 
   // ── Color (tint) ────────────────────────────────────────────────────────────
   const [tintColor, setTintColor] = useState<string>("#8c6b6b");
-  const [tintAlpha, setTintAlpha] = useState<number>(0); // 0 = off
+  const [tintAlpha, setTintAlpha] = useState<number>(0); // 0 = off (will auto-enable at 0.6 when color is picked)
 
   // ── Texture ──────────────────────────────────────────────────────────────────
   const [textureId, setTextureId] = useState<TexturePreset | null>(null);
@@ -427,6 +427,15 @@ export default function ImageEditorModal({
       cropRect.visible = false;
       canvas.discardActiveObject();
       canvas.requestRenderAll();
+    } else {
+      // No crop: use the image's actual bounds to avoid clipping from rounding errors
+      const bounds = img.getBoundingRect(true);
+      region = {
+        left: bounds.left,
+        top: bounds.top,
+        width: bounds.width,
+        height: bounds.height,
+      };
     }
 
     let dataUrl = "";
@@ -578,7 +587,7 @@ export default function ImageEditorModal({
             {/* Color tint */}
             <div className="pt-1 border-t border-[#EDE2DE]">
               <div className="flex items-center justify-between mb-2 mt-2">
-                <label className="text-[11px] text-[#7D5B5980] font-[600]">Color</label>
+                <label className="text-[11px] text-[#7D5B5980] font-[600]">Color Overlay</label>
                 <label
                   className="relative inline-flex items-center justify-center w-6 h-6 rounded border border-[#EDE2DE] cursor-pointer overflow-hidden"
                   title="Pick tint color"
@@ -589,14 +598,14 @@ export default function ImageEditorModal({
                     value={tintColor}
                     onChange={(e) => {
                       setTintColor(e.target.value);
-                      if (tintAlpha <= 0) setTintAlpha(0.5);
+                      if (tintAlpha <= 0) setTintAlpha(0.6);
                     }}
                     className="absolute inset-0 opacity-0 cursor-pointer"
                   />
                 </label>
               </div>
               <SliderRow
-                label="Tint strength"
+                label="Color intensity"
                 value={tintAlpha}
                 min={0}
                 max={1}
