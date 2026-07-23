@@ -3052,6 +3052,8 @@ const [currentPage, setCurrentPage] = useState(0);
     const fabric = fabricModuleRef.current;
     if (!canvas || !fabric || !obj || !dataUrl) return;
 
+    console.log("[replaceObjectImage] starting, dataUrl length:", dataUrl.length, "isDataUrl:", dataUrl.startsWith('data:'));
+
     const idx = canvas.getObjects().indexOf(obj);
     const oldW = typeof obj.getScaledWidth === 'function' ? obj.getScaledWidth() : (obj.width ?? 0) * (obj.scaleX ?? 1);
     const oldH = typeof obj.getScaledHeight === 'function' ? obj.getScaledHeight() : (obj.height ?? 0) * (obj.scaleY ?? 1);
@@ -3059,6 +3061,8 @@ const [currentPage, setCurrentPage] = useState(0);
     fabric.Image.fromURL(dataUrl).then((img: any) => {
       const nW = img.width || 1;
       const nH = img.height || 1;
+      console.log("[replaceObjectImage] loaded new image, dimensions:", nW, "x", nH);
+
       img.set({
         left: obj.left,
         top: obj.top,
@@ -3078,6 +3082,8 @@ const [currentPage, setCurrentPage] = useState(0);
       });
       // Explicitly set src so it serializes correctly for envelope extraction
       (img as any).src = dataUrl;
+      console.log("[replaceObjectImage] set src, src is now:", (img as any).src?.substring?.(0, 50) || 'undefined');
+
       canvas.remove(obj);
       canvas.add(img);
       if (idx >= 0) (canvas as any).moveObjectTo?.(img, idx);
@@ -3086,7 +3092,8 @@ const [currentPage, setCurrentPage] = useState(0);
       pushSnapshot();
       saveCurrentPage(currentPageRef.current);
       editingImageRef.current = null;
-    }).catch((err: any) => console.error('Failed to replace image', err));
+      console.log("[replaceObjectImage] complete");
+    }).catch((err: any) => console.error('[replaceObjectImage] Failed to replace image', err));
   }, []);
 
   // Open the external editor modal for the active image (or a right-clicked one).

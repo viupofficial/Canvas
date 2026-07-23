@@ -408,7 +408,13 @@ export default function ImageEditorModal({
     setBusy(true);
 
     const box = imgBoxRef.current;
-    let region = { left: box.left, top: box.top, width: box.width, height: box.height };
+    // Round to avoid floating-point precision issues when exporting
+    let region = {
+      left: Math.round(box.left * 10) / 10,
+      top: Math.round(box.top * 10) / 10,
+      width: Math.round(box.width * 10) / 10,
+      height: Math.round(box.height * 10) / 10,
+    };
 
     const cropRect = cropRectRef.current;
     if (cropRect) {
@@ -427,28 +433,20 @@ export default function ImageEditorModal({
       cropRect.visible = false;
       canvas.discardActiveObject();
       canvas.requestRenderAll();
-    } else {
-      // No crop: use the image's actual bounds to avoid clipping from rounding errors
-      const bounds = img.getBoundingRect(true);
-      region = {
-        left: bounds.left,
-        top: bounds.top,
-        width: bounds.width,
-        height: bounds.height,
-      };
     }
 
     let dataUrl = "";
     try {
       dataUrl = canvas.toDataURL({
         format: "png",
-        left: region.left,
-        top: region.top,
-        width: region.width,
-        height: region.height,
+        left: Math.round(region.left),
+        top: Math.round(region.top),
+        width: Math.round(region.width),
+        height: Math.round(region.height),
         // Upscale back toward the original resolution (preview is fit-scaled down).
         multiplier: 1 / (box.scale || 1),
       });
+      console.log("[ImageEditor] export successful, dataUrl length:", dataUrl.length);
     } catch (err) {
       console.error("[ImageEditor] export failed", err);
       setBusy(false);
@@ -460,6 +458,7 @@ export default function ImageEditorModal({
       return;
     }
 
+    console.log("[ImageEditor] applying edited image, calling onApply with dataUrl");
     onApply(dataUrl);
   }, [onApply]);
 
