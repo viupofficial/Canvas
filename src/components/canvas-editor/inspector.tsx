@@ -321,8 +321,8 @@ export default function Inspector(props: {
   const DEFAULT_BG = '#F8F7F6';
   const DEFAULT_STROKE = '#F8F7F6';
 
-  // Images don't use a fill color — hide that row for them.
-  const supportsFill = !!selected && selected.type !== 'image';
+  // Fill color applies to both shapes and images (as a color overlay/tint).
+  const supportsFill = !!selected;
 
   // A multi-selection (ActiveSelection) has no typography of its own; its child
   // objects are carried in `selected.objects`. Derive the shown value from the
