@@ -199,6 +199,7 @@ const FABRIC_EXPORT_PROPS = [
   "linkUrl",
   "url",
   "src",
+  "_editedSrc",
   "targetPage",
   "pageIndex",
   "name",
@@ -1380,7 +1381,9 @@ const [currentPage, setCurrentPage] = useState(0);
       const obj = canvas.getActiveObject();
       if (!obj || (obj as any).type !== 'image') return null;
       editingImageRef.current = obj;
-      return (obj as any).getSrc?.() ?? (obj as any)._element?.src ?? null;
+      // Prioritize _editedSrc (which contains the full edited image dataUrl)
+      // over src (which might be just a file path or truncated)
+      return (obj as any)._editedSrc ?? (obj as any).getSrc?.() ?? (obj as any)._element?.src ?? (obj as any).src ?? null;
     },
     isActiveObjectImage: () => {
       const canvas = fabricRef.current;
@@ -3080,14 +3083,26 @@ const [currentPage, setCurrentPage] = useState(0);
       FABRIC_EXPORT_PROPS.forEach((p) => {
         if ((obj as any)[p] !== undefined) (img as any)[p] = (obj as any)[p];
       });
-      // Explicitly set src so it serializes correctly for envelope extraction
+      // Store the edited dataUrl in a custom property that won't be intercepted by Fabric
+      // The src property gets overwritten by Fabric's internal image handling, so we use
+      // a different property name to preserve the full edited image data
       (img as any).src = dataUrl;
-      console.log("[replaceObjectImage] set src, src is now:", (img as any).src?.substring?.(0, 50) || 'undefined');
+      (img as any)._editedSrc = dataUrl;
+      console.log("[replaceObjectImage] set src, src length:", (img as any).src?.length, "_editedSrc length:", (img as any)._editedSrc?.length);
 
       canvas.remove(obj);
       canvas.add(img);
       if (idx >= 0) (canvas as any).moveObjectTo?.(img, idx);
       canvas.setActiveObject(img);
+
+      // Force update both src and _editedSrc after adding to canvas to ensure
+      // the dataUrl is preserved during serialization
+      setTimeout(() => {
+        (img as any).src = dataUrl;
+        (img as any)._editedSrc = dataUrl;
+        console.log("[replaceObjectImage] force-updated src after canvas add, src length:", (img as any).src?.length);
+      }, 0);
+
       canvas.requestRenderAll();
       pushSnapshot();
       saveCurrentPage(currentPageRef.current);
