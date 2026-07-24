@@ -1,7 +1,7 @@
 "use client"
 
 import React, { useState, useRef } from "react"
-import { useEventDataOptional } from "@/src/store/EventDataContext"
+import { useEventDataOptional, QR_DEFAULT_SIZE, QR_MIN_SIZE, QR_MAX_SIZE } from "@/src/store/EventDataContext"
 import { buildIcs, icsFilename } from "@/src/lib/calendar/icsBuilder"
 import { buildGoogleCalendarLink } from "@/src/lib/calendar/googleCalendarLink"
 import EventMiniCalendar from "@/src/components/EventMiniCalendar"
@@ -26,6 +26,7 @@ export default function EventFooter({
     bank: string;
     account: number | string;
     image: string | null;
+    qrSize?: number | null;
   } | null;
   calendar?: {
     date: string;
@@ -320,7 +321,14 @@ const generateICS = (event: any, loc?: any) => {
                   </div>
 
 <div className="qr-wrapper">
-  <img src={moneyGift?.image || "/MayaQRimage.png"} alt="QR Code" />
+  <img
+    src={moneyGift?.image || "/MayaQRimage.png"}
+    alt="QR Code"
+    style={{
+      width: Math.min(QR_MAX_SIZE, Math.max(QR_MIN_SIZE, moneyGift?.qrSize ?? QR_DEFAULT_SIZE)),
+      height: Math.min(QR_MAX_SIZE, Math.max(QR_MIN_SIZE, moneyGift?.qrSize ?? QR_DEFAULT_SIZE)),
+    }}
+  />
 </div>
 
                 </div>

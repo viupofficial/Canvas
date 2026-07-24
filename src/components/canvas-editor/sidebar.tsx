@@ -1,7 +1,7 @@
 // updated
 import React, { useEffect, useState } from 'react';
 import type { EditorHandle } from '@/src/components/CanvasEditor';
-import { useEventData } from '@/src/store/EventDataContext';
+import { useEventData, QR_DEFAULT_SIZE, QR_MIN_SIZE, QR_MAX_SIZE } from '@/src/store/EventDataContext';
 import LivePreviewPanel from '@/src/components/canvas-editor/LivePreviewPanel';
 import { prayerPage } from "@/src/components/template-list/prayerTemplate";
 import { countdownPage } from "@/src/components/template-list/timeBoxTemplate";
@@ -1265,6 +1265,7 @@ function MoneyGiftTab() {
     (current?.account as number | '' | undefined) ?? ''
   );
   const [image, setImage] = useState<string | null>(current?.image ?? null);
+  const [qrSize, setQrSize] = useState<number>(current?.qrSize ?? QR_DEFAULT_SIZE);
 
   const pushField = (patch: Partial<NonNullable<typeof current>>) => {
     updateEventData('moneyGift', patch as any);
@@ -1284,7 +1285,7 @@ function MoneyGiftTab() {
       alert("Please fill all fields");
       return;
     }
-    setSection('moneyGift', { bank, account, image });
+    setSection('moneyGift', { bank, account, image, qrSize });
   };
 
   return (
@@ -1326,6 +1327,27 @@ function MoneyGiftTab() {
             </div>
           )}
         </label>
+
+        <div>
+          <div className="flex items-center justify-between mb-1">
+            <label className="text-sm text-[#191212] font-semibold">QR size</label>
+            <span className="text-xs text-[#7D5B59] font-semibold">{qrSize}px</span>
+          </div>
+          <input
+            type="range"
+            min={QR_MIN_SIZE}
+            max={QR_MAX_SIZE}
+            step={5}
+            value={qrSize}
+            onChange={(e) => {
+              const v = Number(e.target.value);
+              setQrSize(v);
+              pushField({ qrSize: v });
+            }}
+            className="w-full accent-[#8C6B6B] cursor-pointer"
+          />
+        </div>
+
         <button
           onClick={handleSave}
           className="mt-2 py-2 rounded-md bg-[#8C6B6B] text-white font-semibold"

@@ -33,6 +33,34 @@ const DEFAULT_FILTERS: FilterValues = {
 const PREVIEW_W = 480;
 const PREVIEW_H = 380;
 
+// Fabric runs image filters through a WebGL tile whose side is config.textureSize
+// (4096). A source bigger than that tile comes back clipped to it — the envelope
+// art (head.png 4626×4205, body.png 4500×5147) lost its right/bottom edge the
+// moment any slider moved, which read as "the image got cut and smaller".
+// Downscaling the element before it is ever filtered keeps the whole picture.
+const MAX_SOURCE_PX = 4096;
+
+// Replace the image's backing element with a downscaled copy when it exceeds the
+// filter tile. Fabric filters `_originalElement`, so the swap has to happen on the
+// element itself — capping scaleX/scaleY would not help.
+function capSourceResolution(img: any, limit: number) {
+  const el = img.getElement?.() ?? img._originalElement;
+  const nW = el?.naturalWidth || el?.width || 0;
+  const nH = el?.naturalHeight || el?.height || 0;
+  if (!nW || !nH) return;
+  const k = Math.min(limit / nW, limit / nH, 1);
+  if (k >= 1) return;
+  const off = document.createElement("canvas");
+  off.width = Math.max(1, Math.round(nW * k));
+  off.height = Math.max(1, Math.round(nH * k));
+  const ctx = off.getContext("2d");
+  if (!ctx) return;
+  ctx.imageSmoothingEnabled = true;
+  ctx.imageSmoothingQuality = "high";
+  ctx.drawImage(el, 0, 0, off.width, off.height);
+  img.setElement(off);
+}
+
 // Texture presets are painted onto a square offscreen canvas (white background +
 // dark marks), then blended into the image with a "multiply" filter — so the
 // texture only darkens existing pixels and transparent areas stay transparent.
@@ -265,6 +293,10 @@ export default function ImageEditorModal({
       try {
         const img = await fabric.Image.fromURL(imageSrc, imgOpts);
         if (!mounted) return;
+        // Keep the working copy inside the filter tile (see MAX_SOURCE_PX). The
+        // configured tile size is the real bound; anything above 4096 still gets
+        // clipped, and below 4096 fabric drops to the unbounded 2D backend.
+        capSourceResolution(img, Math.min(fabric.config?.textureSize ?? MAX_SOURCE_PX, MAX_SOURCE_PX));
         const nW = img.width || 1;
         const nH = img.height || 1;
         // Never upscale in the preview — keeps the exported result at (or below)
@@ -408,13 +440,7 @@ export default function ImageEditorModal({
     setBusy(true);
 
     const box = imgBoxRef.current;
-    // Round to avoid floating-point precision issues when exporting
-    let region = {
-      left: Math.round(box.left * 10) / 10,
-      top: Math.round(box.top * 10) / 10,
-      width: Math.round(box.width * 10) / 10,
-      height: Math.round(box.height * 10) / 10,
-    };
+    let region = { left: box.left, top: box.top, width: box.width, height: box.height };
 
     const cropRect = cropRectRef.current;
     if (cropRect) {
@@ -435,14 +461,22 @@ export default function ImageEditorModal({
       canvas.requestRenderAll();
     }
 
+    // toDataURL wants whole canvas pixels. Grow the region outwards rather than
+    // rounding to nearest, so a fractional fit offset never shaves the edge off
+    // the picture — at most it adds a sliver of transparency.
+    const left = Math.floor(region.left);
+    const top = Math.floor(region.top);
+    const width = Math.ceil(region.left + region.width) - left;
+    const height = Math.ceil(region.top + region.height) - top;
+
     let dataUrl = "";
     try {
       dataUrl = canvas.toDataURL({
         format: "png",
-        left: Math.round(region.left),
-        top: Math.round(region.top),
-        width: Math.round(region.width),
-        height: Math.round(region.height),
+        left,
+        top,
+        width,
+        height,
         // Upscale back toward the original resolution (preview is fit-scaled down).
         multiplier: 1 / (box.scale || 1),
       });

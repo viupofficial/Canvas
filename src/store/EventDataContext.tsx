@@ -28,7 +28,15 @@ export type GiftData = {
   bank: string;
   account: number | string;
   image: string | null;
+  // QR display size in px (square). Undefined/null falls back to QR_DEFAULT_SIZE.
+  qrSize?: number | null;
 } | null;
+
+// Money Gift QR display bounds (px). Shared by the footer render and the editor
+// slider so both agree on the range and the fallback size.
+export const QR_MIN_SIZE = 140;
+export const QR_MAX_SIZE = 350;
+export const QR_DEFAULT_SIZE = 240;
 export type RSVPConfig = {
   // Whether RSVP is available on the invitation. Treated as ON when undefined so
   // pre-existing designs (saved before this toggle existed) keep showing RSVP.
