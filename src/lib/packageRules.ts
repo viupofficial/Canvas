@@ -133,6 +133,8 @@ export const UPGRADE_MESSAGES = {
     "You have used all 3 location changes for this 24-hour period. Upgrade to change more.",
   locationRemaining: (remaining: number) =>
     `Basic package: ${remaining}/3 location changes left in this 24-hour period.`,
+  moneyGift:
+    "Your current package doesn't include Money Gift, so it stays hidden on the invitation. Upgrade to offer it.",
   music:
     "You have used all 2 music changes for this 24-hour period. Upgrade to change more.",
   musicRemaining: (remaining: number) =>

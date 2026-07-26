@@ -25,12 +25,12 @@ export const guestbookPage = {
       {
   type: "image",
   version: "5.3.0",
-  left: 320,
-  top: 360,
+  left: 450,
+  top: 312,
   originX: "center",
   scaleX: 0.3,
   scaleY: 0.3,
-  angle: 270,
+  angle: 0,
   // Filename is uppercase on disk (public/PAPER.png). The mixed-case "/Paper.png"
   // resolved on case-insensitive Windows but 404'd on the case-sensitive Linux
   // deploy — and a failed image load rejects the whole enlivenObjects batch, so
@@ -79,25 +79,65 @@ export const guestbookPage = {
       name: "guestSender"
     },
 
-    // Left button
+    // Left button — brown rounded pill behind the arrow. Fabric textboxes can't
+    // render a rounded background, so the button is a separate rect painted first
+    // (below) with the white glyph centred on top.
+    {
+      type: "rect",
+      left: 168,
+      top: 262,
+      width: 44,
+      height: 44,
+      rx: 12,
+      ry: 12,
+      originX: "center",
+      originY: "center",
+      fill: "#f2ede9",
+      stroke: "#e6ddd6",
+      strokeWidth: 1,
+      name: "prevBtnBg"
+    },
     {
       type: "textbox",
       text: "←",
-      left: 175,
-      top: 260,
-      fontSize: 24,
+      left: 168,
+      top: 262,
+      width: 44,
+      originX: "center",
+      originY: "center",
+      fontSize: 22,
       textAlign: "center",
+      fill: "#333",
       name: "prevBtn"
     },
 
     // Right button
     {
+      type: "rect",
+      left: 222,
+      top: 262,
+      width: 44,
+      height: 44,
+      rx: 12,
+      ry: 12,
+      originX: "center",
+      originY: "center",
+      fill: "#f2ede9",
+      stroke: "#e6ddd6",
+      strokeWidth: 1,
+      name: "nextBtnBg"
+    },
+    {
       type: "textbox",
       text: "→",
-      left: 220,
-      top: 260,
-      fontSize: 24,
+      left: 222,
+      top: 262,
+      width: 44,
+      originX: "center",
+      originY: "center",
+      fontSize: 22,
       textAlign: "center",
+      fill: "#333",
       name: "nextBtn"
     }
   ]

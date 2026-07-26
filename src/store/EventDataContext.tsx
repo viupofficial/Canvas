@@ -12,9 +12,16 @@ import React, {
 import type { GradientDescriptor } from "@/src/lib/gradient";
 
 export type ContactItem = { name: string; phone: string };
-export type LocationData = { address: string } | null;
+export type LocationData = {
+  address?: string;
+  // Whether Location is offered in the invitation footer. Treated as ON when
+  // undefined so pre-existing designs keep showing it. Mirrors RSVPConfig.enabled.
+  enabled?: boolean;
+} | null;
 export type CalendarData = {
-  date: string;
+  // Optional so the section can hold only the `enabled` flag before a date is
+  // picked (and keep it after the date is cleared again).
+  date?: string;
   // Optional fields used by calendar export (ICS / Google link). All optional —
   // pre-existing records with only `date` continue to work unchanged.
   startTime?: string;
@@ -23,13 +30,23 @@ export type CalendarData = {
   title?: string;
   description?: string;
   reminderMinutes?: number;
+  // Whether Calendar is offered in the invitation footer. Treated as ON when
+  // undefined so pre-existing designs keep showing it. Note this only hides the
+  // footer entry — `date` still drives the canvas countdown element.
+  enabled?: boolean;
 } | null;
 export type GiftData = {
-  bank: string;
-  account: number | string;
-  image: string | null;
+  // Optional so the section can hold only the `enabled` flag before the form is
+  // filled in — turning the toggle off never discards saved form data.
+  bank?: string;
+  account?: number | string;
+  image?: string | null;
   // QR display size in px (square). Undefined/null falls back to QR_DEFAULT_SIZE.
   qrSize?: number | null;
+  // Whether Money Gift is offered in the invitation footer. Treated as ON when
+  // undefined so pre-existing designs keep showing it — subject to the package
+  // rules, which always win (see src/lib/footerNav.ts).
+  enabled?: boolean;
 } | null;
 
 // Money Gift QR display bounds (px). Shared by the footer render and the editor

@@ -1,6 +1,6 @@
 "use client"
 
-import React, { useState, useRef } from "react"
+import React, { useState, useRef, useEffect } from "react"
 import { useEventDataOptional, QR_DEFAULT_SIZE, QR_MIN_SIZE, QR_MAX_SIZE } from "@/src/store/EventDataContext"
 import { buildIcs, icsFilename } from "@/src/lib/calendar/icsBuilder"
 import { buildGoogleCalendarLink } from "@/src/lib/calendar/googleCalendarLink"
@@ -8,6 +8,7 @@ import EventMiniCalendar from "@/src/components/EventMiniCalendar"
 import type { CalendarExportInput } from "@/src/lib/calendar/normalizeEvent"
 import { submitCanvasRSVP, submitCanvasGuestbook, getCanvasGuestbook } from "@/src/lib/viupApi"
 import { cssBackground, type GradientDescriptor } from "@/src/lib/gradient"
+import { computeFooterNav } from "@/src/lib/footerNav"
 
 
 export default function EventFooter({
@@ -23,21 +24,27 @@ export default function EventFooter({
 }: {
   contacts?: any[];
   moneyGift?: {
-    bank: string;
-    account: number | string;
-    image: string | null;
+    bank?: string;
+    account?: number | string;
+    image?: string | null;
     qrSize?: number | null;
+    // "Show Money Gift" (Money Gift sidebar). Undefined ⇒ ON for backward
+    // compat; the package gate still has the final say.
+    enabled?: boolean;
   } | null;
   calendar?: {
-    date: string;
+    date?: string;
     startTime?: string;
     endTime?: string;
     endDate?: string;
     title?: string;
     description?: string;
     reminderMinutes?: number;
+    // "Show Calendar" (Calendar sidebar). Undefined ⇒ ON for backward compat.
+    enabled?: boolean;
   } | null;
-  location?: { address: string } | null;
+  // "Show Location" (Location sidebar). Undefined ⇒ ON for backward compat.
+  location?: { address?: string; enabled?: boolean } | null;
   rsvpConfig?: {
     enabled?: boolean;
     maxGuest?: number;
@@ -64,6 +71,21 @@ export default function EventFooter({
   const calendar = ctx?.eventData.calendar ?? calendarProp ?? null;
   const location = ctx?.eventData.location ?? locationProp ?? null;
   const rsvpConfig = ctx?.eventData.rsvpConfig ?? rsvpConfigProp ?? null;
+
+  // ── Footer navigation ─────────────────────────────────────────────────────
+  // Which items the two slots either side of the RSVP circle hold is decided in
+  // one place, shared by every surface that renders this footer (editor canvas,
+  // local preview, published page) — see src/lib/footerNav.ts for the rules.
+  const nav = computeFooterNav({
+    // Package gate first: Basic has no Money Gift, and no toggle can unlock it.
+    moneyGiftAllowed: showRsvpAndMoneyGift,
+    moneyGiftEnabled: moneyGift?.enabled,
+    calendarEnabled: calendar?.enabled,
+    locationEnabled: location?.enabled,
+  });
+  const showCalendar = nav.calendarVisible;
+  const showLocation = nav.locationVisible;
+  const showMoneyGift = nav.moneyGiftVisible;
 
   const [activeCard, setActiveCard] = useState<string | null>(null);
   const [rsvpStatus, setRsvpStatus] = useState<null | "accept" | "decline">(null);
@@ -122,6 +144,10 @@ export default function EventFooter({
     if (!showRsvpAndMoneyGift && (card === "rsvp" || card === "gift")) return;
     // RSVP turned off via the sidebar toggle — never open its modal.
     if (card === "rsvp" && rsvpConfig?.enabled === false) return;
+    // Money Gift turned off via the sidebar toggle — never open its modal.
+    if (card === "gift" && !showMoneyGift) return;
+    // The Info chooser only exists while the Info button holds the right slot.
+    if (card === "info" && !nav.showInfoButton) return;
     if (activeCard === card) {
       // Info steps back one level: if a Calendar/Location section is open,
       // return to the floating chooser buttons first; only close the card
@@ -168,7 +194,9 @@ export default function EventFooter({
   // circle slides over to the Info slot (move-right), the white bump follows it
   // (bump-shift), the RSVP label drops down into the bar (drop), and the Info
   // star scales up onto the moved circle (visible).
-  const infoActive = activeCard === "info";
+  // Only the Info slot runs the choreography — a direct Calendar/Location
+  // button has no star to fly up to, so the RSVP circle stays put for it.
+  const infoActive = activeCard === "info" && nav.showInfoButton;
   const maxPax = rsvpConfig?.maxGuest ?? 3;
   // RSVP toggle (from the RSVP sidebar). Undefined ⇒ ON for backward compat;
   // only an explicit `false` hides RSVP. Gated together with the package check.
@@ -223,10 +251,15 @@ const generateICS = (event: any, loc?: any) => {
     console.log("FOOTER contacts:", contacts);
     const [infoTab, setInfoTab] = useState<string | null>(null)
 
-    // Basic-package footer exposes Calendar and Location as their own items and
-    // opens each straight to its section (no Info chooser). Re-tapping the open
-    // one closes the panel, mirroring toggleCard's behaviour.
+    // Opens one Info section straight away, with no chooser step. Used by the
+    // Basic-package footer items AND by the direct Calendar/Location button
+    // that replaces Info when only one of the two is enabled — same popup,
+    // same content, no duplicate logic. Re-tapping the open one closes the
+    // panel, mirroring toggleCard's behaviour.
     const openInfoTab = (tab: "calendar" | "location") => {
+      // Turned off via the sidebar toggle — never open its section.
+      if (tab === "calendar" && !showCalendar) return;
+      if (tab === "location" && !showLocation) return;
       if (activeCard === "info" && infoTab === tab) {
         closeCard();
         return;
@@ -235,6 +268,29 @@ const generateICS = (event: any, loc?: any) => {
       setClosing(false);
       setActiveCard("info");
     };
+
+    // A toggle can be flipped in the sidebar while the popup is open. Close it
+    // when what's on screen is no longer available: a section whose feature was
+    // just turned off, or the Calendar/Location chooser once the slot is no
+    // longer the Info button. The footer then re-renders the direct button (or
+    // hides the slot) on the same tick.
+    useEffect(() => {
+      if (activeCard !== "info") return;
+      const stale =
+        (infoTab === "calendar" && !showCalendar) ||
+        (infoTab === "location" && !showLocation) ||
+        (infoTab === null && !nav.showInfoButton);
+      if (stale) closeCard();
+      // closeCard is re-created each render; the guards above make a re-run
+      // after it fires a no-op, so it's intentionally not a dependency.
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [activeCard, infoTab, showCalendar, showLocation, nav.showInfoButton]);
+
+    // Money Gift can be switched off while its modal is open — close it too.
+    useEffect(() => {
+      if (activeCard === "gift" && !showMoneyGift) closeCard();
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [activeCard, showMoneyGift]);
     // Fade class shared by every popup panel: fades in on open, fades out (via
     // `is-closing`) just before unmount. Opacity-only, so it never disturbs a
     // panel's own positioning transform.
@@ -288,7 +344,7 @@ const generateICS = (event: any, loc?: any) => {
             )}
 
             {/* MONEY GIFT */}
-            {showRsvpAndMoneyGift && activeCard === "gift" && (
+            {showMoneyGift && activeCard === "gift" && (
 
                 <div className={`moneygift-card ${fadeCls}`}>
                     <h3>Money Gift</h3>
@@ -622,9 +678,11 @@ const generateICS = (event: any, loc?: any) => {
 
                 <div className={`info-popup ${fadeCls}`}>
 
-                    {/* Basic package reaches Calendar/Location from dedicated
-                        footer items, so the in-popup chooser is hidden there. */}
-                    {showRsvpAndMoneyGift && (
+                    {/* The two-button expansion belongs to the Info slot only.
+                        Every other route into these sections — the Basic-package
+                        items, a direct Calendar/Location button — opens its
+                        section straight away and skips the chooser. */}
+                    {nav.showInfoButton && (
                     <div id="info-buttons">
 
                         <button
@@ -827,7 +885,7 @@ const generateICS = (event: any, loc?: any) => {
             )}
 
             {/* FOOTER */}
-            <div className={`footer-container preview-footer-enter${infoActive ? " bump-shift" : ""}${showRsvpAndMoneyGift ? "" : " footer-basic"}${rsvpEnabled ? "" : " footer-no-rsvp"}`} style={{ background: footerBg, "--rsvp-notch-bg": notchBg } as React.CSSProperties}>
+            <div className={`footer-container preview-footer-enter${infoActive ? " bump-shift" : ""}${showRsvpAndMoneyGift ? "" : " footer-basic"}${rsvpEnabled ? "" : " footer-no-rsvp"}${nav.compact ? " footer-nav-compact" : ""}`} style={{ background: footerBg, "--rsvp-notch-bg": notchBg } as React.CSSProperties}>
                 {showRsvpAndMoneyGift ? (
                   <>
                     {rsvpEnabled && (
@@ -858,17 +916,40 @@ const generateICS = (event: any, loc?: any) => {
                                 <span className="footer-label">Guestbook</span>
                             </a>
 
-                            <a className="moneygift-toggle" style={labelStyle} onClick={() => toggleCard("gift")}>
-                                <span id="moneygift-icon" className="footer-icon" style={iconMaskStyle("/MONEYGIFT.png")} />
-                                <span className="footer-label">Gift</span>
-                            </a>
+                            {/* Left slot: Money Gift, or the direct Calendar button
+                                that takes its place once Money Gift is off. */}
+                            {nav.leftSlot === "moneyGift" ? (
+                              <a className="moneygift-toggle" style={labelStyle} onClick={() => toggleCard("gift")}>
+                                  <span id="moneygift-icon" className="footer-icon" style={iconMaskStyle("/MONEYGIFT.png")} />
+                                  <span className="footer-label">Gift</span>
+                              </a>
+                            ) : nav.leftSlot === "calendar" ? (
+                              <a className="footer-calendar" style={labelStyle} onClick={() => openInfoTab("calendar")}>
+                                  <i className="fa-regular fa-calendar-days"></i>
+                                  <span className="footer-label">Calendar</span>
+                              </a>
+                            ) : null}
                         </div>
 
                         <div className="footer-side right">
-                            <a className="footer-info" style={labelStyle} onClick={() => toggleCard("info")}>
-                                <i className={`${infoActive ? "fa-solid" : "fa-regular"} fa-star floating-star${infoActive ? " visible" : ""}`}></i>
-                                <span className="footer-label" style={{ marginTop: "27px" }}>Info</span>
-                            </a>
+                            {/* Right slot: Info (the only expandable one), or a
+                                direct Calendar/Location button, or nothing. */}
+                            {nav.rightSlot === "info" ? (
+                              <a className="footer-info" style={labelStyle} onClick={() => toggleCard("info")}>
+                                  <i className={`${infoActive ? "fa-solid" : "fa-regular"} fa-star floating-star${infoActive ? " visible" : ""}`}></i>
+                                  <span className="footer-label" style={{ marginTop: "27px" }}>Info</span>
+                              </a>
+                            ) : nav.rightSlot === "calendar" ? (
+                              <a className="footer-info" style={labelStyle} onClick={() => openInfoTab("calendar")}>
+                                  <i className="fa-regular fa-calendar-days"></i>
+                                  <span className="footer-label">Calendar</span>
+                              </a>
+                            ) : nav.rightSlot === "location" ? (
+                              <a className="footer-info" style={labelStyle} onClick={() => openInfoTab("location")}>
+                                  <i className="fa-solid fa-location-dot"></i>
+                                  <span className="footer-label">Location</span>
+                              </a>
+                            ) : null}
 
                             <button className="contact-toggle" style={{ background: "none", border: "none", ...labelStyle }} onClick={() => toggleCard("contact")}>
                                 <span id="contact-icon" className="footer-icon" style={iconMaskStyle("/Contact.png")} />
@@ -886,15 +967,22 @@ const generateICS = (event: any, loc?: any) => {
                         <span className="footer-label">Guestbook</span>
                     </a>
 
+                    {/* Same toggles as the full footer — the row is evenly spread
+                        (space-around + flex:1), so it re-balances on its own when
+                        one or both items drop out. */}
+                    {showCalendar && (
                     <button className="footer-basic-item" style={{ background: "none", border: "none", ...labelStyle }} onClick={() => openInfoTab("calendar")}>
                         <i className="fa-regular fa-calendar-days"></i>
                         <span className="footer-label">Calendar</span>
                     </button>
+                    )}
 
+                    {showLocation && (
                     <button className="footer-basic-item" style={{ background: "none", border: "none", ...labelStyle }} onClick={() => openInfoTab("location")}>
                         <i className="fa-solid fa-location-dot"></i>
                         <span className="footer-label">Location</span>
                     </button>
+                    )}
 
                     <button className="footer-basic-item" style={{ background: "none", border: "none", ...labelStyle }} onClick={() => toggleCard("contact")}>
                         <span className="footer-icon" style={iconMaskStyle("/Contact.png")} />

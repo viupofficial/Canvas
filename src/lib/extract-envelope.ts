@@ -103,10 +103,19 @@ export function extractEnvelope(pages: any[]): EnvelopeExtract {
     o.src !== headSrc && o.src !== sealSrc && o.src !== bodySrc
   );
 
+  // Make the app's own public assets (/head.png, /body.png, …) portable across
+  // domains by reducing them to a pathname, but leave cross-origin URLs intact.
+  // Edited parts live on Vercel Blob storage (a different host); stripping those
+  // to a pathname pointed the preview/live page at a same-origin file that 404s,
+  // so the edited head/body/seal vanished. Only relativize same-origin URLs.
   function toRelativeSrc(src: string): string {
     try {
-      const url = new URL(src);
-      return url.pathname;
+      const origin = typeof window !== "undefined" ? window.location.origin : undefined;
+      const url = new URL(src, origin);
+      // Same-origin (our public/ assets) → relative path. Cross-origin (blob
+      // storage, other CDNs) → keep the absolute URL so it still resolves.
+      if (origin && url.origin === origin) return url.pathname;
+      return src;
     } catch {
       return src;
     }

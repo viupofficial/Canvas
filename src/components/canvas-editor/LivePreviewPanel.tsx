@@ -1,6 +1,6 @@
 "use client";
 
-import { useEventDataOptional } from "@/src/store/EventDataContext";
+import { useEventDataOptional, type CalendarData, type GiftData, type LocationData } from "@/src/store/EventDataContext";
 import { cssBackground, firstColorHex, type GradientDescriptor } from "@/src/lib/gradient";
 
 type PreviewTab = "contact" | "location" | "calendar" | "rsvp" | "money";
@@ -89,7 +89,7 @@ function ContactCard({ contacts }: { contacts: { name: string; phone: string }[]
   );
 }
 
-function LocationCard({ location }: { location: { address: string } | null }) {
+function LocationCard({ location }: { location: LocationData }) {
   const address = location?.address || "Enter a location";
   const mapSrc = location?.address
     ? `https://www.google.com/maps?q=${encodeURIComponent(location.address)}&output=embed`
@@ -113,7 +113,7 @@ function LocationCard({ location }: { location: { address: string } | null }) {
   );
 }
 
-function CalendarCard({ calendar }: { calendar: { date: string; startTime?: string; endTime?: string } | null }) {
+function CalendarCard({ calendar }: { calendar: CalendarData }) {
   return (
     <CardFrame title="Calendar">
       <p className="text-[11px] text-center text-[#191212] font-semibold mb-1">
@@ -154,7 +154,7 @@ function CalendarCard({ calendar }: { calendar: { date: string; startTime?: stri
 function GiftCard({
   moneyGift,
 }: {
-  moneyGift: { bank: string; account: number | string; image: string | null } | null;
+  moneyGift: GiftData;
 }) {
   return (
     <CardFrame title="Money Gift">

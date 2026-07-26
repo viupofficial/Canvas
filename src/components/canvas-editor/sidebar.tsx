@@ -636,20 +636,43 @@ function LocationTab({
   locationChanges: number;
   onLocationChanged?: () => void;
 }) {
-  const { eventData, setSection } = useEventData();
+  const { eventData, setSection, updateEventData } = useEventData();
   const [address, setAddress] = useState(eventData.location?.address ?? '');
+  // "Show Location" — ON ⇒ Location is reachable from the invitation footer.
+  // Defaults to ON unless explicitly turned off, so existing designs are
+  // unaffected. Mirrors the RSVP toggle pattern.
+  const [locationOn, setLocationOn] = useState(eventData.location?.enabled !== false);
 
   const limit = rules.locationChangeLimit;
   const limited = Number.isFinite(limit);
   const atLimit = limited && locationChanges >= limit;
   const remaining = limited ? Math.max(0, limit - locationChanges) : Infinity;
 
+  const toggleLocation = () => {
+    const next = !locationOn;
+    setLocationOn(next);
+    // Merge-patch so this works before an address exists (the section becomes
+    // `{ enabled: false }`) and never counts against the change limit — this is
+    // a visibility switch, not a location change.
+    updateEventData('location', { enabled: next });
+  };
+
+  // setSection replaces the section wholesale, so `enabled` has to be re-stated
+  // on every commit; an empty address keeps a bare `{ enabled: false }` because
+  // undefined would read back as ON.
+  const commitAddress = (value: string) => {
+    setSection(
+      'location',
+      value ? { address: value, enabled: locationOn } : locationOn ? null : { enabled: false },
+    );
+  };
+
   const handleChange = (value: string) => {
     setAddress(value);
     // For limited (Basic) packages the change must go through the gated Save so
     // it can be counted/blocked — no live commit. Other tiers keep live preview.
     if (!rules.isBasicPackage) {
-      setSection('location', value ? { address: value } : null);
+      commitAddress(value);
     }
   };
 
@@ -662,20 +685,50 @@ function LocationTab({
     const committed = (eventData.location?.address ?? '').trim();
     // Re-saving the same address isn't a change — commit it but don't count it.
     if (trimmed === committed) {
-      setSection('location', { address: trimmed });
+      commitAddress(trimmed);
       return;
     }
     if (atLimit) {
       showPackageToast(UPGRADE_MESSAGES.location);
       return;
     }
-    setSection('location', { address: trimmed });
+    commitAddress(trimmed);
     onLocationChanged?.();
   };
 
   return (
     <div>
       <div className="text-[#191212] text-[17px] font-bold mb-4">Location</div>
+
+      <div className="flex items-center justify-between mb-3">
+        <label className="text-xs text-gray-600">Show Location</label>
+        <button
+          type="button"
+          role="switch"
+          aria-checked={locationOn}
+          aria-label="Show Location"
+          title={locationOn ? 'Hide Location' : 'Show Location'}
+          onClick={toggleLocation}
+          className={`relative inline-flex h-5 w-9 shrink-0 items-center rounded-full transition-colors ${
+            locationOn ? 'bg-[#8C6B6B]' : 'bg-gray-300'
+          }`}
+        >
+          <span
+            className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${
+              locationOn ? 'translate-x-[18px]' : 'translate-x-[2px]'
+            }`}
+          />
+        </button>
+      </div>
+
+      {/* The address field stays editable when the toggle is off: it also fills
+          the LOCATION line of the calendar export (ICS / Google link). */}
+      {!locationOn && (
+        <div className="mb-3 rounded-md bg-[#F2E8E6] border border-[#E4D3CE] px-3 py-2 text-[11px] font-semibold text-[#7D5B59]">
+          Location is hidden from the invitation footer. The address below is still used for calendar exports.
+        </div>
+      )}
+
       {rules.isBasicPackage && (
         atLimit ? (
           <div className="mb-3 rounded-md bg-[#FBF1EC] border border-[#E7C9BC] px-3 py-2 text-[11px] font-semibold text-[#8C5B3F]">
@@ -710,6 +763,10 @@ function LocationTab({
 
 function CalendarTab() {
   const { eventData, setSection, updateEventData } = useEventData();
+  // "Show Calendar" — ON ⇒ Calendar is reachable from the invitation footer.
+  // Defaults to ON unless explicitly turned off, so existing designs are
+  // unaffected. Mirrors the RSVP toggle pattern.
+  const [calendarOn, setCalendarOn] = useState(eventData.calendar?.enabled !== false);
   const [date, setDate] = useState(eventData.calendar?.date ?? '');
   const [title, setTitle] = useState(eventData.calendar?.title ?? '');
   const [startTime, setStartTime] = useState(eventData.calendar?.startTime ?? '');
@@ -720,12 +777,22 @@ function CalendarTab() {
       : '',
   );
 
+  const toggleCalendar = () => {
+    const next = !calendarOn;
+    setCalendarOn(next);
+    // Merge-patch, so this also works before a date has been picked (the section
+    // becomes `{ enabled: false }`) and never disturbs the saved date/title.
+    updateEventData('calendar', { enabled: next });
+  };
+
   const handleDateChange = (value: string) => {
     setDate(value);
     if (value) {
       updateEventData('calendar', { date: value });
     } else {
-      setSection('calendar', null);
+      // Clearing the date drops the section — unless the toggle is off, which
+      // has to survive on its own (undefined would read back as ON).
+      setSection('calendar', calendarOn ? null : { enabled: false });
     }
   };
 
@@ -764,6 +831,7 @@ function CalendarTab() {
     }
     setSection('calendar', {
       date,
+      enabled: calendarOn,
       ...(startTime ? { startTime } : {}),
       ...(endTime ? { endTime } : {}),
       ...(title.trim() ? { title: title.trim() } : {}),
@@ -786,6 +854,37 @@ function CalendarTab() {
   return (
     <div>
       <div className="text-[#191212] text-[17px] font-bold mb-4">Calendar</div>
+
+      <div className="flex items-center justify-between mb-3">
+        <label className="text-xs text-gray-600">Show Calendar</label>
+        <button
+          type="button"
+          role="switch"
+          aria-checked={calendarOn}
+          aria-label="Show Calendar"
+          title={calendarOn ? 'Hide Calendar' : 'Show Calendar'}
+          onClick={toggleCalendar}
+          className={`relative inline-flex h-5 w-9 shrink-0 items-center rounded-full transition-colors ${
+            calendarOn ? 'bg-[#8C6B6B]' : 'bg-gray-300'
+          }`}
+        >
+          <span
+            className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${
+              calendarOn ? 'translate-x-[18px]' : 'translate-x-[2px]'
+            }`}
+          />
+        </button>
+      </div>
+
+      {/* Unlike RSVP, the fields stay editable when the toggle is off: the date
+          also feeds the canvas countdown element, which is independent of the
+          footer entry this toggle controls. */}
+      {!calendarOn && (
+        <div className="mb-3 rounded-md bg-[#F2E8E6] border border-[#E4D3CE] px-3 py-2 text-[11px] font-semibold text-[#7D5B59]">
+          Calendar is hidden from the invitation footer. The date below still drives the countdown.
+        </div>
+      )}
+
       <div className="flex flex-col gap-3">
         <label className="text-xs text-gray-600">Title</label>
         <input
@@ -1257,9 +1356,15 @@ function RSVPTab() {
   );
 }
 
-function MoneyGiftTab() {
+function MoneyGiftTab({ rules }: { rules: PackageRules }) {
   const { eventData, updateEventData, setSection } = useEventData();
   const current = eventData.moneyGift;
+  // "Show Money Gift" — ON ⇒ Money Gift is offered in the invitation footer.
+  // Defaults to ON unless explicitly turned off, so existing designs are
+  // unaffected. Purely a visibility switch: the bank / account / QR values
+  // below are left untouched when it goes off, and come straight back when it
+  // is turned on again.
+  const [giftOn, setGiftOn] = useState(current?.enabled !== false);
   const [bank, setBank] = useState(current?.bank ?? '');
   const [account, setAccount] = useState<number | ''>(
     (current?.account as number | '' | undefined) ?? ''
@@ -1269,6 +1374,14 @@ function MoneyGiftTab() {
 
   const pushField = (patch: Partial<NonNullable<typeof current>>) => {
     updateEventData('moneyGift', patch as any);
+  };
+
+  const toggleGift = () => {
+    const next = !giftOn;
+    setGiftOn(next);
+    // Merge-patch: only `enabled` changes, so the saved bank/account/QR data
+    // survives being hidden and reappears intact when switched back on.
+    pushField({ enabled: next });
   };
 
   const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -1285,12 +1398,46 @@ function MoneyGiftTab() {
       alert("Please fill all fields");
       return;
     }
-    setSection('moneyGift', { bank, account, image, qrSize });
+    setSection('moneyGift', { bank, account, image, qrSize, enabled: giftOn });
   };
 
   return (
     <div>
       <div className="text-[#191212] text-[17px] font-bold mb-4">Money Gift</div>
+
+      <div className="flex items-center justify-between mb-3">
+        <label className="text-xs text-gray-600">Show Money Gift</label>
+        <button
+          type="button"
+          role="switch"
+          aria-checked={giftOn}
+          aria-label="Show Money Gift"
+          title={giftOn ? 'Hide Money Gift' : 'Show Money Gift'}
+          onClick={toggleGift}
+          className={`relative inline-flex h-5 w-9 shrink-0 items-center rounded-full transition-colors ${
+            giftOn ? 'bg-[#8C6B6B]' : 'bg-gray-300'
+          }`}
+        >
+          <span
+            className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${
+              giftOn ? 'translate-x-[18px]' : 'translate-x-[2px]'
+            }`}
+          />
+        </button>
+      </div>
+
+      {/* Package rules outrank the toggle — it can hide a feature the package
+          includes, never unlock one it doesn't. */}
+      {!rules.showRsvpAndMoneyGift ? (
+        <div className="mb-3 rounded-md bg-[#FBF1EC] border border-[#E7C9BC] px-3 py-2 text-[11px] font-semibold text-[#8C5B3F]">
+          {UPGRADE_MESSAGES.moneyGift}
+        </div>
+      ) : !giftOn ? (
+        <div className="mb-3 rounded-md bg-[#F2E8E6] border border-[#E4D3CE] px-3 py-2 text-[11px] font-semibold text-[#7D5B59]">
+          Money Gift is hidden from the invitation footer. Your bank details and QR are kept.
+        </div>
+      ) : null}
+
       <div className="flex flex-col gap-3">
         <input
           value={bank}
@@ -1639,6 +1786,7 @@ function BackgroundTab({
   // leave the canvas frozen mid-drag.
   const padRef = React.useRef<HTMLDivElement>(null);
   const [padW, setPadW] = useState(0);
+  const [padH, setPadH] = useState(0);
   const dragRef = React.useRef<{ px: number; py: number; ox: number; oy: number; factor: number } | null>(null);
   // Refs mirror the latest scale + opts builder so the native wheel listener
   // (bound once per src) never reads a stale closure after other edits.
@@ -1667,7 +1815,11 @@ function BackgroundTab({
   useEffect(() => {
     const el = padRef.current;
     if (!el) return;
-    const measure = () => setPadW(el.getBoundingClientRect().width);
+    const measure = () => {
+      const r = el.getBoundingClientRect();
+      setPadW(r.width);
+      setPadH(r.height);
+    };
     measure();
     const ro = new ResizeObserver(measure);
     ro.observe(el);
@@ -1726,6 +1878,95 @@ function BackgroundTab({
     scaleXRef.current = 100;
     scaleYRef.current = 100;
   };
+
+  // ── Resize handles (fabric-style) ──────────────────────────────────────────
+  // Eight handles ride the background image's bounding box inside the preview so
+  // resizing feels like manipulating an object on the canvas. Each handle pins
+  // the opposite edge/corner and drags its own edge to the pointer, then maps the
+  // new box back to the same Scale X/Y + Offset X/Y state the numeric fields use
+  // (and pushes live to the canvas via the shared rAF-throttled applier).
+  const resizeRef = React.useRef<
+    { handle: string; L: number; T: number; R: number; B: number; padLeft: number; padTop: number } | null
+  >(null);
+
+  // The background image's current bounding box inside the preview, in pad pixels.
+  // Same math as padTransform: scaled about the pad centre, then shifted by offset.
+  const bgRectW = padW * (scaleX / 100);
+  const bgRectH = padH * (scaleY / 100);
+  const bgCx = padW / 2 + (offsetX * padW) / BG_CANVAS_W;
+  const bgCy = padH / 2 + (offsetY * padW) / BG_CANVAS_W;
+  const bgLeft = bgCx - bgRectW / 2;
+  const bgTop = bgCy - bgRectH / 2;
+
+  const onHandleDown = (e: React.PointerEvent, handle: string) => {
+    // Don't let the pad's body-drag (move) also start.
+    e.stopPropagation();
+    e.preventDefault();
+    const pr = padRef.current?.getBoundingClientRect();
+    if (!pr) return;
+    resizeRef.current = {
+      handle,
+      L: bgLeft,
+      T: bgTop,
+      R: bgLeft + bgRectW,
+      B: bgTop + bgRectH,
+      padLeft: pr.left,
+      padTop: pr.top,
+    };
+    (e.currentTarget as HTMLElement).setPointerCapture?.(e.pointerId);
+  };
+  const onHandleMove = (e: React.PointerEvent) => {
+    const r = resizeRef.current;
+    if (!r || padW <= 0 || padH <= 0) return;
+    const px = e.clientX - r.padLeft;
+    const py = e.clientY - r.padTop;
+    let { L, T, R, B } = r;
+    const { handle } = r;
+    // Move only the edges this handle owns; the rest stay pinned (the anchor).
+    if (handle.includes('w')) L = px;
+    if (handle.includes('e')) R = px;
+    if (handle.includes('n')) T = py;
+    if (handle.includes('s')) B = py;
+    // Clamp to the scale bounds, then rebuild the box from the pinned edge so the
+    // anchor never drifts even when the size hits its min/max.
+    const nsx = clampBgScale(Math.round(((R - L) / padW) * 100));
+    const nsy = clampBgScale(Math.round(((B - T) / padH) * 100));
+    const clW = (padW * nsx) / 100;
+    const clH = (padH * nsy) / 100;
+    const cx = handle.includes('w') ? R - clW / 2 : handle.includes('e') ? L + clW / 2 : (L + R) / 2;
+    const cy = handle.includes('n') ? B - clH / 2 : handle.includes('s') ? T + clH / 2 : (T + B) / 2;
+    const nox = Math.round(((cx - padW / 2) * BG_CANVAS_W) / padW);
+    const noy = Math.round(((cy - padH / 2) * BG_CANVAS_W) / padW);
+    scaleXRef.current = nsx;
+    scaleYRef.current = nsy;
+    setScaleX(nsx);
+    setScaleY(nsy);
+    setOffsetX(nox);
+    setOffsetY(noy);
+    scheduleLiveApply({
+      ...(buildOptsRef.current?.() ?? buildOpts()),
+      scaleX: nsx / 100,
+      scaleY: nsy / 100,
+      offsetX: nox,
+      offsetY: noy,
+    });
+  };
+  const onHandleUp = (e: React.PointerEvent) => {
+    resizeRef.current = null;
+    (e.currentTarget as HTMLElement).releasePointerCapture?.(e.pointerId);
+  };
+
+  // Corner + edge handles: fx/fy are fractions of the box, cursor hints the axis.
+  const BG_HANDLES: { id: string; fx: number; fy: number; cursor: string }[] = [
+    { id: 'nw', fx: 0, fy: 0, cursor: 'nwse-resize' },
+    { id: 'n', fx: 0.5, fy: 0, cursor: 'ns-resize' },
+    { id: 'ne', fx: 1, fy: 0, cursor: 'nesw-resize' },
+    { id: 'e', fx: 1, fy: 0.5, cursor: 'ew-resize' },
+    { id: 'se', fx: 1, fy: 1, cursor: 'nwse-resize' },
+    { id: 's', fx: 0.5, fy: 1, cursor: 'ns-resize' },
+    { id: 'sw', fx: 0, fy: 1, cursor: 'nesw-resize' },
+    { id: 'w', fx: 0, fy: 0.5, cursor: 'ew-resize' },
+  ];
 
   // Approximate the canvas transform inside the preview so the little image moves
   // 1:1 with the pointer while dragging (offset px ÷ the same drag factor).
@@ -1913,7 +2154,7 @@ function BackgroundTab({
               onPointerCancel={onPadPointerUp}
               onDoubleClick={resetPadTransform}
               title="Drag to move · Scroll to zoom · Double-click to reset"
-              className="relative h-28 rounded border border-gray-200 overflow-hidden bg-gray-50 cursor-grab active:cursor-grabbing touch-none select-none"
+              className="relative w-full aspect-9/16 rounded border border-gray-200 overflow-hidden bg-gray-50 cursor-grab active:cursor-grabbing touch-none select-none"
             >
               <img
                 src={src}
@@ -1922,7 +2163,7 @@ function BackgroundTab({
                 style={{ transform: padTransform }}
                 className="w-full h-full object-cover pointer-events-none will-change-transform"
               />
-              <div className="absolute top-1 right-1 flex gap-1">
+              <div className="absolute top-1 right-1 z-20 flex gap-1">
                 <button
                   type="button"
                   onClick={() => fileRef.current?.click()}
@@ -1941,9 +2182,36 @@ function BackgroundTab({
               </div>
               <div className="absolute bottom-1 left-1 right-1 flex justify-center pointer-events-none">
                 <span className="rounded bg-black/40 text-white text-[9px] font-semibold px-1.5 py-0.5">
-                  Drag to move · Scroll to zoom
+                  Drag to move · Handles or scroll to resize
                 </span>
               </div>
+
+              {/* Fabric-style selection box + resize handles over the image. */}
+              {padW > 0 && padH > 0 && (
+                <>
+                  <div
+                    className="absolute pointer-events-none border border-[#8C6B6B]"
+                    style={{ left: bgLeft, top: bgTop, width: bgRectW, height: bgRectH }}
+                  />
+                  {BG_HANDLES.map((hd) => (
+                    <div
+                      key={hd.id}
+                      onPointerDown={(e) => onHandleDown(e, hd.id)}
+                      onPointerMove={onHandleMove}
+                      onPointerUp={onHandleUp}
+                      onPointerCancel={onHandleUp}
+                      className="absolute z-10 w-2.5 h-2.5 rounded-xs bg-white border border-[#8C6B6B] shadow-sm"
+                      style={{
+                        left: bgLeft + hd.fx * bgRectW,
+                        top: bgTop + hd.fy * bgRectH,
+                        transform: 'translate(-50%, -50%)',
+                        cursor: hd.cursor,
+                        touchAction: 'none',
+                      }}
+                    />
+                  ))}
+                </>
+              )}
             </div>
           )}
 
@@ -2510,7 +2778,7 @@ export default function Sidebar({
       ) : active === 'rsvp' ? (
         <RSVPTab />
       ) : active === 'money' ? (
-        <MoneyGiftTab />
+        <MoneyGiftTab rules={pkgRules} />
       ) : active === 'wishlist' ? (
         <WishlistTab editorRef={editorRef} />
       ) : active === 'templates' ? (

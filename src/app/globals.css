@@ -2488,6 +2488,36 @@ img[alt="Mayaxasyraff"],
   display: none;
 }
 
+/* ── Compact navigation (a slot came up empty) ────────────────────────────────
+   The full bar carries two items per side and the base layout positions each
+   group by a fixed offset from the centre, which only works while both are
+   full: drop one and the survivor slides inward, leaving a hole at the bar's
+   edge. When a slot is empty we switch to the border-anchored layout the
+   preview footer already uses — Guestbook pinned left, Contact pinned right,
+   RSVP circle centred — so the remaining items stay evenly spread with no gap.
+
+   Safe to re-anchor here because the Info button (whose open-state offsets are
+   tuned against the base geometry: .move-right 68%, .floating-star.visible 5%)
+   only ever appears when BOTH slots are filled, i.e. never in compact mode. */
+.footer-container.footer-nav-compact {
+  padding: 8px 20px;
+}
+
+.footer-container.footer-nav-compact .footer-side.left {
+  left: 0.75rem;
+  right: auto;
+}
+
+.footer-container.footer-nav-compact .footer-side.right {
+  right: 0.75rem;
+  left: auto;
+}
+
+/* Only meaningful between two items; with one it would push it off-centre. */
+.footer-container.footer-nav-compact .footer-side.right a:nth-child(1) {
+  margin-right: 0;
+}
+
 /* The wide RSVP-era side padding only worked because the items were absolutely
    positioned; the Basic row is normal flow, so tighten the padding. The double
    class beats `.preview-local .footer-container` on specificity. */
