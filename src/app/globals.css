@@ -2577,6 +2577,31 @@ img[alt="Mayaxasyraff"],
 }
 
 /* ──────────────────────────────────────────────────────────────────────────
+   Continuous Scroll invitation (RsvpPlayer, presentation_mode = "scroll")
+   The pages scroll inside this one container. The invitation is full-bleed
+   artwork, so the bar itself must never be painted — but the container must
+   stay a real scroller: wheel, trackpad, touch and programmatic/smooth
+   scrolling all keep working. `overflow: hidden` is deliberately NOT used.
+   Hiding the bar this way also reserves no gutter, so the invitation column
+   keeps its full width and nothing reflows. Scoped to this container only —
+   the editor's own scrollbars are untouched.
+   ────────────────────────────────────────────────────────────────────────── */
+.scroll-invitation-container {
+  overflow-x: hidden;
+  /* Firefox */
+  scrollbar-width: none;
+  /* legacy Edge / IE */
+  -ms-overflow-style: none;
+}
+
+/* Chrome / Edge / Brave / Safari / Android / iOS Safari */
+.scroll-invitation-container::-webkit-scrollbar {
+  display: none;
+  width: 0;
+  height: 0;
+}
+
+/* ──────────────────────────────────────────────────────────────────────────
    Info-open choreography fixes for the preview footer (.preview-local)
    The preview re-anchors the right icon group to the border (see the
    containment rules above), so the base 68% circle slot and the star offset

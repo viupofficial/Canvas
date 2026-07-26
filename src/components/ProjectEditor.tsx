@@ -840,6 +840,10 @@ function ProjectEditorInner({
 
   const initialPages = isEventMode || projectId ? (initialCanvasJson?.pages ?? [null]) : undefined;
   const initialMusicUrl = isEventMode || projectId ? (initialCanvasJson?.musicUrl ?? null) : null;
+  // Persisted in the same json_data.canvas blob as the pages/music — designs
+  // saved before Continuous Scroll existed have no value and stay page mode.
+  const initialPresentationMode =
+    isEventMode || projectId ? (initialCanvasJson?.presentationMode ?? null) : null;
 
   return (
     <main className="h-screen overflow-hidden bg-brand-cream">
@@ -933,6 +937,7 @@ function ProjectEditorInner({
               onMusicChange={handleMusicChanged}
               initialPages={initialPages}
               initialMusicUrl={initialMusicUrl}
+              initialPresentationMode={initialPresentationMode}
               userId={userId}
               eventId={eventId}
               packageId={effectivePackageId}

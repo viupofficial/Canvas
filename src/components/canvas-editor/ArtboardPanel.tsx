@@ -3,15 +3,21 @@
 import React from "react";
 import { GripVertical, FileText } from "lucide-react";
 import type { EditorHandle } from "@/src/components/CanvasEditor";
+import {
+  DEFAULT_PRESENTATION_MODE,
+  type PresentationMode,
+} from "@/src/lib/presentationMode";
 
 export default function ArtboardPanel({
   pageCount,
   currentPageIndex,
   editorRef,
+  presentationMode = DEFAULT_PRESENTATION_MODE,
 }: {
   pageCount: number;
   currentPageIndex: number;
   editorRef?: React.RefObject<EditorHandle | null>;
+  presentationMode?: PresentationMode;
 }) {
   const handle = () => editorRef?.current ?? null;
 
@@ -59,11 +65,48 @@ export default function ArtboardPanel({
 
   const dropLine = <div className="h-0.5 -my-0.5 rounded-full bg-[#7D5B59]" />;
 
+  const scrollOn = presentationMode === "scroll";
+
   return (
-    <div
-      className="flex flex-col gap-1 p-2"
-      onDragOver={(e) => { if (draggingIndex !== null) e.preventDefault(); }}
-    >
+    <>
+      {/* ── Presentation ────────────────────────────────────────────────────
+          Controls the preview / published invitation only. The editor canvas
+          below stays page-by-page whatever this is set to. */}
+      <div className="border-b border-[#EDE2DE] p-3">
+        <label className="flex items-start gap-3 cursor-pointer select-none">
+          <button
+            type="button"
+            role="switch"
+            aria-checked={scrollOn}
+            onClick={() =>
+              handle()?.setPresentationMode(scrollOn ? "page" : "scroll")
+            }
+            className={`relative mt-0.5 h-5 w-9 shrink-0 rounded-full transition-colors ${
+              scrollOn ? "bg-[#7D5B59]" : "bg-[#D9C9C5]"
+            }`}
+          >
+            <span
+              className={`absolute top-0.5 h-4 w-4 rounded-full bg-white shadow-sm transition-[left] ${
+                scrollOn ? "left-[18px]" : "left-0.5"
+              }`}
+            />
+          </button>
+          <span className="flex flex-col gap-0.5">
+            <span className="text-[13px] font-[600] text-[#7D5B59]">
+              Continuous Scroll
+            </span>
+            <span className="text-[11px] leading-snug text-[#7D5B59]/60">
+              Display all invitation pages as one continuous scrolling
+              experience.
+            </span>
+          </span>
+        </label>
+      </div>
+
+      <div
+        className="flex flex-col gap-1 p-2"
+        onDragOver={(e) => { if (draggingIndex !== null) e.preventDefault(); }}
+      >
       {Array.from({ length: pageCount }, (_, i) => i).map((pageIndex) => {
         const isActive = pageIndex === currentPageIndex;
         const isDragging = pageIndex === draggingIndex;
@@ -127,6 +170,7 @@ export default function ArtboardPanel({
           </React.Fragment>
         );
       })}
-    </div>
+      </div>
+    </>
   );
 }

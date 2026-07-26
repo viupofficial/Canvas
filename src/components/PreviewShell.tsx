@@ -6,6 +6,7 @@ import EventFooter from "@/src/components/EventFooter";
 import PhonePreviewFrame from "@/src/components/PhonePreviewFrame";
 import { getCanvasGuestbook } from "@/src/lib/viupApi";
 import { getPackageRules } from "@/src/lib/packageRules";
+import { normalizePresentationMode, type PresentationMode } from "@/src/lib/presentationMode";
 
 /**
  * Shared preview shell used by BOTH the local preview (/preview-local) and the
@@ -30,6 +31,9 @@ export type PreviewShellData = {
   userId?: string | number | null;
   eventId?: string | number | null;
   packageId?: string | number | null;
+  // "page" (default) or "scroll" — the single source of truth for how the
+  // invitation is presented, shared by /preview-local and the published /e page.
+  presentationMode?: PresentationMode | string | null;
 };
 
 export default function PreviewShell({ data }: { data: PreviewShellData }) {
@@ -72,6 +76,7 @@ export default function PreviewShell({ data }: { data: PreviewShellData }) {
         borderUrl={data.borderUrl}
         eventDate={data.calendar?.date ?? null}
         fillMode="cover"
+        presentationMode={normalizePresentationMode(data.presentationMode)}
         guestMessages={guestMessages.length > 0 ? guestMessages : undefined}
       />
       <EventFooter

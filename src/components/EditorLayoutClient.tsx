@@ -2,6 +2,10 @@
 //ni betul betul atas canva
 import React, { useCallback, useRef, useState } from "react";
 import CanvasEditor, { EditorHandle, LayerInfo } from "./CanvasEditor";
+import {
+  DEFAULT_PRESENTATION_MODE,
+  type PresentationMode,
+} from "@/src/lib/presentationMode";
 import Inspector from "./canvas-editor/inspector";
 import PhonePreviewWrapper from "./canvas-editor/PhonePreviewWrapper";
 import MobileToolbar from "./canvas-editor/mobile-toolbar";
@@ -23,6 +27,7 @@ export default function EditorLayoutClient({
   onMusicChange,
   initialPages,
   initialMusicUrl,
+  initialPresentationMode,
   userId,
   eventId,
   packageId,
@@ -41,6 +46,7 @@ export default function EditorLayoutClient({
   onMusicChange?: (url: string) => void;
   initialPages?: any[] | null;
   initialMusicUrl?: string | null;
+  initialPresentationMode?: PresentationMode | string | null;
   userId?: string | number | null;
   eventId?: string | number | null;
   packageId?: number | null;
@@ -50,6 +56,11 @@ export default function EditorLayoutClient({
   const [selected, setSelected] = useState<any | null>(null);
   const [layers, setLayers] = useState<LayerInfo[]>([]);
   const [pagesInfo, setPagesInfo] = useState({ count: 1, current: 0 });
+  // Mirrors the editor's Artboard → Continuous Scroll setting so the Inspector
+  // toggle reflects it. The editor owns the value; this is only for display.
+  const [presentationMode, setPresentationMode] = useState<PresentationMode>(
+    DEFAULT_PRESENTATION_MODE
+  );
   const [internalPreviewMode, setInternalPreviewMode] = useState<"desktop" | "phone">("desktop");
   const [mobileActiveTab, setMobileActiveTab] = useState<any>(null);
 
@@ -88,6 +99,8 @@ export default function EditorLayoutClient({
       onMusicChange={onMusicChange}
       initialPages={initialPages}
       initialMusicUrl={initialMusicUrl}
+      initialPresentationMode={initialPresentationMode}
+      onPresentationModeChange={setPresentationMode}
       contacts={contacts}
       moneyGift={moneyGift}
       calendar={calendar}
@@ -198,7 +211,15 @@ export default function EditorLayoutClient({
         </div>
       ) : (
         <div className="hidden lg:block">
-          <Inspector selected={selected} updateSelected={updateSelected} editorRef={editorRef} layers={layers} pageCount={pagesInfo.count} currentPageIndex={pagesInfo.current} />
+          <Inspector
+            selected={selected}
+            updateSelected={updateSelected}
+            editorRef={editorRef}
+            layers={layers}
+            pageCount={pagesInfo.count}
+            currentPageIndex={pagesInfo.current}
+            presentationMode={presentationMode}
+          />
         </div>
       )}
 

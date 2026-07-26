@@ -21,6 +21,9 @@ export default function EventPageClient({ data }: { data: any }) {
         userId: data.userId ?? null,
         eventId: data.eventId ?? null,
         packageId: data.packageId ?? null,
+        // Absent on invitations published before Continuous Scroll existed —
+        // PreviewShell normalizes that back to page mode.
+        presentationMode: data.presentationMode ?? null,
       }}
     />
   );

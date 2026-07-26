@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { collectFontFamilies, preloadFonts } from "@/src/lib/fonts";
 import MusicPlayer from "@/src/components/MusicPlayer";
+import { normalizePresentationMode, type PresentationMode } from "@/src/lib/presentationMode";
 
 export type EnvPos = {
   left: number;
@@ -49,6 +50,98 @@ export type EnvelopeData = {
 const STAGE_W = 396;
 const STAGE_H = 704;
 
+// ── Continuous-scroll shared background ─────────────────────────────────────
+// In scroll mode each page's background is lifted OFF its fabric canvas and
+// painted by one shared DOM layer behind the whole scrolling column, so pages
+// that carry the same picture share a single background whose transform is
+// interpolated from the scroll position instead of being re-drawn per page.
+//
+// A background picture is described in stage (396×704) coordinates. The <img>
+// is laid out once at its natural size and everything fabric encoded in
+// left/top/scale/angle/flip is folded into ONE css transform — so moving from
+// one page's background to the next animates a single GPU-accelerated property.
+type BgImageBox = {
+  src: string;
+  naturalWidth: number;
+  naturalHeight: number;
+  // transform-origin, in unscaled image pixels (fabric's origin point).
+  originX: number;
+  originY: number;
+  // Translation that lands the origin point where fabric put it.
+  x: number;
+  y: number;
+  // Mirroring is folded in as a negative scale.
+  scaleX: number;
+  scaleY: number;
+  angle: number;
+  opacity: number;
+};
+
+type PageBackground = { color: string | null; image: BgImageBox | null };
+
+// A page's background moves to its own saved transform as soon as that page
+// becomes active — never tied to raw scroll position. Kept just slow enough to
+// read as a smooth glide rather than a snap, while still landing well before
+// the guest has finished scrolling into the page.
+const BG_TRANSFORM_MS = 880;
+const BG_CROSSFADE_MS = 680;
+const BG_IMAGE_TRANSITION =
+  `transform ${BG_TRANSFORM_MS}ms cubic-bezier(0.22, 1, 0.36, 1), opacity 600ms ease-out`;
+const BG_COLOR_TRANSITION = `background-color ${BG_CROSSFADE_MS}ms ease-out`;
+const BG_LAYER_TRANSITION = `opacity ${BG_CROSSFADE_MS}ms ease-out`;
+
+/** Fabric's origin keyword → its fraction along that axis. */
+const originFraction = (origin: string) =>
+  origin === "center" ? 0.5 : origin === "right" || origin === "bottom" ? 1 : 0;
+
+/**
+ * Read a loaded page canvas' background as a shared-layer descriptor.
+ *
+ * Returns null when the page paints something the shared layer can't take over
+ * safely — today that means a fabric Pattern / gradient on `backgroundColor`
+ * (tiled backgrounds). Those keep rendering on their own canvas exactly as they
+ * do in page mode; the shared layer simply holds its previous state behind them.
+ */
+function readSharedBackground(rc: any): PageBackground | null {
+  const bgColor = rc.backgroundColor;
+  // Pattern / gradient objects stay on the canvas — see above.
+  if (bgColor && typeof bgColor === "object") return null;
+
+  let image: BgImageBox | null = null;
+  const bi = rc.backgroundImage as any;
+  if (bi) {
+    const el = bi.getElement?.() as HTMLImageElement | undefined;
+    const src: string | null = bi.getSrc?.() ?? el?.src ?? null;
+    const natW = (el?.naturalWidth || bi.width || 0) as number;
+    const natH = (el?.naturalHeight || bi.height || 0) as number;
+    if (src && natW > 0 && natH > 0) {
+      // fabric places the image so that its origin point sits at (left, top) and
+      // rotates/scales about that point — which maps exactly onto a CSS
+      // transform-origin at the same point plus a translate.
+      const originX = originFraction(String(bi.originX ?? "left")) * natW;
+      const originY = originFraction(String(bi.originY ?? "top")) * natH;
+      image = {
+        src,
+        naturalWidth: natW,
+        naturalHeight: natH,
+        originX,
+        originY,
+        x: (bi.left ?? 0) - originX,
+        y: (bi.top ?? 0) - originY,
+        scaleX: (bi.scaleX ?? 1) * (bi.flipX ? -1 : 1),
+        scaleY: (bi.scaleY ?? 1) * (bi.flipY ? -1 : 1),
+        angle: bi.angle ?? 0,
+        opacity: bi.opacity ?? 1,
+      };
+    }
+  }
+
+  // No explicit colour behaves like the player's own canvas default (white),
+  // which is what page mode shows for a page that never set one.
+  const color = typeof bgColor === "string" && bgColor ? bgColor : "#ffffff";
+  return { color, image };
+}
+
 function originOffset(pos: EnvPos | undefined) {
   const p = pos ?? { left: 0, top: 0, width: 0, height: 0, angle: 0, originX: "left" as const, originY: "top" as const };
   let dx = 0, dy = 0;
@@ -93,6 +186,10 @@ export type RsvpPlayerProps = {
   //  - "cover": fill the whole frame edge-to-edge (scaled up, edges cropped).
   //            Used by the in-app preview so it looks full-bleed on a phone.
   fillMode?: "fit" | "cover";
+  // "page" (default) keeps the page-by-page player; "scroll" stacks every page
+  // vertically in one continuous scrolling container behind a shared, scroll-
+  // interpolated background. See src/lib/presentationMode.ts.
+  presentationMode?: PresentationMode;
 };
 
 // Shown by the on-page Guestbook element while the event has no wishes yet.
@@ -100,8 +197,18 @@ export type RsvpPlayerProps = {
 // to guests on a live invite.
 const GUESTBOOK_EMPTY_TEXT = "No guestbook entries yet.";
 
-export default function RsvpPlayer({ pages, envelope, musicUrl, borderUrl, eventDate, guestMessages, fillMode = "fit" }: RsvpPlayerProps) {
+export default function RsvpPlayer({
+  pages,
+  envelope,
+  musicUrl,
+  borderUrl,
+  eventDate,
+  guestMessages,
+  fillMode = "fit",
+  presentationMode,
+}: RsvpPlayerProps) {
   const rootRef = useRef<HTMLDivElement>(null);
+  const isScroll = normalizePresentationMode(presentationMode) === "scroll";
 
   const [gone, setGone] = useState(!envelope);
   const [animating, setAnimating] = useState(false);
@@ -130,6 +237,23 @@ export default function RsvpPlayer({ pages, envelope, musicUrl, borderUrl, event
   const bgHomeRef = useRef<Array<{ scaleX: number; scaleY: number; left: number; top: number; opacity: number; src: string | null } | null>>([]);
   const bgAnimRef = useRef<number | null>(null);
   const prevCurrentRef = useRef(0);
+
+  // ── Continuous-scroll state (unused in page mode) ─────────────────────────
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const bgLayerARef = useRef<HTMLDivElement>(null);
+  const bgLayerBRef = useRef<HTMLDivElement>(null);
+  const bgColorARef = useRef<HTMLDivElement>(null);
+  const bgColorBRef = useRef<HTMLDivElement>(null);
+  const bgImgARef = useRef<HTMLImageElement>(null);
+  const bgImgBRef = useRef<HTMLImageElement>(null);
+  // Each page's background, lifted off its canvas and handed to the shared layer.
+  const pageBgRef = useRef<Array<PageBackground | null>>([]);
+  // Lets the async page loads nudge the scroll controller once a background
+  // descriptor becomes available (canvases finish loading after the first paint).
+  const requestBgSyncRef = useRef<(() => void) | null>(null);
+  // Page nearest the viewport centre. A ref, not state: this updates on scroll
+  // and must never re-render the player (and never touches editor selection).
+  const activeScrollPageRef = useRef(0);
 
   // Keep refs in sync so the imperative (non-React) event handlers below read
   // the latest values without re-binding on every change.
@@ -215,6 +339,9 @@ export default function RsvpPlayer({ pages, envelope, musicUrl, borderUrl, event
   // the background transform of the page we just left and eases to its own, so a
   // 100%→120% scale (or a position change) plays out as a smooth zoom/pan.
   useEffect(() => {
+    // Continuous scroll has no "current page" to switch to — every page is laid
+    // out at once and the background is driven by scroll position instead.
+    if (isScroll) return;
     const prev = prevCurrentRef.current;
     prevCurrentRef.current = current;
 
@@ -279,10 +406,12 @@ export default function RsvpPlayer({ pages, envelope, musicUrl, borderUrl, event
         bgAnimRef.current = null;
       }
     };
-  }, [current, pages]);
+  }, [current, pages, isScroll]);
 
-  // Swipe / scroll / keyboard navigation between pages.
+  // Swipe / scroll / keyboard navigation between pages. Page mode only — in
+  // scroll mode the container scrolls natively and hijacking it would fight it.
   useEffect(() => {
+    if (isScroll) return;
     const el = pagerRef.current;
     if (!el) return;
 
@@ -325,7 +454,7 @@ export default function RsvpPlayer({ pages, envelope, musicUrl, borderUrl, event
       el.removeEventListener("touchend", onTouchEnd);
       window.removeEventListener("keydown", onKey);
     };
-  }, [pages.length]);
+  }, [pages.length, isScroll]);
 
   useEffect(() => {
     if (!rootRef.current) return;
@@ -521,10 +650,42 @@ export default function RsvpPlayer({ pages, envelope, musicUrl, borderUrl, event
       cancellers.push(() => clearInterval(wid));
     };
 
+    // Scroll mode: a page's entrance animations should play when the guest
+    // reaches it, not all at once on load. Pages finish loading asynchronously,
+    // so a section may become visible before (seen) or after (pending) its
+    // canvas is ready — handle both, and only ever run each page once.
+    const pendingAnimations = new Map<Element, () => void>();
+    const seenSections = new Set<Element>();
+    const sectionObserver = isScroll
+      ? new IntersectionObserver(
+          (entries) => {
+            for (const entry of entries) {
+              if (!entry.isIntersecting) continue;
+              const run = pendingAnimations.get(entry.target);
+              if (run) {
+                pendingAnimations.delete(entry.target);
+                run();
+              } else {
+                seenSections.add(entry.target);
+              }
+              // One-shot: never restart from small scroll movements.
+              sectionObserver?.unobserve(entry.target);
+            }
+          },
+          { root: scrollRef.current, threshold: 0.2 },
+        )
+      : null;
+    const armAnimations = (section: Element, run: () => void) => {
+      if (!isScroll) { run(); return; }
+      if (seenSections.has(section)) run();
+      else pendingAnimations.set(section, run);
+    };
+
     root.innerHTML = "";
     wrappersRef.current = [];
     pageCanvasesRef.current = [];
     bgHomeRef.current = [];
+    pageBgRef.current = [];
     prevCurrentRef.current = 0;
     setCurrent(0);
     currentRef.current = 0;
@@ -534,18 +695,29 @@ export default function RsvpPlayer({ pages, envelope, musicUrl, borderUrl, event
       const fabric = mod.fabric ?? mod.default ?? mod;
       pages.forEach((pageData: any, index: number) => {
         const wrapper = document.createElement("div");
-        // Every page is stacked in the same spot and stays there — the canvas
-        // never moves or scales. The foreground switches instantly (no opacity
-        // crossfade, so text/elements never appear to morph between pages); the
-        // background is animated separately in the page-change effect, easing
-        // from the previous page's transform to this page's own.
-        wrapper.style.cssText =
-          `position:absolute;top:0;left:0;width:${w}px;height:${h}px;line-height:0;` +
-          `pointer-events:none;user-select:none;` +
-          `opacity:${index === 0 ? 1 : 0};` +
-          `z-index:${index === 0 ? 2 : 1};`;
+        if (isScroll) {
+          // Continuous scroll: the same page wrappers, stacked vertically in
+          // document order instead of layered on top of each other. Each stays a
+          // separate section (own canvas, own elements, own animations) and they
+          // butt up against each other exactly, so there are no seams or gaps.
+          wrapper.style.cssText =
+            `position:relative;width:${w}px;height:${h}px;line-height:0;` +
+            `pointer-events:none;user-select:none;`;
+        } else {
+          // Every page is stacked in the same spot and stays there — the canvas
+          // never moves or scales. The foreground switches instantly (no opacity
+          // crossfade, so text/elements never appear to morph between pages); the
+          // background is animated separately in the page-change effect, easing
+          // from the previous page's transform to this page's own.
+          wrapper.style.cssText =
+            `position:absolute;top:0;left:0;width:${w}px;height:${h}px;line-height:0;` +
+            `pointer-events:none;user-select:none;` +
+            `opacity:${index === 0 ? 1 : 0};` +
+            `z-index:${index === 0 ? 2 : 1};`;
+        }
         wrapper.id = "page-" + index;
         wrappersRef.current[index] = wrapper;
+        sectionObserver?.observe(wrapper);
 
         const canvasEl = document.createElement("canvas");
         canvasEl.id = "canvas-" + index;
@@ -585,6 +757,22 @@ export default function RsvpPlayer({ pages, envelope, musicUrl, borderUrl, event
                   src: bi.getSrc?.() ?? bi._element?.src ?? null,
                 }
               : null;
+            // Scroll mode: hand this page's background to the shared layer and
+            // clear it off the canvas, so the one shared background stays
+            // visible through every page as the guest scrolls. Pages whose
+            // background the shared layer can't take over (tiled patterns) keep
+            // painting it themselves, exactly as in page mode.
+            if (isScroll) {
+              const shared = readSharedBackground(rc);
+              pageBgRef.current[index] = shared;
+              if (shared) {
+                rc.backgroundImage = undefined;
+                // Empty (not "#ffffff") so the canvas stays transparent and the
+                // shared background shows through the page's own artwork.
+                rc.backgroundColor = "";
+              }
+              requestBgSyncRef.current?.();
+            }
             const toRemove: any[] = [];
             rc.forEachObject((obj: any) => {
               if (obj?.isBorder) {
@@ -602,7 +790,9 @@ export default function RsvpPlayer({ pages, envelope, musicUrl, borderUrl, event
               obj.setCoords();
             });
             toRemove.forEach((o) => rc.remove(o));
-            startAnimations(rc);
+            // Page mode runs these immediately (unchanged); scroll mode waits
+            // until the page section actually scrolls into view.
+            armAnimations(wrapper, () => startAnimations(rc));
             startGallerySlideshow(rc);
             startCountdown(rc);
             startGuestbook(rc);
@@ -648,10 +838,254 @@ export default function RsvpPlayer({ pages, envelope, musicUrl, borderUrl, event
       cancelled = true;
       cancellers.forEach((c) => { try { c(); } catch {} });
       createdCanvases.forEach((c) => { try { c.dispose(); } catch {} });
+      sectionObserver?.disconnect();
+      pendingAnimations.clear();
+      seenSections.clear();
       root.innerHTML = "";
       wrappersRef.current = [];
+      pageCanvasesRef.current = [];
+      pageBgRef.current = [];
     };
-  }, [pages, borderUrl, eventDate, guestMessages]);
+  }, [pages, borderUrl, eventDate, guestMessages, isScroll]);
+
+  // ── Continuous scroll: shared background, driven by the ACTIVE PAGE ───────
+  // The background does NOT follow raw scroll position. Each page owns a saved
+  // background transform; while the guest scrolls within a page that transform
+  // stays put, and the moment a different page becomes active the shared layer
+  // animates to that page's values in one short, quick move.
+  //
+  //  - same picture on the new page → the SAME layer stays and only its css
+  //    transform animates. Nothing is re-loaded, crossfaded, or duplicated;
+  //  - different picture → a quick crossfade, with the new picture already at
+  //    its own scale/position the instant it appears. The outgoing layer stays
+  //    fully opaque underneath until it is covered, so nothing ever flashes.
+  //
+  // Active-page detection is an IntersectionObserver over the page sections
+  // (root = the scroller, middle band), so nothing is recomputed per scroll
+  // frame and the transform is written only when the index actually changes.
+  useEffect(() => {
+    if (!isScroll) return;
+    const scroller = scrollRef.current;
+    const layerA = bgLayerARef.current;
+    const layerB = bgLayerBRef.current;
+    const colorA = bgColorARef.current;
+    const colorB = bgColorBRef.current;
+    const imgA = bgImgARef.current;
+    const imgB = bgImgBRef.current;
+    if (!scroller || !layerA || !layerB || !colorA || !colorB || !imgA || !imgB) return;
+
+    const layers = [layerA, layerB];
+    const colorEls = [colorA, colorB];
+    const imgEls = [imgA, imgB];
+
+    // Guests who ask for less motion get the same background changes with no
+    // animation at all — scrolling itself is untouched.
+    const motionQuery = window.matchMedia?.("(prefers-reduced-motion: reduce)");
+    let reduceMotion = !!motionQuery?.matches;
+    const applyTransitions = () => {
+      for (let i = 0; i < 2; i++) {
+        imgEls[i].style.transition = reduceMotion ? "none" : BG_IMAGE_TRANSITION;
+        colorEls[i].style.transition = reduceMotion ? "none" : BG_COLOR_TRANSITION;
+        layers[i].style.transition = reduceMotion ? "none" : BG_LAYER_TRANSITION;
+      }
+    };
+    applyTransitions();
+
+    const applyImage = (el: HTMLImageElement, box: BgImageBox | null) => {
+      if (!box) {
+        el.style.display = "none";
+        delete el.dataset.src;
+        return;
+      }
+      if (el.dataset.src !== box.src) {
+        el.dataset.src = box.src;
+        el.src = box.src;
+      }
+      el.style.display = "block";
+      el.style.width = box.naturalWidth + "px";
+      el.style.height = box.naturalHeight + "px";
+      el.style.opacity = String(box.opacity);
+      el.style.transformOrigin = box.originX + "px " + box.originY + "px";
+      // One composited property carries position, scale and rotation, so the
+      // page-to-page change is a single hardware-accelerated transition.
+      el.style.transform =
+        "translate3d(" + box.x + "px, " + box.y + "px, 0) " +
+        "rotate(" + box.angle + "deg) " +
+        "scale(" + box.scaleX + ", " + box.scaleY + ")";
+    };
+
+    const paint = (slot: number, bg: PageBackground) => {
+      colorEls[slot].style.backgroundColor = bg.color ?? "transparent";
+      applyImage(imgEls[slot], bg.image);
+    };
+
+    // Write to a layer without animating it there from wherever it happened to
+    // be — an incoming picture must appear already at its own scale/position.
+    const paintInstantly = (slot: number, bg: PageBackground) => {
+      const imgTransition = imgEls[slot].style.transition;
+      const colorTransition = colorEls[slot].style.transition;
+      imgEls[slot].style.transition = "none";
+      colorEls[slot].style.transition = "none";
+      paint(slot, bg);
+      layers[slot].getBoundingClientRect(); // flush before restoring transitions
+      imgEls[slot].style.transition = imgTransition;
+      colorEls[slot].style.transition = colorTransition;
+    };
+
+    let visibleSlot = 0;
+    let painted = false;
+    let retireTimer: ReturnType<typeof setTimeout> | null = null;
+
+    const showBackground = (bg: PageBackground) => {
+      if (retireTimer) { clearTimeout(retireTimer); retireTimer = null; }
+
+      if (!painted) {
+        // First paint of the invitation: seed the visible layer outright.
+        painted = true;
+        visibleSlot = 0;
+        paintInstantly(0, bg);
+        layers[0].style.zIndex = "1";
+        layers[0].style.opacity = "1";
+        layers[1].style.zIndex = "0";
+        layers[1].style.opacity = "0";
+        return;
+      }
+
+      const shownSrc = imgEls[visibleSlot].dataset.src ?? null;
+      const nextSrc = bg.image?.src ?? null;
+      if (nextSrc === shownSrc) {
+        // Same picture (or both colour-only): keep this very layer and let its
+        // css transition animate scale/position to the new page's values.
+        paint(visibleSlot, bg);
+        return;
+      }
+
+      // Different picture: bring it up on the other layer, already positioned,
+      // and fade it in over the outgoing one.
+      const nextSlot = visibleSlot === 0 ? 1 : 0;
+      const outgoing = visibleSlot;
+      layers[nextSlot].style.transition = "none";
+      layers[nextSlot].style.opacity = "0";
+      paintInstantly(nextSlot, bg);
+      layers[nextSlot].style.zIndex = "1";
+      layers[outgoing].style.zIndex = "0";
+      // Commit opacity:0 before switching the transition back on, or the fade
+      // would be skipped and the new picture would pop in.
+      layers[nextSlot].getBoundingClientRect();
+      layers[nextSlot].style.transition = reduceMotion ? "none" : BG_LAYER_TRANSITION;
+      layers[nextSlot].style.opacity = "1";
+      visibleSlot = nextSlot;
+      // The outgoing layer is only retired once it is fully covered — dropping
+      // it any earlier is what would show a blank frame mid-crossfade.
+      retireTimer = setTimeout(() => {
+        layers[outgoing].style.opacity = "0";
+        retireTimer = null;
+      }, reduceMotion ? 0 : BG_CROSSFADE_MS + 60);
+    };
+
+    let activeIndex = -1;
+    const applyActive = (index: number) => {
+      // Pages that paint their own (tiled) background have no descriptor; they
+      // are opaque, so the shared layer just holds what it had behind them.
+      const bg = pageBgRef.current[index];
+      if (!bg) return;
+      showBackground(bg);
+    };
+
+    const intersecting = new Set<number>();
+    const observed = new Set<Element>();
+
+    // Of the sections crossing the middle band, the active one is whichever sits
+    // closest to the centre of the viewport. Runs only on observer callbacks
+    // (never per scroll frame) and over at most a couple of elements.
+    const pickActive = () => {
+      if (!intersecting.size) return;
+      const rootRect = scroller.getBoundingClientRect();
+      const middle = rootRect.top + rootRect.height / 2;
+      let best = -1;
+      let bestDistance = Infinity;
+      for (const index of intersecting) {
+        const section = wrappersRef.current[index];
+        if (!section) continue;
+        const rect = section.getBoundingClientRect();
+        const distance = Math.abs(rect.top + rect.height / 2 - middle);
+        if (distance < bestDistance) { bestDistance = distance; best = index; }
+      }
+      // Fires only on a real change of page — equally in both scroll
+      // directions — so small movements can't restart the animation.
+      if (best < 0 || best === activeIndex) return;
+      activeIndex = best;
+      activeScrollPageRef.current = best;
+      applyActive(best);
+    };
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        for (const entry of entries) {
+          const index = wrappersRef.current.indexOf(entry.target as HTMLDivElement);
+          if (index < 0) continue;
+          if (entry.isIntersecting) intersecting.add(index);
+          else intersecting.delete(index);
+        }
+        pickActive();
+      },
+      // A page becomes active once it covers the middle of the invitation.
+      { root: scroller, rootMargin: "-45% 0px -45% 0px", threshold: 0 },
+    );
+
+    // Sections and their background descriptors both arrive asynchronously (the
+    // page canvases load one by one), so the build effect calls this as each
+    // page lands.
+    const sync = () => {
+      for (const section of wrappersRef.current) {
+        if (section && !observed.has(section)) {
+          observed.add(section);
+          observer.observe(section);
+        }
+      }
+      if (activeIndex < 0) {
+        activeIndex = 0;
+        activeScrollPageRef.current = 0;
+      }
+      // Re-apply in case THIS page is the active one and its descriptor only
+      // just became available. Re-painting identical values is a no-op.
+      applyActive(activeIndex);
+    };
+    requestBgSyncRef.current = sync;
+    sync();
+
+    const onMotionChange = () => {
+      reduceMotion = !!motionQuery?.matches;
+      applyTransitions();
+    };
+    motionQuery?.addEventListener?.("change", onMotionChange);
+
+    return () => {
+      if (retireTimer) clearTimeout(retireTimer);
+      requestBgSyncRef.current = null;
+      observer.disconnect();
+      intersecting.clear();
+      observed.clear();
+      motionQuery?.removeEventListener?.("change", onMotionChange);
+    };
+  }, [isScroll, pages]);
+
+  // The envelope must be opened before the guest can reach the rest of the
+  // invitation — scrolling can't be allowed to bypass the opening animation.
+  // `overflow: hidden` alone only stops *user* scrolling: the container can
+  // still be moved programmatically (anchor jumps, focus, scrollIntoView), so
+  // pin it back to the top until the envelope has been opened.
+  useEffect(() => {
+    if (!isScroll) return;
+    const scroller = scrollRef.current;
+    if (!scroller || gone) return;
+    scroller.scrollTop = 0;
+    const pinToTop = () => {
+      if (scroller.scrollTop !== 0) scroller.scrollTop = 0;
+    };
+    scroller.addEventListener("scroll", pinToTop, { passive: true });
+    return () => scroller.removeEventListener("scroll", pinToTop);
+  }, [isScroll, gone]);
 
   return (
     <>
@@ -836,34 +1270,155 @@ export default function RsvpPlayer({ pages, envelope, musicUrl, borderUrl, event
       <div aria-hidden style={{ height: "100dvh", pointerEvents: "none" }} />
 
       {/* Paginated "play mode" stage — one page at a time. */}
-      <div
-        ref={pagerRef}
-        style={{
-          position: "fixed",
-          inset: 0,
-          zIndex: 1,
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          // "fit" reserves room for the sticky footer nav; "cover" fills edge-to-edge.
-          paddingBottom: fillMode === "cover" ? 0 : 96,
-          overflow: "hidden",
-          touchAction: "none",
-        }}
-      >
+      {!isScroll && (
         <div
-          ref={rootRef}
+          ref={pagerRef}
           style={{
-            width: STAGE_W,
-            height: STAGE_H,
-            position: "relative",
+            position: "fixed",
+            inset: 0,
+            zIndex: 1,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            // "fit" reserves room for the sticky footer nav; "cover" fills edge-to-edge.
+            paddingBottom: fillMode === "cover" ? 0 : 96,
             overflow: "hidden",
-            transform: `scale(${scale})`,
-            transformOrigin: "center",
-            flexShrink: 0,
+            touchAction: "none",
           }}
-        />
-      </div>
+        >
+          <div
+            ref={rootRef}
+            style={{
+              width: STAGE_W,
+              height: STAGE_H,
+              position: "relative",
+              overflow: "hidden",
+              transform: `scale(${scale})`,
+              transformOrigin: "center",
+              flexShrink: 0,
+            }}
+          />
+        </div>
+      )}
+
+      {isScroll && (
+        <>
+          {/* Shared background layer — pinned behind the scrolling pages and
+              framed exactly like a single page-mode page, so the artwork keeps
+              the scale and framing it was designed against. Page canvases are
+              transparent in scroll mode, so this shows through all of them. */}
+          <div
+            aria-hidden
+            style={{
+              position: "fixed",
+              inset: 0,
+              zIndex: 0,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              overflow: "hidden",
+              pointerEvents: "none",
+            }}
+          >
+            <div
+              style={{
+                width: STAGE_W * scale,
+                height: STAGE_H * scale,
+                position: "relative",
+                overflow: "hidden",
+                flexShrink: 0,
+              }}
+            >
+              {/* Inner box keeps the layers in stage (396×704) coordinates, so
+                  the controller can write each page's saved transform verbatim. */}
+              <div
+                style={{
+                  position: "absolute",
+                  top: 0,
+                  left: 0,
+                  width: STAGE_W,
+                  height: STAGE_H,
+                  transform: `scale(${scale})`,
+                  transformOrigin: "top left",
+                }}
+              >
+                {[
+                  { layer: bgLayerARef, color: bgColorARef, img: bgImgARef, opacity: 1 },
+                  { layer: bgLayerBRef, color: bgColorBRef, img: bgImgBRef, opacity: 0 },
+                ].map((slot, i) => (
+                  <div
+                    key={i}
+                    ref={slot.layer}
+                    style={{ position: "absolute", inset: 0, opacity: slot.opacity }}
+                  >
+                    {/* Each layer carries its own flat colour BEHIND its own
+                        picture, so fading the layer in never lets the layer
+                        below (or the bare page) flash through. */}
+                    <div ref={slot.color} style={{ position: "absolute", inset: 0 }} />
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      ref={slot.img}
+                      alt=""
+                      style={{ position: "absolute", display: "none", maxWidth: "none" }}
+                    />
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          {/* Continuous stage — every page stacked vertically, one scroller.
+              Locked until the envelope is opened so the guest can't scroll past
+              the opening animation. */}
+          <div
+            ref={scrollRef}
+            // .scroll-invitation-container hides the scrollbar in every browser
+            // without disabling scrolling — see globals.css.
+            className="scroll-invitation-container"
+            style={{
+              position: "fixed",
+              inset: 0,
+              zIndex: 1,
+              overflowY: gone ? "auto" : "hidden",
+              overscrollBehaviorY: "contain",
+              WebkitOverflowScrolling: "touch",
+            }}
+          >
+            <div
+              style={{
+                // Centre on desktop; on a viewport narrower than the scaled page
+                // the sides crop (like page mode) rather than scrolling sideways.
+                display: "flex",
+                flexDirection: "column",
+                alignItems: "center",
+                paddingBottom: fillMode === "cover" ? 0 : 96,
+              }}
+            >
+              <div
+                style={{
+                  width: STAGE_W * scale,
+                  height: STAGE_H * scale * Math.max(1, pages.length),
+                  position: "relative",
+                  flexShrink: 0,
+                }}
+              >
+                <div
+                  ref={rootRef}
+                  style={{
+                    position: "absolute",
+                    top: 0,
+                    left: 0,
+                    width: STAGE_W,
+                    height: STAGE_H * Math.max(1, pages.length),
+                    transform: `scale(${scale})`,
+                    transformOrigin: "top left",
+                  }}
+                />
+              </div>
+            </div>
+          </div>
+        </>
+      )}
 
       {borderUrl && (
         <img

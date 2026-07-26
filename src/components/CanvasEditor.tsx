@@ -37,6 +37,7 @@ import { saveLocalPreview } from "@/src/lib/localPreview";
 import { extractEnvelope } from "@/src/lib/extract-envelope";
 import { slugify } from "@/src/lib/slug";
 import { getPackageRules } from "@/src/lib/packageRules";
+import { normalizePresentationMode, type PresentationMode } from "@/src/lib/presentationMode";
 import { upload } from "@vercel/blob/client";
 import { uploadEditedImage } from "@/src/lib/uploadEditedImage";
 import { showPackageToast } from "@/src/components/PackageLimitToast";
@@ -150,7 +151,18 @@ export type EditorHandle = {
   getActiveImageSrc: () => string | null;
   replaceActiveImage: (dataUrl: string) => void;
   isActiveObjectImage: () => boolean;
-  getProjectData: () => { pages: any[]; currentPage: number; musicUrl: string | null };
+  getProjectData: () => {
+    pages: any[];
+    currentPage: number;
+    musicUrl: string | null;
+    presentationMode: PresentationMode;
+  };
+  // ── Artboard: Continuous Scroll ────────────────────────────────────────────
+  // Presentation only. Changing this never touches the pages, the page order or
+  // the editor canvas — it only decides how the preview / published invitation
+  // plays back (see src/lib/presentationMode.ts).
+  getPresentationMode: () => PresentationMode;
+  setPresentationMode: (mode: PresentationMode) => void;
   getThumbnail: () => string;
   goToPage: (index: number) => void;
   reorderPages: (from: number, to: number) => void;
@@ -364,6 +376,10 @@ const CanvasEditor = forwardRef<
     // footer; null/undefined keeps both (backward compatible). Carried into the
     // export/preview payloads so the published card applies the same rule.
     packageId?: number | null;
+    // How the invitation is PRESENTED to guests (preview / published page).
+    // Purely a presentation setting — the editor canvas stays page-by-page.
+    initialPresentationMode?: PresentationMode | string | null;
+    onPresentationModeChange?: (mode: PresentationMode) => void;
   }
 >((props, ref) => {
   const canvasEl = useRef<HTMLCanvasElement | null>(null);
@@ -380,6 +396,23 @@ const [currentPage, setCurrentPage] = useState(0);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [isLoaded, setIsLoaded] = useState(false);
   const [musicUrl, setMusicUrl] = useState<string | null>(props.initialMusicUrl ?? null);
+  // Artboard → Continuous Scroll. Existing designs have nothing saved, so this
+  // normalizes to "page" and they keep behaving exactly as before.
+  const [presentationMode, setPresentationModeState] = useState<PresentationMode>(
+    normalizePresentationMode(props.initialPresentationMode)
+  );
+  // Mirror for the imperative handle / payload builders, which are memoized and
+  // must read the live value rather than the one captured at definition time.
+  const presentationModeRef = useRef<PresentationMode>(presentationMode);
+  useEffect(() => { presentationModeRef.current = presentationMode; }, [presentationMode]);
+  // Publish the saved value once on mount so the Artboard toggle renders in the
+  // right state when an existing design is reopened.
+  const onPresentationModeChangeProp = props.onPresentationModeChange;
+  useEffect(() => {
+    onPresentationModeChangeProp?.(presentationModeRef.current);
+    // Mount only — later changes are reported by setPresentationMode itself.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   // True while a music file is streaming to blob storage. A ref (not state) so
   // Preview/Save can read the live value synchronously at click time.
   const musicUploadingRef = useRef(false);
@@ -1006,6 +1039,7 @@ const [currentPage, setCurrentPage] = useState(0);
         userId: props.userId ?? null,
         eventId: props.eventId ?? null,
         packageId: props.packageId ?? null,
+        presentationMode: presentationModeRef.current,
       };
       // Open the tab synchronously so the browser keeps it tied to the user's
       // click (avoids popup blocking); the preview page waits for IndexedDB.
@@ -1401,7 +1435,20 @@ const [currentPage, setCurrentPage] = useState(0);
       const exportedPages = pages.map((page, index) =>
         index === currentPage ? (currentJson ?? page ?? null) : (page ?? null)
       );
-      return { pages: exportedPages, currentPage, musicUrl };
+      // Saved into designs.json_data.canvas alongside the pages — no schema or
+      // migration needed, and records without it read back as "page".
+      return { pages: exportedPages, currentPage, musicUrl, presentationMode };
+    },
+    getPresentationMode: () => presentationModeRef.current,
+    setPresentationMode: (mode: PresentationMode) => {
+      const next = normalizePresentationMode(mode);
+      if (next === presentationModeRef.current) return;
+      presentationModeRef.current = next;
+      setPresentationModeState(next);
+      props.onPresentationModeChange?.(next);
+      // Mark the design dirty so the existing autosave persists the setting —
+      // no separate save path. The canvas itself is deliberately untouched.
+      props.onCanvasChange?.();
     },
     getThumbnail: () => {
       const canvas = fabricRef.current;
@@ -3362,6 +3409,9 @@ const [currentPage, setCurrentPage] = useState(0);
     userId: props.userId ?? null,
     eventId: props.eventId ?? null,
     packageId: props.packageId ?? null,
+    // Published invitations play back in the mode chosen in Artboard. Blobs
+    // written before this existed simply lack the key and stay page mode.
+    presentationMode: presentationModeRef.current,
   };
 
   try {

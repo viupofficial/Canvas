@@ -72,6 +72,7 @@ export default function PreviewLocalPage() {
         userId: payload.userId ?? null,
         eventId: payload.eventId ?? null,
         packageId: payload.packageId ?? null,
+        presentationMode: payload.presentationMode ?? null,
       });
     } catch (e) {
       console.error("[preview-local] failed to parse", e);

@@ -23,6 +23,10 @@ import {
   gradientToSolid,
 } from "@/src/lib/gradient";
 import type { LayerInfo } from "@/src/components/CanvasEditor";
+import {
+  DEFAULT_PRESENTATION_MODE,
+  type PresentationMode,
+} from "@/src/lib/presentationMode";
 
 // Revert (undo) icon.
 function RevertIcon() {
@@ -288,8 +292,18 @@ export default function Inspector(props: {
   layers?: LayerInfo[];
   pageCount?: number;
   currentPageIndex?: number;
+  // Artboard → Continuous Scroll, mirrored from the editor. Presentation only.
+  presentationMode?: PresentationMode;
 }) {
-  const { selected, updateSelected, editorRef, layers = [], pageCount = 1, currentPageIndex = 0 } = props;
+  const {
+    selected,
+    updateSelected,
+    editorRef,
+    layers = [],
+    pageCount = 1,
+    currentPageIndex = 0,
+    presentationMode = DEFAULT_PRESENTATION_MODE,
+  } = props;
   const [tab, setTab] = React.useState<"design" | "layers" | "artboard">("design");
   const [showTextStyles, setShowTextStyles] = React.useState(false);
   // When on, editing width or height scales both axes by the same factor so the
@@ -402,6 +416,7 @@ export default function Inspector(props: {
           pageCount={pageCount}
           currentPageIndex={currentPageIndex}
           editorRef={editorRef}
+          presentationMode={presentationMode}
         />
       ) : tab === "layers" ? (
         <LayersPanel
