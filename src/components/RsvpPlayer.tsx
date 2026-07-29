@@ -553,7 +553,11 @@ export default function RsvpPlayer({
     // Gallery slideshow: the gallery page's photos all share one slot (named
     // galleryImage1, galleryImage2, …). Show one at a time, advancing every 5s,
     // looping through every photo. No-op on pages without a gallery.
-    const startGallerySlideshow = (rc: any) => {
+    //
+    // The guest can also swipe the photo sideways to flip through it by hand —
+    // swipe right for the next photo, swipe left for the previous one — and the
+    // 5s clock restarts so the photo they just picked gets a full turn.
+    const startGallerySlideshow = (rc: any, wrapper: HTMLElement, index: number) => {
       const imgs = rc
         .getObjects()
         .filter((o: any) => typeof o?.name === "string" && o.name.startsWith("galleryImage"));
@@ -565,12 +569,89 @@ export default function RsvpPlayer({
       };
       show();
       if (imgs.length < 2) return; // a single photo never needs to cycle
-      const gid = setInterval(() => {
-        if (cancelled) return;
-        gi = (gi + 1) % imgs.length;
-        show();
-      }, 5000);
+      let gid: ReturnType<typeof setInterval>;
+      const startTimer = () => {
+        gid = setInterval(() => {
+          if (cancelled) return;
+          gi = (gi + 1) % imgs.length;
+          show();
+        }, 5000);
+      };
+      startTimer();
       cancellers.push(() => clearInterval(gid));
+
+      const step = (dir: number) => {
+        gi = (gi + dir + imgs.length) % imgs.length;
+        show();
+        clearInterval(gid);
+        startTimer();
+      };
+
+      // Hit area = the photo slot itself, in screen pixels. Recomputed per
+      // gesture because the stage is CSS-scaled to the viewport and (in scroll
+      // mode) travels with the scroller.
+      const overPhoto = (clientX: number, clientY: number) => {
+        // Page mode stacks every page in the same spot, so only the page the
+        // guest is actually looking at may answer.
+        if (!isScroll && currentRef.current !== index) return false;
+        const box = wrapper.getBoundingClientRect();
+        if (!box.width) return false;
+        const s = box.width / w; // uniform: the stage never scales non-uniformly
+        const b = imgs[gi].getBoundingRect();
+        const x = clientX - box.left;
+        const y = clientY - box.top;
+        return (
+          x >= b.left * s && x <= (b.left + b.width) * s &&
+          y >= b.top * s && y <= (b.top + b.height) * s
+        );
+      };
+
+      const SWIPE_MIN = 40;
+      let x0 = 0;
+      let y0 = 0;
+      let tracking = false;
+
+      const begin = (x: number, y: number) => {
+        tracking = overPhoto(x, y);
+        x0 = x;
+        y0 = y;
+      };
+      const finish = (x: number, y: number, e: Event) => {
+        if (!tracking) return;
+        tracking = false;
+        const dx = x - x0;
+        const dy = y - y0;
+        // Sideways only — a mostly-vertical drag still belongs to page
+        // navigation (page mode) or to the scroller (scroll mode).
+        if (Math.abs(dx) < SWIPE_MIN || Math.abs(dx) <= Math.abs(dy)) return;
+        step(dx > 0 ? 1 : -1);
+        // Consumed here. These listeners sit on the stage, below the pager that
+        // handles page swipes, so stopping propagation keeps a diagonal flick
+        // from also turning the page.
+        e.stopPropagation();
+      };
+
+      const onTouchStart = (e: TouchEvent) => {
+        const t = e.touches[0];
+        if (t) begin(t.clientX, t.clientY);
+      };
+      const onTouchEnd = (e: TouchEvent) => {
+        const t = e.changedTouches[0];
+        if (t) finish(t.clientX, t.clientY, e);
+      };
+      const onMouseDown = (e: MouseEvent) => begin(e.clientX, e.clientY);
+      const onMouseUp = (e: MouseEvent) => finish(e.clientX, e.clientY, e);
+
+      root.addEventListener("touchstart", onTouchStart, { passive: true });
+      root.addEventListener("touchend", onTouchEnd, { passive: true });
+      root.addEventListener("mousedown", onMouseDown);
+      root.addEventListener("mouseup", onMouseUp);
+      cancellers.push(() => {
+        root.removeEventListener("touchstart", onTouchStart);
+        root.removeEventListener("touchend", onTouchEnd);
+        root.removeEventListener("mousedown", onMouseDown);
+        root.removeEventListener("mouseup", onMouseUp);
+      });
     };
 
     // "Counting Days" countdown: rewrite each value box (tagged with
@@ -793,7 +874,7 @@ export default function RsvpPlayer({
             // Page mode runs these immediately (unchanged); scroll mode waits
             // until the page section actually scrolls into view.
             armAnimations(wrapper, () => startAnimations(rc));
-            startGallerySlideshow(rc);
+            startGallerySlideshow(rc, wrapper, index);
             startCountdown(rc);
             startGuestbook(rc);
             rc.requestRenderAll();
