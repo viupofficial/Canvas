@@ -388,7 +388,7 @@ export default function Inspector(props: {
   // };
 
   return (
-    <aside className="w-80 bg-brand-cream border-[#EDE2DE] border-[1px] overflow-y-auto h-full">
+    <aside className="w-60 lg:w-80 min-w-0 lg:shrink-0 bg-brand-cream border-[#EDE2DE] border-[1px] overflow-y-auto h-full">
       <div className="border-b-[1px] border-[#EDE2DE] pb-3 p-4">
         <h3 className="font-[600] text-[20px] capitalize">
           {tab === "layers" ? "Layers" : tab === "artboard" ? "Artboard" : selected?.type ?? "Inspector"}

@@ -40,7 +40,11 @@ export type GiftData = {
   // filled in — turning the toggle off never discards saved form data.
   bank?: string;
   account?: number | string;
+  // Legacy single QR. Kept in sync with `images[0]` so invitations saved before
+  // multi-QR (and any consumer still reading this field) keep working.
   image?: string | null;
+  // All QR images, in swipe order. Empty/absent ⇒ fall back to `image`.
+  images?: string[] | null;
   // QR display size in px (square). Undefined/null falls back to QR_DEFAULT_SIZE.
   qrSize?: number | null;
   // Whether Money Gift is offered in the invitation footer. Treated as ON when
@@ -54,6 +58,21 @@ export type GiftData = {
 export const QR_MIN_SIZE = 140;
 export const QR_MAX_SIZE = 350;
 export const QR_DEFAULT_SIZE = 240;
+// Maximum QR images a Money Gift section can hold. Each one is stored inline as
+// a data URL, so the cap keeps the saved event payload a sane size.
+export const QR_MAX_IMAGES = 2;
+
+/** The QR images to show, in swipe order. Reads the multi-image list and falls
+ *  back to the legacy single `image` for invitations saved before multi-QR. */
+export function giftQrImages(
+  gift?: { image?: string | null; images?: (string | null)[] | null } | null,
+): string[] {
+  const list = (gift?.images ?? []).filter(
+    (src): src is string => typeof src === "string" && src.length > 0,
+  );
+  if (list.length > 0) return list;
+  return gift?.image ? [gift.image] : [];
+}
 export type RSVPConfig = {
   // Whether RSVP is available on the invitation. Treated as ON when undefined so
   // pre-existing designs (saved before this toggle existed) keep showing RSVP.

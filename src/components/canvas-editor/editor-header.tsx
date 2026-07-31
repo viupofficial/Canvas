@@ -309,28 +309,28 @@ export default function EditorHeader(props: {
   };
 
   return (
-    <header className="grid lg:grid-cols-[1fr_auto_1fr] h-auto lg:h-[111px] w-full items-center gap-2 lg:gap-4 bg-[#EDE2DE] p-3 lg:p-0">
-      <div className="flex items-center justify-start lg:pl-[106px] gap-2 lg:gap-0">
+    <header className="grid pc:grid-cols-[1fr_auto_1fr] h-auto pc:h-[78px] lg:h-[111px] w-full items-center gap-2 pc:gap-4 bg-[#EDE2DE] p-3 pc:px-4 pc:py-0 lg:p-0">
+      <div className="flex items-center justify-start lg:pl-[106px] gap-2 pc:gap-0">
         {teaser || !canGoHome ? (
           // Teaser mode, or any route other than /designer: the logo is
           // decorative only — no link back to the homepage filing system.
-          <div className="flex items-center justify-center gap-4 my-9 mr-[20px] hidden lg:flex">
+          <div className="flex items-center justify-center gap-4 my-9 mr-[20px] hidden pc:flex">
             <img src="/Vi-Up Submark.png" alt="Vi-Up" className="h-[30px] w-[30px]" />
           </div>
         ) : (
-          <a href={resolvedHomeHref} className="flex items-center justify-center gap-4 my-9 mr-[20px] hidden lg:flex">
+          <a href={resolvedHomeHref} className="flex items-center justify-center gap-4 my-9 mr-[20px] hidden pc:flex">
             <img src="/Vi-Up Submark.png" alt="Vi-Up" className="h-[30px] w-[30px]" />
           </a>
         )}
 
         {/* Hamburger Menu - Mobile Only */}
-        <button className="lg:hidden p-2 hover:bg-[#D4C9C4] rounded-lg transition-colors">
+        <button className="pc:hidden p-2 hover:bg-[#D4C9C4] rounded-lg transition-colors">
           <svg className="w-6 h-6 text-[#7D5B59]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
           </svg>
         </button>
 
-        <div className="flex items-center gap-[35px] hidden lg:flex">
+        <div className="flex items-center gap-4 lg:gap-[35px] hidden pc:flex">
           <button onClick={handleUndoClick}>
             <img src="/Undo.svg" alt="Undo" className="w-[23px] h-[23px]" />
           </button>
@@ -341,7 +341,7 @@ export default function EditorHeader(props: {
         </div>
 
         {/* Mobile Undo/Redo */}
-        <div className="flex items-center gap-2 lg:hidden">
+        <div className="flex items-center gap-2 pc:hidden">
           <button onClick={handleUndoClick} className="p-2 hover:bg-[#D4C9C4] rounded-lg transition-colors">
             <img src="/Undo.svg" alt="Undo" className="w-[18px] h-[18px]" />
           </button>
@@ -352,12 +352,12 @@ export default function EditorHeader(props: {
         </div>
       </div>
 
-      <div className="hidden lg:flex items-center justify-center gap-[5px] -translate-x-[105px]">
+      <div className="hidden pc:flex items-center justify-center gap-[5px] lg:-translate-x-[105px]">
         <input
           type="text"
           value={eventName}
           onChange={(event) => setEventName(event.target.value)}
-          className="font-bold text-[18px] text-right bg-transparent border-none outline-none w-[140px]"
+          className="font-bold text-[15px] lg:text-[18px] text-right bg-transparent border-none outline-none w-[110px] lg:w-[140px]"
           aria-label="Event name"
         />
 
@@ -380,7 +380,7 @@ export default function EditorHeader(props: {
       </div>
 
       {/* Mobile Event Name (compact) */}
-      <div className="flex lg:hidden items-center gap-2 flex-1 justify-center order-3 lg:order-none w-full lg:w-auto">
+      <div className="flex pc:hidden items-center gap-2 flex-1 justify-center order-3 w-full">
         <input
           type="text"
           value={eventName}
@@ -404,7 +404,7 @@ export default function EditorHeader(props: {
         </button>
       </div>
 
-      <div className="hidden lg:flex items-center justify-end gap-4 mr-[130px]">
+      <div className="hidden pc:flex items-center justify-end gap-2 lg:gap-4 mr-0 lg:mr-[130px]">
         <div className="relative" ref={previewRef}>
           <button
             onClick={() => setPreviewOpen((o) => !o)}
@@ -413,7 +413,7 @@ export default function EditorHeader(props: {
             title="Preview"
             className=" rounded-full text-white p-2"
           >
-            <img src="/preview.svg" alt="Preview" className="h-[45px] w-[45px]" />
+            <img src="/preview.svg" alt="Preview" className="h-[34px] w-[34px] lg:h-[45px] lg:w-[45px]" />
           </button>
 
           {/* Preview dropdown: Live vs Local */}
@@ -467,18 +467,18 @@ export default function EditorHeader(props: {
         {props.onUpgrade && (
           <button
             onClick={handleUpgradeClick}
-            className="border-3 border-[#7D5B59] text-[#7D5B59] rounded-[100px] px-[22px] py-[12px] flex items-center gap-2 h-[45px] text-[18px] font-bold hover:bg-[#7D5B59]/5"
+            className="border-3 border-[#7D5B59] text-[#7D5B59] rounded-[100px] px-3 lg:px-[22px] py-2 lg:py-[12px] flex items-center gap-2 h-[36px] lg:h-[45px] text-[13px] lg:text-[18px] font-bold whitespace-nowrap hover:bg-[#7D5B59]/5"
           >
             {/* Teaser keeps the gift icon on every viewport (incl. laptop/PC);
                 elsewhere it only shows on smaller screens. */}
-            <Gift className={teaser ? "w-5" : "w-5 lg:hidden"} /> Upgrade Package
+            <Gift className={teaser ? "w-5" : "w-5 lg:hidden"} /> <span className="hidden lg:inline">Upgrade Package</span>
           </button>
         )}
 
         {teaser ? (
-          <button onClick={handleLoginClick} className="bg-[#5a2d2d] text-white px-[22px] py-[12px] rounded-[100px] flex items-center gap-2 h-[45px] text-[18px] font-bold">
+          <button onClick={handleLoginClick} className="bg-[#5a2d2d] text-white px-3 lg:px-[22px] py-2 lg:py-[12px] rounded-[100px] flex items-center gap-2 h-[36px] lg:h-[45px] text-[13px] lg:text-[18px] font-bold whitespace-nowrap">
             <LogIn className="w-5 lg:hidden" />
-            Login
+            <span className="hidden lg:inline">Login</span>
           </button>
         ) : (
           <div className="relative" ref={shareRef}>
@@ -486,10 +486,10 @@ export default function EditorHeader(props: {
               onClick={handleShareClick}
               aria-haspopup="true"
               aria-expanded={shareOpen}
-              className="bg-[#5a2d2d] text-white px-[22px] py-[12px] rounded-[100px] flex items-center gap-2 h-[45px] text-[18px] font-bold"
+              className="bg-[#5a2d2d] text-white px-3 lg:px-[22px] py-2 lg:py-[12px] rounded-[100px] flex items-center gap-2 h-[36px] lg:h-[45px] text-[13px] lg:text-[18px] font-bold whitespace-nowrap"
             >
               <Upload className="w-5 lg:hidden" />
-              Share
+              <span className="hidden lg:inline">Share</span>
             </button>
 
             {/* Share dropdown */}
@@ -562,10 +562,10 @@ export default function EditorHeader(props: {
         {!teaser && user === null && (
           <button
             onClick={handleLoginClick}
-            className="bg-[#5a2d2d] text-white px-[22px] py-[12px] rounded-[100px] flex items-center gap-2 h-[45px] text-[18px] font-bold"
+            className="bg-[#5a2d2d] text-white px-3 lg:px-[22px] py-2 lg:py-[12px] rounded-[100px] flex items-center gap-2 h-[36px] lg:h-[45px] text-[13px] lg:text-[18px] font-bold whitespace-nowrap"
           >
             <LogIn className="w-5 lg:hidden" />
-            Login
+            <span className="hidden lg:inline">Login</span>
           </button>
         )}
 
@@ -664,7 +664,7 @@ export default function EditorHeader(props: {
       </div>
 
       {/* Mobile Right Section */}
-      <div className="flex lg:hidden items-center justify-end gap-2 order-4">
+      <div className="flex pc:hidden items-center justify-end gap-2 order-4">
         <button
           onClick={() => setPreviewOpen((o) => !o)}
           className="p-2 hover:bg-[#D4C9C4] rounded-lg transition-colors"
@@ -683,7 +683,7 @@ export default function EditorHeader(props: {
 
       {/* Mobile Preview Dropdown */}
       {previewOpen && (
-        <nav className="lg:hidden absolute right-2 top-[calc(100%+8px)] min-w-[200px] bg-white rounded-[15px] shadow-lg p-2 z-[1000]">
+        <nav className="pc:hidden absolute right-2 top-[calc(100%+8px)] min-w-[200px] bg-white rounded-[15px] shadow-lg p-2 z-[1000]">
           <button
             type="button"
             role="menuitem"

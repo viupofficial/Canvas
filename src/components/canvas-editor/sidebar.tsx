@@ -1,7 +1,7 @@
 // updated
 import React, { useEffect, useState } from 'react';
 import type { EditorHandle } from '@/src/components/CanvasEditor';
-import { useEventData, QR_DEFAULT_SIZE, QR_MIN_SIZE, QR_MAX_SIZE } from '@/src/store/EventDataContext';
+import { useEventData, giftQrImages, QR_DEFAULT_SIZE, QR_MIN_SIZE, QR_MAX_SIZE, QR_MAX_IMAGES } from '@/src/store/EventDataContext';
 import LivePreviewPanel from '@/src/components/canvas-editor/LivePreviewPanel';
 import { prayerPage } from "@/src/components/template-list/prayerTemplate";
 import { countdownPage } from "@/src/components/template-list/timeBoxTemplate";
@@ -1369,7 +1369,8 @@ function MoneyGiftTab({ rules }: { rules: PackageRules }) {
   const [account, setAccount] = useState<number | ''>(
     (current?.account as number | '' | undefined) ?? ''
   );
-  const [image, setImage] = useState<string | null>(current?.image ?? null);
+  // Every uploaded QR, in the order guests swipe through them.
+  const [images, setImages] = useState<string[]>(() => giftQrImages(current));
   const [qrSize, setQrSize] = useState<number>(current?.qrSize ?? QR_DEFAULT_SIZE);
 
   const pushField = (patch: Partial<NonNullable<typeof current>>) => {
@@ -1384,13 +1385,42 @@ function MoneyGiftTab({ rules }: { rules: PackageRules }) {
     pushField({ enabled: next });
   };
 
+  // `image` stays in sync with the first QR: older invitations (and anything
+  // still reading the single-image field) keep rendering a QR.
+  const commitImages = (next: string[]) => {
+    setImages(next);
+    pushField({ images: next, image: next[0] ?? null });
+  };
+
   const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    downscaleImageFile(file).then((dataUrl) => {
-      setImage(dataUrl);
-      pushField({ image: dataUrl });
+    const files = Array.from(e.target.files ?? []);
+    // Let the same file be picked again after a remove.
+    e.target.value = '';
+    if (files.length === 0) return;
+    const room = QR_MAX_IMAGES - images.length;
+    if (room <= 0) {
+      alert(`You can add up to ${QR_MAX_IMAGES} QR images.`);
+      return;
+    }
+    if (files.length > room) {
+      alert(`Only the first ${room} image${room === 1 ? ' was' : 's were'} added — Money Gift holds up to ${QR_MAX_IMAGES} QR images.`);
+    }
+    Promise.all(files.slice(0, room).map(downscaleImageFile)).then((dataUrls) => {
+      commitImages([...images, ...dataUrls]);
     });
+  };
+
+  const removeImage = (index: number) => {
+    commitImages(images.filter((_, i) => i !== index));
+  };
+
+  // Reorder = change the swipe order guests see.
+  const moveImage = (index: number, delta: number) => {
+    const target = index + delta;
+    if (target < 0 || target >= images.length) return;
+    const next = [...images];
+    [next[index], next[target]] = [next[target], next[index]];
+    commitImages(next);
   };
 
   const handleSave = () => {
@@ -1398,7 +1428,14 @@ function MoneyGiftTab({ rules }: { rules: PackageRules }) {
       alert("Please fill all fields");
       return;
     }
-    setSection('moneyGift', { bank, account, image, qrSize, enabled: giftOn });
+    setSection('moneyGift', {
+      bank,
+      account,
+      images,
+      image: images[0] ?? null,
+      qrSize,
+      enabled: giftOn,
+    });
   };
 
   return (
@@ -1459,20 +1496,90 @@ function MoneyGiftTab({ rules }: { rules: PackageRules }) {
           placeholder="Account Number"
           className="px-3 py-2 border rounded-md text-sm"
         />
-        <label className="border-2 border-dashed rounded-md p-4 text-center cursor-pointer hover:bg-gray-50">
+        {images.length > 0 && (
+          <div>
+            <div className="flex items-center justify-between mb-1">
+              <label className="text-sm text-[#191212] font-semibold">QR images</label>
+              <span className="text-xs text-[#7D5B59] font-semibold">
+                {images.length}/{QR_MAX_IMAGES}
+              </span>
+            </div>
+            <p className="text-[11px] text-gray-500 mb-2">
+              {images.length > 1
+                ? 'Guests swipe through these in this order — use the arrows to reorder.'
+                : 'Add another QR to let guests swipe between them.'}
+            </p>
+            <div className="grid grid-cols-3 gap-2">
+              {images.map((src, i) => (
+                <div
+                  key={`${i}-${src.slice(-24)}`}
+                  className="relative group rounded-md border bg-white p-1"
+                >
+                  <img src={src} alt={`QR ${i + 1}`} className="w-full h-16 object-contain" />
+                  <button
+                    type="button"
+                    onClick={() => removeImage(i)}
+                    aria-label={`Remove QR ${i + 1}`}
+                    title="Remove"
+                    className="absolute -top-1.5 -right-1.5 h-5 w-5 rounded-full bg-[#8C6B6B] text-white text-[11px] leading-none shadow"
+                  >
+                    ×
+                  </button>
+                  {images.length > 1 && (
+                    <div className="mt-1 flex items-center justify-between">
+                      <button
+                        type="button"
+                        onClick={() => moveImage(i, -1)}
+                        disabled={i === 0}
+                        aria-label={`Move QR ${i + 1} earlier`}
+                        title="Move earlier"
+                        className="px-1 text-xs text-[#7D5B59] disabled:opacity-30"
+                      >
+                        ‹
+                      </button>
+                      <span className="text-[10px] text-[#7D5B59] font-semibold">{i + 1}</span>
+                      <button
+                        type="button"
+                        onClick={() => moveImage(i, 1)}
+                        disabled={i === images.length - 1}
+                        aria-label={`Move QR ${i + 1} later`}
+                        title="Move later"
+                        className="px-1 text-xs text-[#7D5B59] disabled:opacity-30"
+                      >
+                        ›
+                      </button>
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        <label
+          className={`border-2 border-dashed rounded-md p-4 text-center ${
+            images.length >= QR_MAX_IMAGES
+              ? 'opacity-50 cursor-not-allowed'
+              : 'cursor-pointer hover:bg-gray-50'
+          }`}
+        >
           <input
             type="file"
             accept="image/*"
+            multiple
+            disabled={images.length >= QR_MAX_IMAGES}
             onChange={handleImageUpload}
             className="hidden"
           />
-          {image ? (
-            <img src={image} alt="preview" className="w-full h-32 object-contain" />
-          ) : (
-            <div className="text-sm text-gray-500">
-              Drag or drop images,<br />or browse files
-            </div>
-          )}
+          <div className="text-sm text-gray-500">
+            {images.length >= QR_MAX_IMAGES ? (
+              <>Maximum of {QR_MAX_IMAGES} QR images reached</>
+            ) : images.length > 0 ? (
+              <>Add more QR images,<br />or browse files</>
+            ) : (
+              <>Drag or drop images,<br />or browse files</>
+            )}
+          </div>
         </label>
 
         <div>
@@ -2526,7 +2633,7 @@ export default function Sidebar({
   };
 
   const iconNav = (
-    <aside className="bg-brand-cream transition-all duration-200 w-30 h-full overflow-y-auto shrink-0">
+    <aside className="bg-brand-cream transition-all duration-200 w-24 lg:w-30 h-full overflow-y-auto shrink-0">
       <nav className="flex flex-col gap-2 pt-4">
         {SIDEBAR_ITEMS.map((it) => {
           // Teaser + Basic grey out RSVP + Money Gift. In teaser they are also
@@ -2557,7 +2664,7 @@ export default function Sidebar({
   );
 
   const tabPanel = active ? (
-    <aside className="w-72 p-4 border-r border-[#BBA8A7] transition-all duration-200 h-full overflow-y-auto shrink-0">
+    <aside className="w-60 lg:w-72 p-3 lg:p-4 border-r border-[#BBA8A7] transition-all duration-200 h-full overflow-y-auto shrink-0">
       {(PREVIEW_TABS as readonly string[]).includes(active) && (
         <LivePreviewPanel activeTab={active as PreviewTabName} />
       )}
@@ -2825,7 +2932,7 @@ export default function Sidebar({
   }
 
   return (
-    <div className="hidden md:flex h-full">
+    <div className="hidden pc:flex h-full">
       {iconNav}
       {tabPanel}
     </div>

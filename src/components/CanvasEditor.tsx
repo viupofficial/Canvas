@@ -4154,7 +4154,10 @@ const applyBgToOtherPages = (patch: { backgroundImage?: any; backgroundColor?: a
   }, []);
 
   return (
-    <div className="w-full h-full flex flex-col gap-4 p-6">
+    // Phone: the canvas gets the whole middle — every bit of padding here is
+    // height the artboard loses, and there is no control bar below it either
+    // (see the `hidden pc:flex` row at the end).
+    <div className="w-full h-full flex flex-col gap-0 p-0 pc:gap-4 pc:p-6">
 
       <input
         ref={fileInputRef}
@@ -4178,10 +4181,16 @@ const applyBgToOtherPages = (patch: { backgroundImage?: any; backgroundColor?: a
         style={{ display: "none" }}
       />
 
-      <div ref={containerRef} className="flex-grow border border-dashed border-[#282828] rounded overflow-hidden flex flex-col min-h-0 min-w-0">
-        <div className="flex justify-center items-center p-4 bg-[#FBF7F6]">
-          {!isLoaded && <span className="text-neutral-200">Initializing canvas...</span>}
-        </div>
+      {/* The dashed artboard frame is desktop-only: on a phone it sits well wide
+          of the height-limited canvas, reading as a box around empty space. */}
+      <div ref={containerRef} className="flex-grow border-0 pc:border pc:border-dashed border-[#282828] rounded overflow-hidden flex flex-col min-h-0 min-w-0">
+        {/* Only while loading — an always-mounted padded strip would steal height
+            from the canvas, which is scarce on a phone. */}
+        {!isLoaded && (
+          <div className="flex justify-center items-center p-4 bg-[#FBF7F6]">
+            <span className="text-neutral-200">Initializing canvas...</span>
+          </div>
+        )}
 
       <div
   className={`relative flex justify-center items-center overflow-hidden flex-1 min-h-0 min-w-0 w-full bg-[#FBF7F6] ${
@@ -4404,7 +4413,10 @@ const applyBgToOtherPages = (patch: { backgroundImage?: any; backgroundColor?: a
 
       </div>
 
-      <div className="flex items-center justify-between text-sm text-neutral-500 border-t pt-3">
+      {/* Editor chrome — desktop only. On a phone the middle of the screen is
+          just the canvas: the tip, zoom, Reset/Fullscreen and page controls all
+          stay hidden, and their jobs are done by touch gestures / the toolbar. */}
+      <div className="hidden pc:flex items-center justify-between text-sm text-neutral-500 border-t pt-3">
 
   <div>
     Tip: Select objects to move/resize/rotate
