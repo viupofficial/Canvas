@@ -922,7 +922,7 @@ function ProjectEditorInner({
           packageId={effectivePackageId}
         />
 
-        <div className="flex w-full gap-6 flex-1 min-h-0 overflow-hidden">
+        <div className="flex w-full gap-2 lg:gap-6 flex-1 min-h-0 overflow-hidden">
           <Sidebar
             editorRef={editorRef}
             isPhonePreview={previewMode === "phone"}

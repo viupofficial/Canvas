@@ -117,9 +117,11 @@ export default function EditorLayoutClient({
 
   return (
     <>
-      <div className="flex flex-col lg:flex-row gap-6 h-full">
+      <div className="flex flex-col pc:flex-row gap-2 lg:gap-6 h-full">
         {/* Main canvas area */}
-        <div className="flex-1 h-full overflow-y-auto pb-[180px] lg:pb-0">
+        {/* Bottom padding only clears the fixed mobile toolbar (~69px tall) — any
+            more leaves dead space under the canvas instead of canvas. */}
+        <div className="flex-1 h-full overflow-y-auto pb-[72px] pc:pb-0 pc:min-w-[220px]">
         <div className="bg-white border rounded-lg shadow-sm flex flex-col h-full">
           {/* Canvas area */}
           {previewMode === "phone" ? (
@@ -127,7 +129,7 @@ export default function EditorLayoutClient({
               {canvas}
             </PhonePreviewWrapper>
           ) : (
-            <div className="p-4 flex-1 min-h-0 flex flex-col bg-[#FBF7F6]">
+            <div className="p-0 pc:p-2 lg:p-4 flex-1 min-h-0 flex flex-col bg-[#FBF7F6]">
               {canvas}
             </div>
           )}
@@ -136,7 +138,7 @@ export default function EditorLayoutClient({
 
       {/* Inspector — hidden in phone preview and on mobile, replaced by mobile toolbar */}
       {previewMode === "phone" ? (
-        <div className="hidden lg:block w-72 bg-brand-cream border-[#EDE2DE] border rounded-lg overflow-y-auto h-full shrink-0">
+        <div className="hidden pc:block w-72 bg-brand-cream border-[#EDE2DE] border rounded-lg overflow-y-auto h-full shrink-0">
           <div className="border-b border-[#EDE2DE] pb-3 p-4">
             <h3 className="font-semibold text-[16px] text-[#7D5B59]">
               {selected?.type ?? "Position"}
@@ -210,7 +212,7 @@ export default function EditorLayoutClient({
           )}
         </div>
       ) : (
-        <div className="hidden lg:block">
+        <div className="hidden pc:block">
           <Inspector
             selected={selected}
             updateSelected={updateSelected}

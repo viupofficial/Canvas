@@ -45,7 +45,7 @@ export default function MobileToolbar({
   return (
     <>
       {/* Mobile Bottom Toolbar - Only show on small screens */}
-      <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-[#EDE2DE] z-40 md:hidden">
+      <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-[#EDE2DE] z-40 pc:hidden">
         {/* Icon Toolbar */}
         <div
           className="flex items-center gap-0.5 p-2 overflow-x-auto scroll-smooth"
@@ -105,14 +105,14 @@ export default function MobileToolbar({
       {/* Mobile Menu Overlay */}
       {showMenu && (
         <div
-          className="fixed inset-0 bg-black/30 z-30 md:hidden"
+          className="fixed inset-0 bg-black/30 z-30 pc:hidden"
           onClick={() => setShowMenu(false)}
         />
       )}
 
       {/* Mobile Menu Dropdown */}
       {showMenu && (
-        <div className="fixed bottom-20 right-4 left-4 bg-white rounded-lg shadow-lg border border-[#EDE2DE] z-40 md:hidden max-h-64 overflow-y-auto">
+        <div className="fixed bottom-20 right-4 left-4 bg-white rounded-lg shadow-lg border border-[#EDE2DE] z-40 pc:hidden max-h-64 overflow-y-auto">
           <div className="flex flex-col">
             {TOOLBAR_ITEMS.slice(8).map((item) => (
               <button

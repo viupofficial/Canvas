@@ -25,6 +25,14 @@
   --font-mono: var(--font-geist-mono);
 }
 
+/* The editor's only phone/desktop switch. Below 500px the editor is the phone
+   layout (bottom toolbar, chrome-free full-bleed canvas); from 500px up it is
+   always the desktop/laptop layout (sidebar + inspector + canvas controls).
+   Use `pc:` for every one of those switches so they can never disagree. */
+@theme {
+  --breakpoint-pc: 500px;
+}
+
 /* Dark mode */
 @media (prefers-color-scheme: dark) {
   :root {
@@ -1147,6 +1155,83 @@ star-fly-in {
 
 .qr-wrapper img:hover {
   transform: scale(1.03);
+}
+
+/* Money Gift QR gallery. One or more QR images swiped horizontally: the track
+   is a scroll-snap container so touch/trackpad gestures are native (mouse
+   drag is added in QrCarousel.tsx). */
+.qr-carousel {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+}
+
+.qr-carousel-track {
+  display: flex;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scroll-snap-type: x mandatory;
+  overscroll-behavior-x: contain;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+  border-radius: 12px;
+}
+
+.qr-carousel-track::-webkit-scrollbar {
+  display: none;
+}
+
+.qr-carousel-track:focus-visible {
+  outline: 2px solid #7b4b3a;
+  outline-offset: 3px;
+}
+
+.qr-carousel-slide {
+  flex: 0 0 100%;
+  scroll-snap-align: center;
+  scroll-snap-stop: always;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.qr-carousel-slide img {
+  border-radius: 12px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  object-fit: contain;
+  user-select: none;
+  -webkit-user-drag: none;
+}
+
+/* The single-QR hover zoom would be clipped by the scrolling track. */
+.qr-wrapper .qr-carousel-slide img,
+.qr-wrapper .qr-carousel-slide img:hover {
+  transition: none;
+  transform: none;
+}
+
+.qr-carousel-dots {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.qr-carousel-dot {
+  width: 7px;
+  height: 7px;
+  padding: 0;
+  border: 0;
+  border-radius: 9999px;
+  background: rgba(123, 75, 58, 0.28);
+  cursor: pointer;
+  transition: background 0.2s ease, transform 0.2s ease;
+}
+
+.qr-carousel-dot.is-active {
+  background: #7b4b3a;
+  transform: scale(1.25);
 }
 
 /* <!--rsvp click effect --> */

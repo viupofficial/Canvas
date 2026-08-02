@@ -1,7 +1,8 @@
 "use client"
 
 import React, { useState, useRef, useEffect } from "react"
-import { useEventDataOptional, QR_DEFAULT_SIZE, QR_MIN_SIZE, QR_MAX_SIZE } from "@/src/store/EventDataContext"
+import { useEventDataOptional, giftQrImages, QR_DEFAULT_SIZE, QR_MIN_SIZE, QR_MAX_SIZE } from "@/src/store/EventDataContext"
+import QrCarousel from "@/src/components/QrCarousel"
 import { buildIcs, icsFilename } from "@/src/lib/calendar/icsBuilder"
 import { buildGoogleCalendarLink } from "@/src/lib/calendar/googleCalendarLink"
 import EventMiniCalendar from "@/src/components/EventMiniCalendar"
@@ -26,7 +27,10 @@ export default function EventFooter({
   moneyGift?: {
     bank?: string;
     account?: number | string;
+    // Legacy single QR — superseded by `images`, still honoured as a fallback.
     image?: string | null;
+    // QR images in swipe order.
+    images?: string[] | null;
     qrSize?: number | null;
     // "Show Money Gift" (Money Gift sidebar). Undefined ⇒ ON for backward
     // compat; the package gate still has the final say.
@@ -86,6 +90,12 @@ export default function EventFooter({
   const showCalendar = nav.calendarVisible;
   const showLocation = nav.locationVisible;
   const showMoneyGift = nav.moneyGiftVisible;
+
+  // Money Gift QR gallery: every uploaded QR, swipeable. Falls back to the demo
+  // QR so an unfilled Money Gift card still shows something, as before.
+  const uploadedQrImages = giftQrImages(moneyGift);
+  const qrImages = uploadedQrImages.length > 0 ? uploadedQrImages : ["/MayaQRimage.png"];
+  const qrSize = Math.min(QR_MAX_SIZE, Math.max(QR_MIN_SIZE, moneyGift?.qrSize ?? QR_DEFAULT_SIZE));
 
   const [activeCard, setActiveCard] = useState<string | null>(null);
   const [rsvpStatus, setRsvpStatus] = useState<null | "accept" | "decline">(null);
@@ -377,14 +387,7 @@ const generateICS = (event: any, loc?: any) => {
                   </div>
 
 <div className="qr-wrapper">
-  <img
-    src={moneyGift?.image || "/MayaQRimage.png"}
-    alt="QR Code"
-    style={{
-      width: Math.min(QR_MAX_SIZE, Math.max(QR_MIN_SIZE, moneyGift?.qrSize ?? QR_DEFAULT_SIZE)),
-      height: Math.min(QR_MAX_SIZE, Math.max(QR_MIN_SIZE, moneyGift?.qrSize ?? QR_DEFAULT_SIZE)),
-    }}
-  />
+  <QrCarousel images={qrImages} size={qrSize} />
 </div>
 
                 </div>

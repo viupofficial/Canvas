@@ -1,7 +1,8 @@
 "use client";
 
-import { useEventDataOptional, type CalendarData, type GiftData, type LocationData } from "@/src/store/EventDataContext";
+import { useEventDataOptional, giftQrImages, type CalendarData, type GiftData, type LocationData } from "@/src/store/EventDataContext";
 import { cssBackground, firstColorHex, type GradientDescriptor } from "@/src/lib/gradient";
+import QrCarousel from "@/src/components/QrCarousel";
 
 type PreviewTab = "contact" | "location" | "calendar" | "rsvp" | "money";
 
@@ -156,6 +157,7 @@ function GiftCard({
 }: {
   moneyGift: GiftData;
 }) {
+  const qrImages = giftQrImages(moneyGift);
   return (
     <CardFrame title="Money Gift">
       <div className="flex flex-col items-center gap-2">
@@ -165,18 +167,14 @@ function GiftCard({
         <div className="text-[11px] text-center text-[#7D5B59] tracking-wider">
           {moneyGift?.account || "0000 0000 0000"}
         </div>
-        <div className="w-20 h-20 rounded-md bg-white border flex items-center justify-center overflow-hidden">
-          {moneyGift?.image ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img
-              src={moneyGift.image}
-              alt="QR"
-              className="w-full h-full object-contain"
-            />
-          ) : (
+        {qrImages.length > 0 ? (
+          // Same swipeable gallery as the invitation footer, at panel scale.
+          <QrCarousel images={qrImages} size={80} />
+        ) : (
+          <div className="w-20 h-20 rounded-md bg-white border flex items-center justify-center overflow-hidden">
             <span className="text-[9px] text-neutral-400">QR preview</span>
-          )}
-        </div>
+          </div>
+        )}
       </div>
     </CardFrame>
   );
