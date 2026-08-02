@@ -57,16 +57,21 @@ export function isEventBlobPath(pathname: string | null | undefined): boolean {
   return !!match && isEventSlug(match[1]);
 }
 
-// The published invitation is always served from the public canvas host, so a
-// shared link is identical regardless of where the editor itself runs (localhost,
-// LAN, preview deploy). Keep this as the ONE source of the public base URL.
+// ── INTERNAL URL — NOT the link customers get ────────────────────────────────
+// The canvas host serves the raw published invitation. iFastNet embeds it as the
+// iframe source inside the customer-facing page
+// (https://vi-up.com/e/{event-title-slug}, returned by /api/canvas-sync).
+//
+// Never copy or open this URL for a user: on its own it is missing the
+// user_event wrapper. Share Link and Live Preview both use the vi-up.com URL
+// that iFastNet hands back — see src/lib/publishEvent.ts.
 export const LIVE_EVENT_BASE_URL = "https://canvas.vi-up.com";
 
-// Build the canonical public link for a published event slug:
+// Build the internal canvas URL for a published event slug:
 //   https://canvas.vi-up.com/e/event-{eventId}
 //
-// The link is permanent for the life of the event: renaming the title, or
-// republishing any number of times, keeps writing to the same slug.
+// Stable for the life of the event: renaming the title, or republishing any
+// number of times, keeps writing to the same slug.
 export function liveEventUrl(slug: string): string {
   return `${LIVE_EVENT_BASE_URL}/e/${slug}`;
 }

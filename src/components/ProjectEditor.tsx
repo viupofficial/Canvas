@@ -7,7 +7,6 @@ import Sidebar from "@/src/components/canvas-editor/sidebar";
 import EditorHeader from "@/src/components/canvas-editor/editor-header";
 import ImageEditorModal from "@/src/components/canvas-editor/ImageEditorModal";
 import "@/src/app/globals.css";
-import { useRouter } from "next/navigation";
 import { EventDataProvider, useEventData, type EventData } from "@/src/store/EventDataContext";
 import { ensureProject, saveProject } from "@/src/lib/projectStorage";
 import { getCanvasUser } from "@/src/lib/userSession";
@@ -16,6 +15,7 @@ import type { CanvasUser } from "@/src/lib/userSession";
 import { getPackageRules, readFeatureUsage, normalizeUsageCounter, type FeatureUsage } from "@/src/lib/packageRules";
 import { PackageToastHost, showPackageToast } from "@/src/components/PackageLimitToast";
 import PaymentUpgradeModal from "@/src/components/PaymentUpgradeModal";
+import { publishAndSyncCanvas } from "@/src/lib/publishEvent";
 
 const API_BASE = "https://vi-up.com/api";
 
@@ -194,7 +194,6 @@ function ProjectEditorInner({
   // Bumped whenever the active page's content is (re)loaded — the Background panel
   // watches this to re-read and display the current page's background.
   const [bgReadNonce, setBgReadNonce] = useState(0);
-  const router = useRouter();
 
   const { eventData } = useEventData();
 
@@ -866,10 +865,12 @@ function ProjectEditorInner({
           // entirely by not wiring a handler (EditorHeader only renders it when
           // onUpgrade is present).
           onUpgrade={rules.isPremiumPackage ? undefined : openUpgrade}
-          onPreview={() => {
+          onPreview={async () => {
             // Music still transferring? Publishing now would bake a design with
             // no track into the blob /e/[slug] reads — wait for it to finish.
-            if (editorRef.current?.isMusicUploading?.()) {
+            const editor = editorRef.current;
+            if (!editor) return;
+            if (editor.isMusicUploading?.()) {
               showPackageToast("Music is still uploading — please wait a moment before previewing.", "warn");
               return;
             }
@@ -877,16 +878,26 @@ function ProjectEditorInner({
             // then publish + open the hosted page. The save is fire-and-forget:
             // /e/[slug] reads the uploaded blob, not the designs row.
             forceSaveNow();
-            editorRef.current
-              ?.exportHTML(eventName)
-              .then((slug) => router.push(`/e/${slug}`))
-              // exportHTML now throws instead of returning a placeholder slug, so
-              // a failed publish reports itself rather than opening someone
-              // else's blob at /e/rsvp.
-              .catch((e: Error) => {
-                console.error("[preview] publish failed", e);
-                showPackageToast(e.message || "Could not publish this design.", "warn");
+            try {
+              // Identical flow to Share Link — same helper, same order — so both
+              // buttons always land on the same customer-facing URL.
+              const { publicShareUrl } = await publishAndSyncCanvas(editor, eventName, {
+                userId,
+                eventId,
+                designId,
+                packageId: effectivePackageId,
               });
+              // Open what iFastNet returned (https://vi-up.com/e/{title-slug}),
+              // NOT the internal canvas page: the preview must show the real
+              // user_event wrapper the guest sees, iframe and all. That is a
+              // different origin, so this is a full navigation, not router.push.
+              window.location.href = publicShareUrl;
+            } catch (e) {
+              // A failed publish or sync opens nothing at all, rather than a page
+              // that would show a stale (or someone else's) invitation.
+              console.error("[preview] publish failed", e);
+              showPackageToast((e as Error).message || "Could not publish this design.", "warn");
+            }
           }}
           onPreviewLocal={() => {
             if (editorRef.current?.isMusicUploading?.()) {

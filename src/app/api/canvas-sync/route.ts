@@ -34,6 +34,26 @@ function toId(value: unknown): number | null {
   return Number.isSafeInteger(n) ? n : null;
 }
 
+// Hosts allowed to appear in the share link PHP hands back. The URL is copied
+// to a customer's clipboard and opened in their browser, so validate it here
+// rather than trusting the upstream body: a mangled or hostile value would
+// otherwise become an open redirect (or a javascript: URL) with our UI's
+// blessing. vi-up.com and its subdomains only.
+function pickShareUrl(data: any): string | null {
+  const candidate = data?.public_share_url ?? data?.data?.public_share_url;
+  if (typeof candidate !== "string" || !candidate.trim()) return null;
+  let parsed: URL;
+  try {
+    parsed = new URL(candidate.trim());
+  } catch {
+    return null;
+  }
+  if (parsed.protocol !== "https:" && parsed.protocol !== "http:") return null;
+  const host = parsed.hostname.toLowerCase();
+  if (host !== "vi-up.com" && !host.endsWith(".vi-up.com")) return null;
+  return parsed.toString();
+}
+
 export async function POST(req: NextRequest): Promise<NextResponse> {
   const syncUrl = process.env.IFASTNET_CANVAS_SYNC_URL;
   const syncSecret = process.env.IFASTNET_CANVAS_SYNC_SECRET;
@@ -116,5 +136,25 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     return NextResponse.json({ ok: false, error: message }, { status: 502 });
   }
 
-  return NextResponse.json({ ok: true, canvas_slug: canvasSlug, upstream: data ?? null });
+  // iFastNet owns the customer-facing URL (https://vi-up.com/e/{event-title-slug}),
+  // which wraps the canvas page in the user_event iframe. Without it there is
+  // nothing safe to share, so a "successful" sync that omits it is still a
+  // failure — the canvas URL must never be handed to a customer as a fallback.
+  const publicShareUrl = pickShareUrl(data);
+  if (!publicShareUrl) {
+    console.error("[canvas-sync] upstream returned no usable public_share_url:", raw.slice(0, 500));
+    return NextResponse.json(
+      { ok: false, error: "vi-up.com did not return a share link for this event." },
+      { status: 502 },
+    );
+  }
+
+  return NextResponse.json({
+    ok: true,
+    // The customer-facing link — this is what gets copied / opened.
+    public_share_url: publicShareUrl,
+    // Internal only: the blob slug behind https://canvas.vi-up.com/e/{slug},
+    // which iFastNet embeds as the iframe source. Returned for logging/debug.
+    canvas_slug: canvasSlug,
+  });
 }

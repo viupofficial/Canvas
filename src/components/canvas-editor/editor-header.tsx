@@ -12,7 +12,7 @@ import {
   avatarFor,
   type CanvasUser,
 } from "@/src/lib/userSession";
-import { liveEventUrl } from "@/src/lib/slug";
+import { publishAndSyncCanvas } from "@/src/lib/publishEvent";
 
 /**
  * EditorHeader component
@@ -36,7 +36,12 @@ export default function EditorHeader(props: {
   onUndo?: () => void;
   onRedo?: () => void;
   onSave?: () => void;
-  onPreview?: () => void;
+  /**
+   * "Live Preview": publishes exactly like Share Link (blob + iFastNet sync)
+   * and then opens the hosted page. May return a promise — the menu item stays
+   * disabled with a spinner until it settles, so one click = one publish.
+   */
+  onPreview?: () => void | Promise<void>;
   onPreviewLocal?: () => void;
   onUpgrade?: () => void;
   onProfile?: () => void;
@@ -125,6 +130,9 @@ export default function EditorHeader(props: {
   // hosted /e/{slug} page; "Local" previews in-place without uploading.
   const [previewOpen, setPreviewOpen] = useState(false);
   const previewRef = useRef<HTMLDivElement>(null);
+  // "live" while the publish + sync is in flight — same duplicate-click guard as
+  // Share Link, since Live Preview now runs the identical publish flow.
+  const [previewStatus, setPreviewStatus] = useState<"idle" | "live">("idle");
 
   // Close dropdowns when clicking outside
   useEffect(() => {
@@ -205,12 +213,25 @@ export default function EditorHeader(props: {
   };
 
   /**
-   * "Live" preview: publish/upload the pages and open the hosted page.
+   * "Live" preview: publish (blob + iFastNet sync, exactly like Share Link) and
+   * open the hosted page. The menu stays open and the item disabled while that
+   * runs so a second click cannot start a duplicate publish; the handler reports
+   * its own failures (toast), after which the item is clickable again.
    */
-  const handlePreviewLive = () => {
-    setPreviewOpen(false);
-    if (onPreview) return onPreview();
-    console.log('Preview (live) action triggered');
+  const handlePreviewLive = async (): Promise<void> => {
+    if (previewStatus !== "idle") return;
+    if (!onPreview) {
+      setPreviewOpen(false);
+      console.log('Preview (live) action triggered');
+      return;
+    }
+    setPreviewStatus("live");
+    try {
+      await onPreview();
+      setPreviewOpen(false);
+    } finally {
+      setPreviewStatus("idle");
+    }
   };
 
   /**
@@ -275,18 +296,15 @@ export default function EditorHeader(props: {
   };
 
   /**
-   * "Share Link" — three ordered steps, each one gating the next:
+   * "Share Link" — publish + sync (publishAndSyncCanvas, the same helper Live
+   * Preview uses), then copy the customer-facing vi-up.com URL that iFastNet
+   * returned. The internal https://canvas.vi-up.com/e/{canvas_slug} address is
+   * never copied: it is only the iframe source inside that page.
    *
-   *   1. exportHTML publishes the invitation JSON to blob storage at the stable
-   *      events/event-{eventId}.json path and returns that slug.
-   *   2. /api/canvas-sync tells iFastNet which canvas slug now serves the event
-   *      (server-side only — the secret never reaches the browser).
-   *   3. Only once BOTH succeeded is the public URL copied to the clipboard.
-   *
-   * A failure at step 1 skips step 2 entirely, so PHP is never told about a
-   * canvas that was not published. A failure at step 2 leaves the published blob
-   * in place and simply reports the error — clicking Share Link again re-runs
-   * both steps, which is safe because each overwrites in place.
+   * A blob failure skips the sync entirely, so PHP is never told about a canvas
+   * that was not published. A sync failure leaves the published blob in place
+   * and copies NOTHING — clicking Share Link again re-runs both steps, which is
+   * safe because each overwrites in place.
    */
   const handleShareLink = async (): Promise<void> => {
     const editor = editorRef.current;
@@ -297,31 +315,15 @@ export default function EditorHeader(props: {
     setShareError("");
     setShareStatus("link");
     try {
-      // ── 1. Publish to blob ────────────────────────────────────────────────
-      // Throws on failure; the sync below is therefore unreachable unless the
-      // invitation JSON really is live.
-      const slug = await editor.exportHTML(eventName);
-
-      // ── 2. Sync to iFastNet (server route, Bearer secret stays server-side)
-      const res = await fetch("/api/canvas-sync", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        // canvas_slug is intentionally NOT sent — the route derives it from
-        // event_id so the browser cannot claim a slug for someone else's event.
-        body: JSON.stringify({
-          user_id: props.userId ?? null,
-          event_id: props.eventId ?? null,
-          design_id: props.designId ?? null,
-          package_id: props.packageId ?? null,
-        }),
+      const { publicShareUrl } = await publishAndSyncCanvas(editor, eventName, {
+        userId: props.userId,
+        eventId: props.eventId,
+        designId: props.designId,
+        packageId: props.packageId,
       });
-      const data = await res.json().catch(() => null);
-      if (!res.ok || data?.ok === false) {
-        throw new Error(data?.error || `Sync failed (HTTP ${res.status}).`);
-      }
 
-      // ── 3. Both succeeded — hand the user the canonical public link ───────
-      await copyText(liveEventUrl(slug));
+      // Both steps succeeded — copy the link iFastNet returned, verbatim.
+      await copyText(publicShareUrl);
       setShareStatus("copied");
       setTimeout(() => {
         setShareStatus("idle");
@@ -477,12 +479,19 @@ export default function EditorHeader(props: {
             <button
               type="button"
               role="menuitem"
+              // Disabled for the whole publish → sync cycle (same guard as Share
+              // Link) so one click can never trigger two publishes.
+              disabled={previewStatus === "live"}
               onClick={handlePreviewLive}
-              className="w-full flex items-center gap-[10px] px-3 py-[10px] text-[#7D5B59] font-semibold font-[Montserrat] rounded-[10px] hover:bg-[#f7f2f1] text-left"
+              className="w-full flex items-center gap-[10px] px-3 py-[10px] text-[#7D5B59] font-semibold font-[Montserrat] rounded-[10px] hover:bg-[#f7f2f1] disabled:opacity-40 disabled:cursor-not-allowed text-left"
             >
-              <Link2 className="w-[22px] flex-shrink-0" />
+              {previewStatus === "live" ? (
+                <Loader2 className="w-[22px] flex-shrink-0 animate-spin" />
+              ) : (
+                <Link2 className="w-[22px] flex-shrink-0" />
+              )}
               <span className="flex flex-col items-start min-w-0">
-                <span>Live Preview</span>
+                <span>{previewStatus === "live" ? "Publishing…" : "Live Preview"}</span>
                 <span className="text-[12px] font-normal text-[#7D5B59]/60">
                   Publish and open the hosted page
                 </span>
@@ -745,11 +754,16 @@ export default function EditorHeader(props: {
           <button
             type="button"
             role="menuitem"
+            disabled={previewStatus === "live"}
             onClick={handlePreviewLive}
-            className="w-full flex items-center gap-2 px-3 py-2 text-[#7D5B59] font-semibold rounded-[10px] hover:bg-[#f7f2f1] text-left text-sm"
+            className="w-full flex items-center gap-2 px-3 py-2 text-[#7D5B59] font-semibold rounded-[10px] hover:bg-[#f7f2f1] disabled:opacity-40 disabled:cursor-not-allowed text-left text-sm"
           >
-            <Link2 className="w-4 flex-shrink-0" />
-            <span>Live Preview</span>
+            {previewStatus === "live" ? (
+              <Loader2 className="w-4 flex-shrink-0 animate-spin" />
+            ) : (
+              <Link2 className="w-4 flex-shrink-0" />
+            )}
+            <span>{previewStatus === "live" ? "Publishing…" : "Live Preview"}</span>
           </button>
           <button
             type="button"
