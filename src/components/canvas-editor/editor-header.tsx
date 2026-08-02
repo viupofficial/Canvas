@@ -71,6 +71,16 @@ export default function EditorHeader(props: {
    */
   titleSyncStatus?: "idle" | "saving" | "saved" | "error";
   titleSyncError?: string;
+  /**
+   * Identity of the event this canvas belongs to. Share Link needs it twice:
+   * the published blob is keyed on the event id, and the same ids are reported
+   * to iFastNet after publishing so PHP knows which canvas serves the event.
+   * Absent on legacy project / teaser canvases, where Share Link cannot publish.
+   */
+  userId?: number | null;
+  eventId?: number | null;
+  designId?: number | null;
+  packageId?: number | null;
 }) {
   const router = useRouter();
   const pathname = usePathname();
@@ -106,6 +116,9 @@ export default function EditorHeader(props: {
   const [shareOpen, setShareOpen] = useState(false);
   const shareRef = useRef<HTMLDivElement>(null);
   const [shareStatus, setShareStatus] = useState<"idle" | "link" | "copied" | "pdf">("idle");
+  // Last Share Link failure, shown inside the dropdown. Cleared on every retry —
+  // publishing and syncing are both idempotent, so retrying is always safe.
+  const [shareError, setShareError] = useState("");
 
   // ── PREVIEW DROPDOWN ─────────────────────────────────────────────────────
   // The preview button opens a menu: "Live" publishes/uploads then opens the
@@ -262,21 +275,53 @@ export default function EditorHeader(props: {
   };
 
   /**
-   * "Share Link": publish the project exactly like the play (preview) button
-   * does — exportHTML uploads the pages and returns a slug derived from the
-   * event name — then copy the resulting /e/{slug} URL to the clipboard.
+   * "Share Link" — three ordered steps, each one gating the next:
+   *
+   *   1. exportHTML publishes the invitation JSON to blob storage at the stable
+   *      events/event-{eventId}.json path and returns that slug.
+   *   2. /api/canvas-sync tells iFastNet which canvas slug now serves the event
+   *      (server-side only — the secret never reaches the browser).
+   *   3. Only once BOTH succeeded is the public URL copied to the clipboard.
+   *
+   * A failure at step 1 skips step 2 entirely, so PHP is never told about a
+   * canvas that was not published. A failure at step 2 leaves the published blob
+   * in place and simply reports the error — clicking Share Link again re-runs
+   * both steps, which is safe because each overwrites in place.
    */
   const handleShareLink = async (): Promise<void> => {
     const editor = editorRef.current;
+    // The guard is what prevents a double click from publishing twice: any
+    // status other than "idle" means a share is already in flight or just
+    // finished (the button is also disabled for the same window).
     if (!editor || shareStatus !== "idle") return;
+    setShareError("");
     setShareStatus("link");
     try {
-      // exportHTML publishes the pages and returns the title-derived slug; build
-      // the canonical public link so the copied URL is always the real live
-      // format (https://canvas.vi-up.com/e/{slug}), not the editor's own origin.
+      // ── 1. Publish to blob ────────────────────────────────────────────────
+      // Throws on failure; the sync below is therefore unreachable unless the
+      // invitation JSON really is live.
       const slug = await editor.exportHTML(eventName);
-      const shareUrl = liveEventUrl(slug);
-      await copyText(shareUrl);
+
+      // ── 2. Sync to iFastNet (server route, Bearer secret stays server-side)
+      const res = await fetch("/api/canvas-sync", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        // canvas_slug is intentionally NOT sent — the route derives it from
+        // event_id so the browser cannot claim a slug for someone else's event.
+        body: JSON.stringify({
+          user_id: props.userId ?? null,
+          event_id: props.eventId ?? null,
+          design_id: props.designId ?? null,
+          package_id: props.packageId ?? null,
+        }),
+      });
+      const data = await res.json().catch(() => null);
+      if (!res.ok || data?.ok === false) {
+        throw new Error(data?.error || `Sync failed (HTTP ${res.status}).`);
+      }
+
+      // ── 3. Both succeeded — hand the user the canonical public link ───────
+      await copyText(liveEventUrl(slug));
       setShareStatus("copied");
       setTimeout(() => {
         setShareStatus("idle");
@@ -284,7 +329,7 @@ export default function EditorHeader(props: {
       }, 1500);
     } catch (e) {
       console.error("[share] link failed", e);
-      alert("Could not create the share link: " + (e as Error).message);
+      setShareError((e as Error).message || "Could not create the share link.");
       setShareStatus("idle");
     }
   };
@@ -508,7 +553,9 @@ export default function EditorHeader(props: {
               <button
                 type="button"
                 role="menuitem"
-                disabled={shareStatus === "pdf"}
+                // Disabled for the whole publish → sync → copy cycle so a second
+                // click cannot start a duplicate publish.
+                disabled={shareStatus !== "idle"}
                 onClick={handleShareLink}
                 className="w-full flex items-center gap-[10px] px-3 py-[10px] text-[#7D5B59] font-semibold font-[Montserrat] rounded-[10px] hover:bg-[#f7f2f1] disabled:opacity-40 disabled:cursor-not-allowed text-left"
               >
@@ -532,6 +579,17 @@ export default function EditorHeader(props: {
                   </span>
                 </span>
               </button>
+
+              {/* Share Link failure — the link was NOT copied. Both steps are
+                  idempotent, so clicking Share Link again is a safe retry. */}
+              {shareError && (
+                <p
+                  role="alert"
+                  className="mx-3 mb-1 rounded-[10px] bg-[#FDECEC] px-3 py-2 text-[12px] font-semibold text-[#B23B3B]"
+                >
+                  {shareError} Please try again.
+                </p>
+              )}
 
               {/* Share PDF */}
               <button

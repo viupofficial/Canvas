@@ -877,7 +877,16 @@ function ProjectEditorInner({
             // then publish + open the hosted page. The save is fire-and-forget:
             // /e/[slug] reads the uploaded blob, not the designs row.
             forceSaveNow();
-            editorRef.current?.exportHTML(eventName).then((slug) => router.push(`/e/${slug}`));
+            editorRef.current
+              ?.exportHTML(eventName)
+              .then((slug) => router.push(`/e/${slug}`))
+              // exportHTML now throws instead of returning a placeholder slug, so
+              // a failed publish reports itself rather than opening someone
+              // else's blob at /e/rsvp.
+              .catch((e: Error) => {
+                console.error("[preview] publish failed", e);
+                showPackageToast(e.message || "Could not publish this design.", "warn");
+              });
           }}
           onPreviewLocal={() => {
             if (editorRef.current?.isMusicUploading?.()) {
@@ -905,6 +914,12 @@ function ProjectEditorInner({
             titleError ? "error" : titleSaving ? "saving" : titleSaved ? "saved" : "idle"
           }
           titleSyncError={titleError}
+          // Share Link publishes to events/event-{eventId}.json and then reports
+          // these ids to iFastNet via /api/canvas-sync.
+          userId={userId ?? null}
+          eventId={eventId ?? null}
+          designId={designId ?? null}
+          packageId={effectivePackageId}
         />
 
         <div className="flex w-full gap-6 flex-1 min-h-0 overflow-hidden">

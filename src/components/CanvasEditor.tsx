@@ -35,7 +35,7 @@ import { FONT_GROUPS, loadGoogleFont, collectFontFamilies, preloadFonts } from "
 import { downscaleImageFile } from "@/src/lib/imageDownscale";
 import { saveLocalPreview } from "@/src/lib/localPreview";
 import { extractEnvelope } from "@/src/lib/extract-envelope";
-import { slugify } from "@/src/lib/slug";
+import { eventBlobPath, eventSlug } from "@/src/lib/slug";
 import { getPackageRules } from "@/src/lib/packageRules";
 import { normalizePresentationMode, type PresentationMode } from "@/src/lib/presentationMode";
 import { upload } from "@vercel/blob/client";
@@ -3355,7 +3355,7 @@ const [currentPage, setCurrentPage] = useState(0);
  const exportHTML = useCallback(async (eventName?: string): Promise<string> => {
   const canvas = fabricRef.current;
   const fabric = fabricModuleRef.current;
-  if (!canvas || !fabric) return "rsvp";
+  if (!canvas || !fabric) throw new Error("The canvas is not ready yet.");
 
   const currentPageJson = serializeCanvas(canvas);
   const exportedPages = pages.map((page, index) => {
@@ -3368,7 +3368,18 @@ const [currentPage, setCurrentPage] = useState(0);
   // can stream straight to blob storage. Routing it through the serverless
   // function instead hit Vercel's 4.5MB request-body limit and silently
   // dropped large publishes, freezing /e/{slug} at the last small version.
-  const slug = slugify(eventName);
+  //
+  // The slug is the EVENT ID, never the title: publishing the same event twice
+  // overwrites one stable blob, so a shared link survives renames and two events
+  // with identical titles can never overwrite each other. A canvas with no event
+  // (legacy project / teaser) has nowhere safe to publish and must not fall back
+  // to a shared path — surface that instead of silently writing somewhere else.
+  const slug = eventSlug(props.eventId);
+  if (!slug) {
+    throw new Error(
+      "This canvas is not linked to an event yet, so it cannot be published. Open it from My Event and try again.",
+    );
+  }
   const env = extractEnvelope(exportedPages ?? []);
   const borderList = globalBordersRef.current ?? [];
   const borderUrl = borderList.length > 0 ? borderList[0].url : null;
@@ -3417,16 +3428,19 @@ const [currentPage, setCurrentPage] = useState(0);
   try {
     // Direct browser → blob upload; /api/export-to-rsvp only signs the token,
     // so there is no function-body size ceiling on the design itself.
-    await upload(`events/${slug}.json`, JSON.stringify(payload), {
+    await upload(eventBlobPath(slug), JSON.stringify(payload), {
       access: "public",
       contentType: "application/json",
       handleUploadUrl: "/api/export-to-rsvp",
     });
     return slug;
   } catch (err: any) {
+    // Rethrow instead of returning a fallback slug: the caller must know the
+    // publish failed so it can report it and (for Share Link) skip the iFastNet
+    // sync entirely. The old behaviour returned "rsvp", which handed the user a
+    // link to an unrelated blob as if publishing had worked.
     console.error("export-to-rsvp upload error:", err);
-    alert("Publish failed: " + (err?.message ?? "unknown error"));
-    return "rsvp";
+    throw new Error(err?.message ? `Publish failed: ${err.message}` : "Publish failed.");
   }
 }, [currentPage, musicUrl, pages, serializeCanvas, props]);
 

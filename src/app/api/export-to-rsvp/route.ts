@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { handleUpload, type HandleUploadBody } from "@vercel/blob/client";
+import { isEventBlobPath } from "@/src/lib/slug";
 
 // Token issuer for CLIENT-SIDE blob uploads of the published event JSON.
 //
@@ -18,15 +19,24 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       body,
       request: req,
       token: process.env.BLOB_READ_WRITE_TOKEN_READ_WRITE_TOKEN,
-      onBeforeGenerateToken: async () => ({
-        allowedContentTypes: ["application/json"],
-        // Keep the deterministic events/{slug}.json path and overwrite in place
-        // so the live link is stable and always reflects the latest publish.
-        addRandomSuffix: false,
-        allowOverwrite: true,
-        // Generous ceiling for image-heavy designs (well above the old 4.5MB).
-        maximumSizeInBytes: 100 * 1024 * 1024,
-      }),
+      onBeforeGenerateToken: async (pathname) => {
+        // The token grants write access to exactly the path it is signed for, so
+        // this is the ONE place that decides where the browser may publish.
+        // Only the deterministic events/event-{eventId}.json path is allowed —
+        // never an arbitrary blob key chosen by the client.
+        if (!isEventBlobPath(pathname)) {
+          throw new Error(`Refusing to sign an upload for "${pathname}"`);
+        }
+        return {
+          allowedContentTypes: ["application/json"],
+          // Keep the deterministic path and overwrite in place so the live link
+          // is stable and always reflects the latest publish.
+          addRandomSuffix: false,
+          allowOverwrite: true,
+          // Generous ceiling for image-heavy designs (well above the old 4.5MB).
+          maximumSizeInBytes: 100 * 1024 * 1024,
+        };
+      },
       // No server-side post-processing is needed; the blob is the source of
       // truth the live page reads. (This webhook does not fire on localhost.)
       onUploadCompleted: async () => {},
