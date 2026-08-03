@@ -1,8 +1,8 @@
 "use client"
 
 import React, { useState, useRef, useEffect } from "react"
-import { useEventDataOptional, giftQrImages, QR_DEFAULT_SIZE, QR_MIN_SIZE, QR_MAX_SIZE } from "@/src/store/EventDataContext"
-import QrCarousel from "@/src/components/QrCarousel"
+import { useEventDataOptional, giftAccounts, clampQrSize, type GiftAccount } from "@/src/store/EventDataContext"
+import GiftCarousel from "@/src/components/GiftCarousel"
 import { buildIcs, icsFilename } from "@/src/lib/calendar/icsBuilder"
 import { buildGoogleCalendarLink } from "@/src/lib/calendar/googleCalendarLink"
 import EventMiniCalendar from "@/src/components/EventMiniCalendar"
@@ -25,11 +25,13 @@ export default function EventFooter({
 }: {
   contacts?: any[];
   moneyGift?: {
+    // Bank / number / QR / QR size, one entry per account guests can swipe to.
+    accounts?: GiftAccount[] | null;
+    // Legacy single-account fields, still honoured for invitations saved before
+    // multi-account (see giftAccounts()).
     bank?: string;
     account?: number | string;
-    // Legacy single QR — superseded by `images`, still honoured as a fallback.
     image?: string | null;
-    // QR images in swipe order.
     images?: string[] | null;
     qrSize?: number | null;
     // "Show Money Gift" (Money Gift sidebar). Undefined ⇒ ON for backward
@@ -91,15 +93,18 @@ export default function EventFooter({
   const showLocation = nav.locationVisible;
   const showMoneyGift = nav.moneyGiftVisible;
 
-  // Money Gift QR gallery: every uploaded QR, swipeable. Falls back to the demo
-  // QR so an unfilled Money Gift card still shows something, as before.
-  const uploadedQrImages = giftQrImages(moneyGift);
-  const qrImages = uploadedQrImages.length > 0 ? uploadedQrImages : ["/MayaQRimage.png"];
-  const qrSize = Math.min(QR_MAX_SIZE, Math.max(QR_MIN_SIZE, moneyGift?.qrSize ?? QR_DEFAULT_SIZE));
+  // Money Gift: one swipeable slide per saved account. Falls back to the demo
+  // account so an unfilled Money Gift card still shows something, as before.
+  const savedAccounts = giftAccounts(moneyGift);
+  const giftAccountList: GiftAccount[] =
+    savedAccounts.length > 0
+      ? savedAccounts
+      : [{ bank: "Maybank Berhad", account: "154080219940", image: "/MayaQRimage.png", qrSize: clampQrSize(null) }];
 
   const [activeCard, setActiveCard] = useState<string | null>(null);
   const [rsvpStatus, setRsvpStatus] = useState<null | "accept" | "decline">(null);
-  const [copied, setCopied] = useState(false);
+  // Which account's number was just copied (one copy button per slide).
+  const [copiedIndex, setCopiedIndex] = useState<number | null>(null);
   // While a panel is fading out it stays mounted with the `is-closing` class so
   // the fade-out can play, then unmounts. Keep this in sync with the CSS
   // `previewUiFadeOut` duration in globals.css (240ms).
@@ -116,12 +121,14 @@ export default function EventFooter({
   const gbNameRef = useRef<HTMLInputElement>(null);
   const hasEventInfo = userId != null && eventId != null && userId !== "" && eventId !== "";
 
-  const handleCopyAccount = async () => {
-    const accountNumber = String(moneyGift?.account || "154080219940");
+  const handleCopyAccount = async (accountNumber: string, index: number) => {
+    const flash = () => {
+      setCopiedIndex(index);
+      setTimeout(() => setCopiedIndex((i) => (i === index ? null : i)), 1500);
+    };
     try {
       await navigator.clipboard.writeText(accountNumber);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 1500);
+      flash();
     } catch {
       const ta = document.createElement("textarea");
       ta.value = accountNumber;
@@ -129,8 +136,7 @@ export default function EventFooter({
       ta.select();
       document.execCommand("copy");
       document.body.removeChild(ta);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 1500);
+      flash();
     }
   };
 
@@ -359,36 +365,58 @@ const generateICS = (event: any, loc?: any) => {
                 <div className={`moneygift-card ${fadeCls}`}>
                     <h3>Money Gift</h3>
 
-                  <div className="bank-info">
-                    <input
-                      type="text"
-                      style={{ textAlign: "center" }}
-                      value={moneyGift?.bank || "Maybank Berhad"}
-                      readOnly
-                    />
-                  </div>
+                  {/* One slide per account — its bank, its number and its own QR
+                      stay together, so the number a guest copies always belongs
+                      to the code they are looking at. */}
+                  <GiftCarousel
+                    itemLabel="account"
+                    slides={giftAccountList.map((acc, i) => {
+                      const number = String(acc.account ?? "");
+                      const copied = copiedIndex === i;
+                      return (
+                        <div className="gift-slide" key={i}>
+                          <div className="bank-info">
+                            <input
+                              type="text"
+                              style={{ textAlign: "center" }}
+                              value={acc.bank || ""}
+                              readOnly
+                            />
+                          </div>
 
-                  <div className="account-wrapper">
-                    <input
-                      type="text"
-                      style={{ textAlign: "center" }}
-                      id="account-number"
-                      value={moneyGift?.account || "154080219940"}
-                      readOnly
-                    />
-                    <button
-                      type="button"
-                      onClick={handleCopyAccount}
-                      aria-label="Copy account number"
-                      title={copied ? "Copied!" : "Copy account number"}
-                    >
-                      <i className={copied ? "fas fa-check" : "fa-regular fa-copy"}></i>
-                    </button>
-                  </div>
+                          <div className="account-wrapper">
+                            <input
+                              type="text"
+                              style={{ textAlign: "center" }}
+                              id={i === 0 ? "account-number" : `account-number-${i + 1}`}
+                              value={number}
+                              readOnly
+                            />
+                            <button
+                              type="button"
+                              onClick={() => handleCopyAccount(number, i)}
+                              aria-label={`Copy account number${acc.bank ? ` for ${acc.bank}` : ""}`}
+                              title={copied ? "Copied!" : "Copy account number"}
+                            >
+                              <i className={copied ? "fas fa-check" : "fa-regular fa-copy"}></i>
+                            </button>
+                          </div>
 
-<div className="qr-wrapper">
-  <QrCarousel images={qrImages} size={qrSize} />
-</div>
+                          {acc.image && (
+                            <div className="qr-wrapper">
+                              {/* eslint-disable-next-line @next/next/no-img-element */}
+                              <img
+                                src={acc.image}
+                                alt={acc.bank ? `QR code for ${acc.bank}` : "QR code"}
+                                draggable={false}
+                                style={{ width: clampQrSize(acc.qrSize), height: clampQrSize(acc.qrSize) }}
+                              />
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  />
 
                 </div>
 

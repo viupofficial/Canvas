@@ -702,33 +702,118 @@ export default function RsvpPlayer({
     // replaced automatically once entries arrive (the guestMessages prop change
     // rebuilds the canvases), so the template wording never shows alongside
     // real wishes.
-    const startGuestbook = (rc: any) => {
+    const startGuestbook = (rc: any): (() => void) | undefined => {
       const objs = rc.getObjects();
       const msgBox = objs.find((o: any) => o?.name === "guestMessage");
       const senderBox = objs.find((o: any) => o?.name === "guestSender");
       if (!msgBox && !senderBox) return;
+
+      // Wishes are guest-written, so the message box's height changes with every
+      // entry — a long one grows straight through whatever the design placed
+      // around it (the "Guestbook" title above, the ← → buttons below). After
+      // each swap we re-flow the pair inside the band those two reserve: the
+      // message starts under the title, the sender follows it, and if the pair
+      // still reaches the buttons the message shrinks until it clears them.
+      const height = (o: any) => (o.height ?? 0) * (o.scaleY ?? 1);
+      const originShift = (o: any) =>
+        o.originY === "center" ? height(o) / 2 : o.originY === "bottom" ? height(o) : 0;
+      const topOf = (o: any) => (o.top ?? 0) - originShift(o);
+      const bottomOf = (o: any) => topOf(o) + height(o);
+      const setTopOf = (o: any, y: number) => {
+        o.set("top", y + originShift(o));
+        o.setCoords?.();
+      };
+
+      // The element's own title — still the plain "Guestbook" textbox even after
+      // the designer restyles or moves it. Only treated as a ceiling when it
+      // actually sits above the message's resting place.
+      const titleBox = objs.find(
+        (o: any) =>
+          o !== msgBox &&
+          o !== senderBox &&
+          typeof o?.text === "string" &&
+          o.text.trim().toLowerCase() === "guestbook",
+      );
+      const buttons = objs.filter((o: any) => /^(prev|next)Btn(Bg)?$/.test(String(o?.name ?? "")));
+
+      // Kept clear of the title above and of the buttons below.
+      const TITLE_GAP = 12;
+      const BUTTON_GAP = 16;
+      const SENDER_GAP = 8;
+      const MIN_FONT_SIZE = 9;
+
+      // The design's own resting layout, captured while the boxes still hold the
+      // template's placeholder text.
+      const restingTop = msgBox ? topOf(msgBox) : 0;
+      const senderRestingTop = senderBox ? topOf(senderBox) : 0;
+      const restingBottom = senderBox ? bottomOf(senderBox) : msgBox ? bottomOf(msgBox) : 0;
+      const baseFontSize = msgBox?.fontSize ?? 16;
+      const buttonsTop = (() => {
+        const tops = buttons.map(topOf).filter((y: number) => y > restingTop);
+        return tops.length ? Math.min(...tops) : null;
+      })();
+      // Breathing room above the buttons — but never more than the design itself
+      // leaves there, or a tight template (where the sender already sits just
+      // above the arrows) would shrink every wish for no reason.
+      const floor =
+        buttonsTop == null
+          ? Infinity
+          : buttonsTop - Math.max(0, Math.min(BUTTON_GAP, buttonsTop - restingBottom));
+
+      const relayout = () => {
+        if (!msgBox) {
+          senderBox?.setCoords?.();
+          return;
+        }
+        // Re-measured every pass: the title's own height only settles once its
+        // webfont has loaded.
+        const ceiling = titleBox ? bottomOf(titleBox) + TITLE_GAP : -Infinity;
+        const top = Math.max(restingTop, ceiling);
+
+        // Lay the pair out at a given size and report where it ends.
+        const flow = (size: number) => {
+          if (msgBox.fontSize !== size) msgBox.set("fontSize", size);
+          msgBox.initDimensions?.();
+          setTopOf(msgBox, top);
+          if (!senderBox) return bottomOf(msgBox);
+          senderBox.initDimensions?.();
+          setTopOf(senderBox, Math.max(senderRestingTop, bottomOf(msgBox) + SENDER_GAP));
+          return bottomOf(senderBox);
+        };
+
+        let size = baseFontSize;
+        let bottom = flow(size);
+        while (bottom > floor && size > MIN_FONT_SIZE) {
+          size -= 1;
+          bottom = flow(size);
+        }
+      };
+
       const list = guestMessages && guestMessages.length ? guestMessages : null;
       if (!list) {
         msgBox?.set("text", GUESTBOOK_EMPTY_TEXT);
         senderBox?.set("text", "");
+        relayout();
         rc.requestRenderAll();
-        return;
+        return relayout;
       }
       let i = 0;
       const show = () => {
         const entry = list[i];
         msgBox?.set("text", `“${entry.message}”`);
         senderBox?.set("text", `- ${entry.sender}`);
+        relayout();
         rc.requestRenderAll();
       };
       show();
-      if (list.length < 2) return;
+      if (list.length < 2) return relayout;
       const wid = setInterval(() => {
         if (cancelled) return;
         i = (i + 1) % list.length;
         show();
       }, 4000);
       cancellers.push(() => clearInterval(wid));
+      return relayout;
     };
 
     // Scroll mode: a page's entrance animations should play when the guest
@@ -876,7 +961,7 @@ export default function RsvpPlayer({
             armAnimations(wrapper, () => startAnimations(rc));
             startGallerySlideshow(rc, wrapper, index);
             startCountdown(rc);
-            startGuestbook(rc);
+            const relayoutGuestbook = startGuestbook(rc);
             rc.requestRenderAll();
             // Webfonts used by this page may not be ready at first paint; load
             // them, then repaint so text renders with the correct family. A
@@ -902,6 +987,10 @@ export default function RsvpPlayer({
                   try { fabric.util?.clearFabricFontCache?.(f); } catch {}
                 }
                 rc.forEachObject(refreshText);
+                // The guestbook's spacing was computed against the fallback
+                // serif; now that the real faces are measured, re-flow it so the
+                // message still clears the title and the ← → buttons.
+                relayoutGuestbook?.();
                 rc.requestRenderAll();
               };
               preloadFonts(families).then(repaintWithFonts);

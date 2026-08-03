@@ -1157,14 +1157,33 @@ star-fly-in {
   transform: scale(1.03);
 }
 
-/* Money Gift QR gallery. One or more QR images swiped horizontally: the track
-   is a scroll-snap container so touch/trackpad gestures are native (mouse
-   drag is added in QrCarousel.tsx). */
+/* Money Gift gallery. One or more accounts swiped horizontally: the track is a
+   scroll-snap container so touch/trackpad gestures are native (mouse drag is
+   added in GiftCarousel.tsx). */
 .qr-carousel {
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: 10px;
+}
+
+/* One saved account: bank, number and that account's QR, stacked. Each fills
+   the slide so the inputs keep the width they had before the carousel. */
+.gift-slide {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: 100%;
+}
+
+.gift-slide .bank-info,
+.gift-slide .account-wrapper {
+  width: 100%;
+}
+
+/* The card's own bottom padding already spaces the QR from the dots. */
+.gift-slide .qr-wrapper {
+  margin-top: 10px;
 }
 
 .qr-carousel-track {
@@ -1190,10 +1209,13 @@ star-fly-in {
 
 .qr-carousel-slide {
   flex: 0 0 100%;
+  min-width: 0;
   scroll-snap-align: center;
   scroll-snap-stop: always;
   display: flex;
-  align-items: center;
+  /* Top-aligned: accounts can have differently sized QRs, and centring would
+     leave their bank/number rows sitting at different heights while swiping. */
+  align-items: flex-start;
   justify-content: center;
 }
 

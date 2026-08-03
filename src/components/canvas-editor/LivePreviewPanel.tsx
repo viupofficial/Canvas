@@ -1,8 +1,8 @@
 "use client";
 
-import { useEventDataOptional, giftQrImages, type CalendarData, type GiftData, type LocationData } from "@/src/store/EventDataContext";
+import { useEventDataOptional, giftAccounts, type CalendarData, type GiftData, type LocationData } from "@/src/store/EventDataContext";
 import { cssBackground, firstColorHex, type GradientDescriptor } from "@/src/lib/gradient";
-import QrCarousel from "@/src/components/QrCarousel";
+import GiftCarousel from "@/src/components/GiftCarousel";
 
 type PreviewTab = "contact" | "location" | "calendar" | "rsvp" | "money";
 
@@ -157,25 +157,33 @@ function GiftCard({
 }: {
   moneyGift: GiftData;
 }) {
-  const qrImages = giftQrImages(moneyGift);
-  return (
-    <CardFrame title="Money Gift">
-      <div className="flex flex-col items-center gap-2">
+  const accounts = giftAccounts(moneyGift);
+  // Empty section: keep the placeholder card the panel showed before anything
+  // was filled in.
+  const slides = (accounts.length > 0 ? accounts : [{ bank: "", account: "", image: null }]).map(
+    (acc, i) => (
+      <div className="flex flex-col items-center gap-2 w-full" key={i}>
         <div className="text-[11px] text-center font-semibold text-[#191212]">
-          {moneyGift?.bank || "Bank name"}
+          {acc.bank || "Bank name"}
         </div>
         <div className="text-[11px] text-center text-[#7D5B59] tracking-wider">
-          {moneyGift?.account || "0000 0000 0000"}
+          {acc.account || "0000 0000 0000"}
         </div>
-        {qrImages.length > 0 ? (
-          // Same swipeable gallery as the invitation footer, at panel scale.
-          <QrCarousel images={qrImages} size={80} />
+        {acc.image ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={acc.image} alt="QR" className="w-20 h-20 object-contain rounded-md" draggable={false} />
         ) : (
           <div className="w-20 h-20 rounded-md bg-white border flex items-center justify-center overflow-hidden">
             <span className="text-[9px] text-neutral-400">QR preview</span>
           </div>
         )}
       </div>
+    ),
+  );
+  return (
+    <CardFrame title="Money Gift">
+      {/* Same swipeable gallery as the invitation footer, at panel scale. */}
+      <GiftCarousel slides={slides} itemLabel="account" />
     </CardFrame>
   );
 }
