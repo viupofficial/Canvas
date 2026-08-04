@@ -1,7 +1,16 @@
 // updated
 import React, { useEffect, useState } from 'react';
 import type { EditorHandle } from '@/src/components/CanvasEditor';
-import { useEventData, giftQrImages, QR_DEFAULT_SIZE, QR_MIN_SIZE, QR_MAX_SIZE, QR_MAX_IMAGES } from '@/src/store/EventDataContext';
+import {
+  useEventData,
+  giftAccounts,
+  legacyGiftFields,
+  QR_DEFAULT_SIZE,
+  QR_MIN_SIZE,
+  QR_MAX_SIZE,
+  GIFT_MAX_ACCOUNTS,
+  type GiftAccount,
+} from '@/src/store/EventDataContext';
 import LivePreviewPanel from '@/src/components/canvas-editor/LivePreviewPanel';
 import MobileToolbar from '@/src/components/canvas-editor/mobile-toolbar';
 import { prayerPage } from "@/src/components/template-list/prayerTemplate";
@@ -1357,22 +1366,30 @@ function RSVPTab() {
   );
 }
 
+// A blank account card — what "Add another account" drops in.
+const emptyGiftAccount = (): GiftAccount => ({
+  bank: '',
+  account: '',
+  image: null,
+  qrSize: QR_DEFAULT_SIZE,
+});
+
 function MoneyGiftTab({ rules }: { rules: PackageRules }) {
   const { eventData, updateEventData, setSection } = useEventData();
   const current = eventData.moneyGift;
   // "Show Money Gift" — ON ⇒ Money Gift is offered in the invitation footer.
   // Defaults to ON unless explicitly turned off, so existing designs are
-  // unaffected. Purely a visibility switch: the bank / account / QR values
-  // below are left untouched when it goes off, and come straight back when it
-  // is turned on again.
+  // unaffected. Purely a visibility switch: the accounts below are left
+  // untouched when it goes off, and come straight back when it is turned on
+  // again.
   const [giftOn, setGiftOn] = useState(current?.enabled !== false);
-  const [bank, setBank] = useState(current?.bank ?? '');
-  const [account, setAccount] = useState<number | ''>(
-    (current?.account as number | '' | undefined) ?? ''
-  );
-  // Every uploaded QR, in the order guests swipe through them.
-  const [images, setImages] = useState<string[]>(() => giftQrImages(current));
-  const [qrSize, setQrSize] = useState<number>(current?.qrSize ?? QR_DEFAULT_SIZE);
+  // One entry per place guests can send a gift — bank, number, QR and that QR's
+  // size travel together, in the order guests swipe through them. Always at
+  // least one card on screen, even before anything is filled in.
+  const [accounts, setAccounts] = useState<GiftAccount[]>(() => {
+    const saved = giftAccounts(current);
+    return saved.length > 0 ? saved : [emptyGiftAccount()];
+  });
 
   const pushField = (patch: Partial<NonNullable<typeof current>>) => {
     updateEventData('moneyGift', patch as any);
@@ -1381,60 +1398,71 @@ function MoneyGiftTab({ rules }: { rules: PackageRules }) {
   const toggleGift = () => {
     const next = !giftOn;
     setGiftOn(next);
-    // Merge-patch: only `enabled` changes, so the saved bank/account/QR data
-    // survives being hidden and reappears intact when switched back on.
+    // Merge-patch: only `enabled` changes, so the saved accounts survive being
+    // hidden and reappear intact when switched back on.
     pushField({ enabled: next });
   };
 
-  // `image` stays in sync with the first QR: older invitations (and anything
-  // still reading the single-image field) keep rendering a QR.
-  const commitImages = (next: string[]) => {
-    setImages(next);
-    pushField({ images: next, image: next[0] ?? null });
+  // Every write goes through here so the legacy single-account fields (which
+  // canvas `eventBinding`s and already-published invitations still read) stay
+  // mirrored from the first account.
+  const commitAccounts = (next: GiftAccount[]) => {
+    setAccounts(next);
+    pushField({ accounts: next, ...legacyGiftFields(next) });
   };
 
-  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = Array.from(e.target.files ?? []);
-    // Let the same file be picked again after a remove.
-    e.target.value = '';
-    if (files.length === 0) return;
-    const room = QR_MAX_IMAGES - images.length;
-    if (room <= 0) {
-      alert(`You can add up to ${QR_MAX_IMAGES} QR images.`);
-      return;
-    }
-    if (files.length > room) {
-      alert(`Only the first ${room} image${room === 1 ? ' was' : 's were'} added — Money Gift holds up to ${QR_MAX_IMAGES} QR images.`);
-    }
-    Promise.all(files.slice(0, room).map(downscaleImageFile)).then((dataUrls) => {
-      commitImages([...images, ...dataUrls]);
-    });
+  const patchAccount = (index: number, patch: Partial<GiftAccount>) => {
+    commitAccounts(accounts.map((a, i) => (i === index ? { ...a, ...patch } : a)));
   };
 
-  const removeImage = (index: number) => {
-    commitImages(images.filter((_, i) => i !== index));
+  const addAccount = () => {
+    if (accounts.length >= GIFT_MAX_ACCOUNTS) return;
+    commitAccounts([...accounts, emptyGiftAccount()]);
+  };
+
+  const removeAccount = (index: number) => {
+    const next = accounts.filter((_, i) => i !== index);
+    commitAccounts(next.length > 0 ? next : [emptyGiftAccount()]);
   };
 
   // Reorder = change the swipe order guests see.
-  const moveImage = (index: number, delta: number) => {
+  const moveAccount = (index: number, delta: number) => {
     const target = index + delta;
-    if (target < 0 || target >= images.length) return;
-    const next = [...images];
+    if (target < 0 || target >= accounts.length) return;
+    const next = [...accounts];
     [next[index], next[target]] = [next[target], next[index]];
-    commitImages(next);
+    commitAccounts(next);
+  };
+
+  const handleQrUpload = (index: number) => (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    // Let the same file be picked again after a remove.
+    e.target.value = '';
+    if (!file) return;
+    downscaleImageFile(file).then((dataUrl) => patchAccount(index, { image: dataUrl }));
   };
 
   const handleSave = () => {
-    if (!bank || !account) {
-      alert("Please fill all fields");
+    // Blank trailing cards are dropped rather than saved — an account with no
+    // bank, no number and no QR would render as an empty slide for guests.
+    const filled = accounts.filter(
+      (a) => String(a.bank ?? '').trim() || String(a.account ?? '').trim() || a.image,
+    );
+    if (filled.length === 0) {
+      alert('Please fill in at least one bank account.');
       return;
     }
+    const incomplete = filled.findIndex(
+      (a) => !String(a.bank ?? '').trim() || !String(a.account ?? '').trim(),
+    );
+    if (incomplete !== -1) {
+      alert(`Please fill in the bank name and account number for account ${incomplete + 1}.`);
+      return;
+    }
+    setAccounts(filled);
     setSection('moneyGift', {
-      bank,
-      account,
-      images,
-      image: images[0] ?? null,
-      qrSize,
+      accounts: filled,
+      ...legacyGiftFields(filled),
       enabled: giftOn,
     });
   };
@@ -1477,131 +1505,138 @@ function MoneyGiftTab({ rules }: { rules: PackageRules }) {
       ) : null}
 
       <div className="flex flex-col gap-3">
-        <input
-          value={bank}
-          onChange={(e) => {
-            setBank(e.target.value);
-            pushField({ bank: e.target.value });
-          }}
-          placeholder="Bank"
-          className="px-3 py-2 border rounded-md text-sm"
-        />
-        <input
-          type="number"
-          value={account}
-          onChange={(e) => {
-            const v = Number(e.target.value);
-            setAccount(v);
-            pushField({ account: v });
-          }}
-          placeholder="Account Number"
-          className="px-3 py-2 border rounded-md text-sm"
-        />
-        {images.length > 0 && (
-          <div>
-            <div className="flex items-center justify-between mb-1">
-              <label className="text-sm text-[#191212] font-semibold">QR images</label>
-              <span className="text-xs text-[#7D5B59] font-semibold">
-                {images.length}/{QR_MAX_IMAGES}
+        {accounts.length > 1 && (
+          <p className="text-[11px] text-gray-500">
+            Guests swipe between these in this order — use the arrows to reorder.
+          </p>
+        )}
+
+        {accounts.map((acc, i) => (
+          <div key={i} className="rounded-md border border-[#E4D3CE] bg-[#FDFAF9] p-3 flex flex-col gap-3">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-semibold text-[#7D5B59]">
+                Account {i + 1}
+                {accounts.length > 1 ? ` of ${accounts.length}` : ''}
               </span>
-            </div>
-            <p className="text-[11px] text-gray-500 mb-2">
-              {images.length > 1
-                ? 'Guests swipe through these in this order — use the arrows to reorder.'
-                : 'Add another QR to let guests swipe between them.'}
-            </p>
-            <div className="grid grid-cols-3 gap-2">
-              {images.map((src, i) => (
-                <div
-                  key={`${i}-${src.slice(-24)}`}
-                  className="relative group rounded-md border bg-white p-1"
-                >
-                  <img src={src} alt={`QR ${i + 1}`} className="w-full h-16 object-contain" />
+              <div className="flex items-center gap-1">
+                {accounts.length > 1 && (
+                  <>
+                    <button
+                      type="button"
+                      onClick={() => moveAccount(i, -1)}
+                      disabled={i === 0}
+                      aria-label={`Move account ${i + 1} earlier`}
+                      title="Move earlier"
+                      className="px-1 text-sm text-[#7D5B59] disabled:opacity-30"
+                    >
+                      ‹
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => moveAccount(i, 1)}
+                      disabled={i === accounts.length - 1}
+                      aria-label={`Move account ${i + 1} later`}
+                      title="Move later"
+                      className="px-1 text-sm text-[#7D5B59] disabled:opacity-30"
+                    >
+                      ›
+                    </button>
+                  </>
+                )}
+                {/* Only when there is something to remove — the tab always keeps
+                    one card on screen, so an × on a lone card would do nothing
+                    visible. */}
+                {accounts.length > 1 && (
                   <button
                     type="button"
-                    onClick={() => removeImage(i)}
-                    aria-label={`Remove QR ${i + 1}`}
-                    title="Remove"
+                    onClick={() => removeAccount(i)}
+                    aria-label={`Remove account ${i + 1}`}
+                    title="Remove account"
+                    className="h-5 w-5 rounded-full bg-[#8C6B6B] text-white text-[11px] leading-none shadow"
+                  >
+                    ×
+                  </button>
+                )}
+              </div>
+            </div>
+
+            <input
+              value={acc.bank ?? ''}
+              onChange={(e) => patchAccount(i, { bank: e.target.value })}
+              placeholder="Bank"
+              className="px-3 py-2 border rounded-md text-sm bg-white"
+            />
+            {/* Text, not number: account numbers can carry leading zeros and are
+                never arithmetic. */}
+            <input
+              inputMode="numeric"
+              value={String(acc.account ?? '')}
+              onChange={(e) => patchAccount(i, { account: e.target.value })}
+              placeholder="Account Number"
+              className="px-3 py-2 border rounded-md text-sm bg-white"
+            />
+
+            {acc.image ? (
+              <div className="flex items-center gap-3">
+                <div className="relative rounded-md border bg-white p-1">
+                  <img src={acc.image} alt={`QR for account ${i + 1}`} className="w-16 h-16 object-contain" />
+                  <button
+                    type="button"
+                    onClick={() => patchAccount(i, { image: null })}
+                    aria-label={`Remove QR for account ${i + 1}`}
+                    title="Remove QR"
                     className="absolute -top-1.5 -right-1.5 h-5 w-5 rounded-full bg-[#8C6B6B] text-white text-[11px] leading-none shadow"
                   >
                     ×
                   </button>
-                  {images.length > 1 && (
-                    <div className="mt-1 flex items-center justify-between">
-                      <button
-                        type="button"
-                        onClick={() => moveImage(i, -1)}
-                        disabled={i === 0}
-                        aria-label={`Move QR ${i + 1} earlier`}
-                        title="Move earlier"
-                        className="px-1 text-xs text-[#7D5B59] disabled:opacity-30"
-                      >
-                        ‹
-                      </button>
-                      <span className="text-[10px] text-[#7D5B59] font-semibold">{i + 1}</span>
-                      <button
-                        type="button"
-                        onClick={() => moveImage(i, 1)}
-                        disabled={i === images.length - 1}
-                        aria-label={`Move QR ${i + 1} later`}
-                        title="Move later"
-                        className="px-1 text-xs text-[#7D5B59] disabled:opacity-30"
-                      >
-                        ›
-                      </button>
-                    </div>
-                  )}
                 </div>
-              ))}
+                <label className="text-xs text-[#7D5B59] font-semibold underline cursor-pointer">
+                  <input type="file" accept="image/*" onChange={handleQrUpload(i)} className="hidden" />
+                  Replace QR
+                </label>
+              </div>
+            ) : (
+              <label className="border-2 border-dashed rounded-md p-4 text-center cursor-pointer hover:bg-white">
+                <input type="file" accept="image/*" onChange={handleQrUpload(i)} className="hidden" />
+                <div className="text-sm text-gray-500">
+                  Drag or drop QR image,<br />or browse files
+                </div>
+              </label>
+            )}
+
+            <div>
+              <div className="flex items-center justify-between mb-1">
+                <label className="text-sm text-[#191212] font-semibold">QR size</label>
+                <span className="text-xs text-[#7D5B59] font-semibold">
+                  {acc.qrSize ?? QR_DEFAULT_SIZE}px
+                </span>
+              </div>
+              <input
+                type="range"
+                min={QR_MIN_SIZE}
+                max={QR_MAX_SIZE}
+                step={5}
+                value={acc.qrSize ?? QR_DEFAULT_SIZE}
+                onChange={(e) => patchAccount(i, { qrSize: Number(e.target.value) })}
+                className="w-full accent-[#8C6B6B] cursor-pointer"
+              />
             </div>
           </div>
+        ))}
+
+        {accounts.length < GIFT_MAX_ACCOUNTS ? (
+          <button
+            type="button"
+            onClick={addAccount}
+            className="py-2 rounded-md border border-[#8C6B6B] text-[#8C6B6B] text-sm font-semibold hover:bg-[#F7EFEC]"
+          >
+            + Add another account
+          </button>
+        ) : (
+          <p className="text-[11px] text-gray-500 text-center">
+            Money Gift holds up to {GIFT_MAX_ACCOUNTS} accounts.
+          </p>
         )}
-
-        <label
-          className={`border-2 border-dashed rounded-md p-4 text-center ${
-            images.length >= QR_MAX_IMAGES
-              ? 'opacity-50 cursor-not-allowed'
-              : 'cursor-pointer hover:bg-gray-50'
-          }`}
-        >
-          <input
-            type="file"
-            accept="image/*"
-            multiple
-            disabled={images.length >= QR_MAX_IMAGES}
-            onChange={handleImageUpload}
-            className="hidden"
-          />
-          <div className="text-sm text-gray-500">
-            {images.length >= QR_MAX_IMAGES ? (
-              <>Maximum of {QR_MAX_IMAGES} QR images reached</>
-            ) : images.length > 0 ? (
-              <>Add more QR images,<br />or browse files</>
-            ) : (
-              <>Drag or drop images,<br />or browse files</>
-            )}
-          </div>
-        </label>
-
-        <div>
-          <div className="flex items-center justify-between mb-1">
-            <label className="text-sm text-[#191212] font-semibold">QR size</label>
-            <span className="text-xs text-[#7D5B59] font-semibold">{qrSize}px</span>
-          </div>
-          <input
-            type="range"
-            min={QR_MIN_SIZE}
-            max={QR_MAX_SIZE}
-            step={5}
-            value={qrSize}
-            onChange={(e) => {
-              const v = Number(e.target.value);
-              setQrSize(v);
-              pushField({ qrSize: v });
-            }}
-            className="w-full accent-[#8C6B6B] cursor-pointer"
-          />
-        </div>
 
         <button
           onClick={handleSave}

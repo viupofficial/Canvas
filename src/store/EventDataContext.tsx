@@ -35,17 +35,32 @@ export type CalendarData = {
   // footer entry — `date` still drives the canvas countdown element.
   enabled?: boolean;
 } | null;
-export type GiftData = {
-  // Optional so the section can hold only the `enabled` flag before the form is
-  // filled in — turning the toggle off never discards saved form data.
+/** One place guests can send a gift: a bank, its account number, the QR they
+ *  scan, and how large that QR is shown. A Money Gift section holds up to
+ *  GIFT_MAX_ACCOUNTS of these and guests swipe between them. */
+export type GiftAccount = {
   bank?: string;
   account?: number | string;
-  // Legacy single QR. Kept in sync with `images[0]` so invitations saved before
-  // multi-QR (and any consumer still reading this field) keep working.
   image?: string | null;
-  // All QR images, in swipe order. Empty/absent ⇒ fall back to `image`.
-  images?: string[] | null;
   // QR display size in px (square). Undefined/null falls back to QR_DEFAULT_SIZE.
+  qrSize?: number | null;
+};
+
+export type GiftData = {
+  // The saved accounts, in the order guests swipe through them. Absent on
+  // invitations saved before multi-account — read via giftAccounts(), which
+  // migrates those on the fly.
+  accounts?: GiftAccount[] | null;
+  // ── Legacy single-account fields ──────────────────────────────────────────
+  // Still written, mirrored from accounts[0], so canvas `eventBinding`s
+  // ("moneyGift.image"), already-published invitations and the PHP records keep
+  // working. Optional so the section can hold only the `enabled` flag before the
+  // form is filled in — turning the toggle off never discards saved form data.
+  bank?: string;
+  account?: number | string;
+  image?: string | null;
+  // Every account's QR, in swipe order.
+  images?: string[] | null;
   qrSize?: number | null;
   // Whether Money Gift is offered in the invitation footer. Treated as ON when
   // undefined so pre-existing designs keep showing it — subject to the package
@@ -58,9 +73,16 @@ export type GiftData = {
 export const QR_MIN_SIZE = 140;
 export const QR_MAX_SIZE = 350;
 export const QR_DEFAULT_SIZE = 240;
-// Maximum QR images a Money Gift section can hold. Each one is stored inline as
-// a data URL, so the cap keeps the saved event payload a sane size.
-export const QR_MAX_IMAGES = 2;
+// Maximum accounts a Money Gift section can hold. Each one carries its QR inline
+// as a data URL, so the cap keeps the saved event payload a sane size.
+export const GIFT_MAX_ACCOUNTS = 2;
+
+/** A QR size the footer can actually render — the saved value clamped to the
+ *  slider's range, with the default for anything missing or malformed. */
+export function clampQrSize(size?: number | null): number {
+  const n = typeof size === "number" && Number.isFinite(size) ? size : QR_DEFAULT_SIZE;
+  return Math.min(QR_MAX_SIZE, Math.max(QR_MIN_SIZE, n));
+}
 
 /** The QR images to show, in swipe order. Reads the multi-image list and falls
  *  back to the legacy single `image` for invitations saved before multi-QR. */
@@ -72,6 +94,57 @@ export function giftQrImages(
   );
   if (list.length > 0) return list;
   return gift?.image ? [gift.image] : [];
+}
+
+const accountIsEmpty = (a: GiftAccount) =>
+  !String(a.bank ?? "").trim() && !String(a.account ?? "").trim() && !a.image;
+
+/**
+ * The accounts to show, in swipe order — the one reader every surface uses
+ * (footer, published page, live preview panel, editor sidebar).
+ *
+ * Invitations saved before multi-account hold a single bank/number plus up to
+ * two QR images — two codes for that same account (e.g. DuitNow and the bank
+ * app). Each of those becomes an account carrying that same bank and number, so
+ * guests keep seeing exactly what they saw before.
+ *
+ * Blank entries are dropped: the editor keeps an empty card on screen while it
+ * is being filled in, and that half-typed state must never reach a guest.
+ */
+export function giftAccounts(gift?: GiftData): GiftAccount[] {
+  const saved = (gift?.accounts ?? []).filter(
+    (a): a is GiftAccount => !!a && typeof a === "object",
+  );
+  const list = saved.length > 0 ? saved : legacyGiftAccounts(gift);
+  return list
+    .filter((a) => !accountIsEmpty(a))
+    .slice(0, GIFT_MAX_ACCOUNTS)
+    .map((a) => ({
+      bank: a.bank ?? "",
+      account: a.account ?? "",
+      image: a.image ?? null,
+      qrSize: clampQrSize(a.qrSize),
+    }));
+}
+
+function legacyGiftAccounts(gift?: GiftData): GiftAccount[] {
+  const base = { bank: gift?.bank, account: gift?.account, qrSize: gift?.qrSize };
+  const images = giftQrImages(gift);
+  if (images.length === 0) return [{ ...base, image: null }];
+  return images.map((image) => ({ ...base, image }));
+}
+
+/** The legacy single-account fields, mirrored from the account list. Written on
+ *  every save so older consumers keep reading a valid Money Gift. */
+export function legacyGiftFields(accounts: GiftAccount[]) {
+  const first = accounts[0];
+  return {
+    bank: first?.bank ?? "",
+    account: first?.account ?? "",
+    image: first?.image ?? null,
+    images: accounts.map((a) => a.image).filter((src): src is string => !!src),
+    qrSize: clampQrSize(first?.qrSize),
+  };
 }
 export type RSVPConfig = {
   // Whether RSVP is available on the invitation. Treated as ON when undefined so

@@ -33,7 +33,10 @@ export default function EditorShellClient({ onSelectionChange }: { onSelectionCh
           </button>
           <button
             className="px-3 py-1 bg-brand-dark text-brand-light rounded"
-            onClick={() => editorRef.current?.exportHTML()}
+            onClick={() =>
+              // exportHTML rejects when the canvas has no event to publish to.
+              editorRef.current?.exportHTML().catch((e) => console.error("[export]", e))
+            }
           >
             Export
           </button>

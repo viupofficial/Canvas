@@ -3,8 +3,10 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
 
 /**
- * Swipeable QR gallery used by every surface that shows Money Gift (editor
- * canvas footer, local preview, published page, live preview panel).
+ * Swipeable gallery used by every surface that shows Money Gift (editor canvas
+ * footer, local preview, published page, live preview panel). One slide per
+ * saved account — bank, account number and that account's QR travel together,
+ * so a guest always reads a number next to the QR it belongs to.
  *
  * Horizontal swiping is native scroll + CSS scroll-snap, so touch and trackpad
  * gestures behave the same everywhere — including inside the editor canvas,
@@ -12,21 +14,25 @@ import React, { useCallback, useEffect, useRef, useState } from "react";
  * on top for desktop; its deltas are screen-space, so they are divided by the
  * measured transform scale before being applied to scrollLeft.
  */
-export default function QrCarousel({
-  images,
-  size,
+export default function GiftCarousel({
+  slides,
+  width = "100%",
   className = "",
   showDots = true,
+  itemLabel = "account",
 }: {
-  images: string[];
-  /** Slide width/height in px (square) — the QR display size. */
-  size: number;
+  /** Slide contents, in swipe order. */
+  slides: React.ReactNode[];
+  /** Track width — each slide fills it. Defaults to the container's width. */
+  width?: number | string;
   className?: string;
   showDots?: boolean;
+  /** Noun used in the accessible labels ("account 1 of 2"). */
+  itemLabel?: string;
 }) {
   const trackRef = useRef<HTMLDivElement | null>(null);
   const [index, setIndex] = useState(0);
-  const count = images.length;
+  const count = slides.length;
 
   // Scroll fires every frame while swiping — coalesce to one read per frame.
   const rafRef = useRef<number | null>(null);
@@ -53,7 +59,7 @@ export default function QrCarousel({
     [],
   );
 
-  // Removing a QR in the editor while the card is open can leave the track
+  // Removing an account in the editor while the card is open can leave the track
   // scrolled past the last slide — pull it back into range.
   useEffect(() => {
     if (count === 0 || index <= count - 1) return;
@@ -76,6 +82,9 @@ export default function QrCarousel({
   const onPointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
     // Touch already scrolls natively; hijacking it would fight the browser.
     if (count < 2 || e.pointerType === "touch") return;
+    // Let the guest select the account number / hit the copy button instead of
+    // starting a drag on it.
+    if ((e.target as HTMLElement).closest("input, button, a, textarea")) return;
     const el = trackRef.current;
     if (!el) return;
     const rect = el.getBoundingClientRect();
@@ -123,11 +132,11 @@ export default function QrCarousel({
   const multi = count > 1;
 
   return (
-    <div className={`qr-carousel${className ? ` ${className}` : ""}`} style={{ width: size }}>
+    <div className={`qr-carousel${className ? ` ${className}` : ""}`} style={{ width }}>
       <div
         ref={trackRef}
         className="qr-carousel-track"
-        style={{ width: size, height: size, cursor: multi ? "grab" : "default" }}
+        style={{ width, cursor: multi ? "grab" : "default" }}
         onScroll={multi ? handleScroll : undefined}
         onPointerDown={onPointerDown}
         onPointerMove={onPointerMove}
@@ -135,7 +144,7 @@ export default function QrCarousel({
         onPointerCancel={endDrag}
         role={multi ? "group" : undefined}
         aria-roledescription={multi ? "carousel" : undefined}
-        aria-label={multi ? `QR code ${index + 1} of ${count}` : undefined}
+        aria-label={multi ? `${itemLabel} ${index + 1} of ${count}` : undefined}
         tabIndex={multi ? 0 : undefined}
         onKeyDown={(e) => {
           if (!multi) return;
@@ -148,27 +157,25 @@ export default function QrCarousel({
           }
         }}
       >
-        {images.map((src, i) => (
-          <div className="qr-carousel-slide" key={`${i}-${src.slice(-24)}`} style={{ width: size, height: size }}>
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
-              src={src}
-              alt={multi ? `QR Code ${i + 1} of ${count}` : "QR Code"}
-              draggable={false}
-              style={{ width: size, height: size }}
-            />
+        {slides.map((slide, i) => (
+          <div
+            className="qr-carousel-slide"
+            key={i}
+            aria-hidden={multi && i !== index ? true : undefined}
+          >
+            {slide}
           </div>
         ))}
       </div>
 
       {showDots && multi && (
         <div className="qr-carousel-dots">
-          {images.map((_, i) => (
+          {slides.map((_, i) => (
             <button
               key={i}
               type="button"
               className={`qr-carousel-dot${i === index ? " is-active" : ""}`}
-              aria-label={`Show QR code ${i + 1}`}
+              aria-label={`Show ${itemLabel} ${i + 1}`}
               aria-current={i === index}
               onClick={() => goTo(i)}
             />

@@ -12,7 +12,7 @@ import {
   avatarFor,
   type CanvasUser,
 } from "@/src/lib/userSession";
-import { liveEventUrl } from "@/src/lib/slug";
+import { publishAndSyncCanvas } from "@/src/lib/publishEvent";
 
 /**
  * EditorHeader component
@@ -36,7 +36,12 @@ export default function EditorHeader(props: {
   onUndo?: () => void;
   onRedo?: () => void;
   onSave?: () => void;
-  onPreview?: () => void;
+  /**
+   * "Live Preview": publishes exactly like Share Link (blob + iFastNet sync)
+   * and then opens the hosted page. May return a promise — the menu item stays
+   * disabled with a spinner until it settles, so one click = one publish.
+   */
+  onPreview?: () => void | Promise<void>;
   onPreviewLocal?: () => void;
   onUpgrade?: () => void;
   onProfile?: () => void;
@@ -72,12 +77,15 @@ export default function EditorHeader(props: {
   titleSyncStatus?: "idle" | "saving" | "saved" | "error";
   titleSyncError?: string;
   /**
-   * Page state, mirrored from the editor. Only the phone ⋮ menu uses it — that
-   * menu is the phone's page control, since the desktop page bar under the
-   * canvas is hidden below 500px.
+   * Identity of the event this canvas belongs to. Share Link needs it twice:
+   * the published blob is keyed on the event id, and the same ids are reported
+   * to iFastNet after publishing so PHP knows which canvas serves the event.
+   * Absent on legacy project / teaser canvases, where Share Link cannot publish.
    */
-  pageCount?: number;
-  currentPageIndex?: number;
+  userId?: number | null;
+  eventId?: number | null;
+  designId?: number | null;
+  packageId?: number | null;
 }) {
   const router = useRouter();
   const pathname = usePathname();
@@ -113,19 +121,18 @@ export default function EditorHeader(props: {
   const [shareOpen, setShareOpen] = useState(false);
   const shareRef = useRef<HTMLDivElement>(null);
   const [shareStatus, setShareStatus] = useState<"idle" | "link" | "copied" | "pdf">("idle");
+  // Last Share Link failure, shown inside the dropdown. Cleared on every retry —
+  // publishing and syncing are both idempotent, so retrying is always safe.
+  const [shareError, setShareError] = useState("");
 
   // ── PREVIEW DROPDOWN ─────────────────────────────────────────────────────
   // The preview button opens a menu: "Live" publishes/uploads then opens the
   // hosted /e/{slug} page; "Local" previews in-place without uploading.
   const [previewOpen, setPreviewOpen] = useState(false);
   const previewRef = useRef<HTMLDivElement>(null);
-
-  // ── PHONE ⋮ MENU (page actions) ──────────────────────────────────────────
-  // Deleting a page is destructive and there is no undo for it, so the item
-  // arms itself first and only deletes on the second tap.
-  const [moreOpen, setMoreOpen] = useState(false);
-  const moreRef = useRef<HTMLDivElement>(null);
-  const [deleteArmed, setDeleteArmed] = useState(false);
+  // "live" while the publish + sync is in flight — same duplicate-click guard as
+  // Share Link, since Live Preview now runs the identical publish flow.
+  const [previewStatus, setPreviewStatus] = useState<"idle" | "live">("idle");
 
   // Close dropdowns when clicking outside
   useEffect(() => {
@@ -210,12 +217,25 @@ export default function EditorHeader(props: {
   };
 
   /**
-   * "Live" preview: publish/upload the pages and open the hosted page.
+   * "Live" preview: publish (blob + iFastNet sync, exactly like Share Link) and
+   * open the hosted page. The menu stays open and the item disabled while that
+   * runs so a second click cannot start a duplicate publish; the handler reports
+   * its own failures (toast), after which the item is clickable again.
    */
-  const handlePreviewLive = () => {
-    setPreviewOpen(false);
-    if (onPreview) return onPreview();
-    console.log('Preview (live) action triggered');
+  const handlePreviewLive = async (): Promise<void> => {
+    if (previewStatus !== "idle") return;
+    if (!onPreview) {
+      setPreviewOpen(false);
+      console.log('Preview (live) action triggered');
+      return;
+    }
+    setPreviewStatus("live");
+    try {
+      await onPreview();
+      setPreviewOpen(false);
+    } finally {
+      setPreviewStatus("idle");
+    }
   };
 
   /**
@@ -307,21 +327,34 @@ export default function EditorHeader(props: {
   };
 
   /**
-   * "Share Link": publish the project exactly like the play (preview) button
-   * does — exportHTML uploads the pages and returns a slug derived from the
-   * event name — then copy the resulting /e/{slug} URL to the clipboard.
+   * "Share Link" — publish + sync (publishAndSyncCanvas, the same helper Live
+   * Preview uses), then copy the customer-facing vi-up.com URL that iFastNet
+   * returned. The internal https://canvas.vi-up.com/e/{canvas_slug} address is
+   * never copied: it is only the iframe source inside that page.
+   *
+   * A blob failure skips the sync entirely, so PHP is never told about a canvas
+   * that was not published. A sync failure leaves the published blob in place
+   * and copies NOTHING — clicking Share Link again re-runs both steps, which is
+   * safe because each overwrites in place.
    */
   const handleShareLink = async (): Promise<void> => {
     const editor = editorRef.current;
+    // The guard is what prevents a double click from publishing twice: any
+    // status other than "idle" means a share is already in flight or just
+    // finished (the button is also disabled for the same window).
     if (!editor || shareStatus !== "idle") return;
+    setShareError("");
     setShareStatus("link");
     try {
-      // exportHTML publishes the pages and returns the title-derived slug; build
-      // the canonical public link so the copied URL is always the real live
-      // format (https://canvas.vi-up.com/e/{slug}), not the editor's own origin.
-      const slug = await editor.exportHTML(eventName);
-      const shareUrl = liveEventUrl(slug);
-      await copyText(shareUrl);
+      const { publicShareUrl } = await publishAndSyncCanvas(editor, eventName, {
+        userId: props.userId,
+        eventId: props.eventId,
+        designId: props.designId,
+        packageId: props.packageId,
+      });
+
+      // Both steps succeeded — copy the link iFastNet returned, verbatim.
+      await copyText(publicShareUrl);
       setShareStatus("copied");
       setTimeout(() => {
         setShareStatus("idle");
@@ -329,7 +362,7 @@ export default function EditorHeader(props: {
       }, 1500);
     } catch (e) {
       console.error("[share] link failed", e);
-      alert("Could not create the share link: " + (e as Error).message);
+      setShareError((e as Error).message || "Could not create the share link.");
       setShareStatus("idle");
     }
   };
@@ -477,12 +510,19 @@ export default function EditorHeader(props: {
             <button
               type="button"
               role="menuitem"
+              // Disabled for the whole publish → sync cycle (same guard as Share
+              // Link) so one click can never trigger two publishes.
+              disabled={previewStatus === "live"}
               onClick={handlePreviewLive}
-              className="w-full flex items-center gap-[10px] px-3 py-[10px] text-[#7D5B59] font-semibold font-[Montserrat] rounded-[10px] hover:bg-[#f7f2f1] text-left"
+              className="w-full flex items-center gap-[10px] px-3 py-[10px] text-[#7D5B59] font-semibold font-[Montserrat] rounded-[10px] hover:bg-[#f7f2f1] disabled:opacity-40 disabled:cursor-not-allowed text-left"
             >
-              <Link2 className="w-[22px] flex-shrink-0" />
+              {previewStatus === "live" ? (
+                <Loader2 className="w-[22px] flex-shrink-0 animate-spin" />
+              ) : (
+                <Link2 className="w-[22px] flex-shrink-0" />
+              )}
               <span className="flex flex-col items-start min-w-0">
-                <span>Live Preview</span>
+                <span>{previewStatus === "live" ? "Publishing…" : "Live Preview"}</span>
                 <span className="text-[12px] font-normal text-[#7D5B59]/60">
                   Publish and open the hosted page
                 </span>
@@ -553,7 +593,9 @@ export default function EditorHeader(props: {
               <button
                 type="button"
                 role="menuitem"
-                disabled={shareStatus === "pdf"}
+                // Disabled for the whole publish → sync → copy cycle so a second
+                // click cannot start a duplicate publish.
+                disabled={shareStatus !== "idle"}
                 onClick={handleShareLink}
                 className="w-full flex items-center gap-[10px] px-3 py-[10px] text-[#7D5B59] font-semibold font-[Montserrat] rounded-[10px] hover:bg-[#f7f2f1] disabled:opacity-40 disabled:cursor-not-allowed text-left"
               >
@@ -577,6 +619,17 @@ export default function EditorHeader(props: {
                   </span>
                 </span>
               </button>
+
+              {/* Share Link failure — the link was NOT copied. Both steps are
+                  idempotent, so clicking Share Link again is a safe retry. */}
+              {shareError && (
+                <p
+                  role="alert"
+                  className="mx-3 mb-1 rounded-[10px] bg-[#FDECEC] px-3 py-2 text-[12px] font-semibold text-[#B23B3B]"
+                >
+                  {shareError} Please try again.
+                </p>
+              )}
 
               {/* Share PDF */}
               <button
@@ -801,11 +854,16 @@ export default function EditorHeader(props: {
           <button
             type="button"
             role="menuitem"
+            disabled={previewStatus === "live"}
             onClick={handlePreviewLive}
-            className="w-full flex items-center gap-2 px-3 py-2 text-[#7D5B59] font-semibold rounded-[10px] hover:bg-[#f7f2f1] text-left text-sm"
+            className="w-full flex items-center gap-2 px-3 py-2 text-[#7D5B59] font-semibold rounded-[10px] hover:bg-[#f7f2f1] disabled:opacity-40 disabled:cursor-not-allowed text-left text-sm"
           >
-            <Link2 className="w-4 flex-shrink-0" />
-            <span>Live Preview</span>
+            {previewStatus === "live" ? (
+              <Loader2 className="w-4 flex-shrink-0 animate-spin" />
+            ) : (
+              <Link2 className="w-4 flex-shrink-0" />
+            )}
+            <span>{previewStatus === "live" ? "Publishing…" : "Live Preview"}</span>
           </button>
           <button
             type="button"

@@ -1,40 +1,77 @@
 // Canonical slug + live-link helpers for the published invitation page.
 //
 // The slug rule lives HERE (one place) so every consumer agrees on it:
-//   - the server that writes the published blob (events/{slug}.json)
+//   - the client that writes the published blob (events/{slug}.json)
+//   - the token issuer that validates the blob path (/api/export-to-rsvp)
+//   - the iFastNet sync route that reports canvas_slug back to PHP
 //   - the editor's "Share Link" / live-preview link shown to the user
-// The canvas/event TITLE is the single source of truth — change the title and
-// the generated slug (and therefore the live link) changes with it.
 //
-// Slug rules:
-//   - lowercase
-//   - spaces, punctuation and any run of unsafe characters collapse to ONE hyphen
-//   - only [a-z0-9] and hyphens survive
-//   - no leading/trailing hyphens, never a doubled hyphen
-//   - empty / all-unsafe titles fall back to "rsvp" (never an empty slug)
+// The EVENT ID is the single source of truth:
+//   event id 456  →  slug "event-456"
+//               →  blob "events/event-456.json"
+//               →  link "https://canvas.vi-up.com/e/event-456"
 //
-// Example: "Ali & Aisyah Wedding!" → "ali-aisyah-wedding"
-export function slugify(title: string | null | undefined): string {
-  return (title ?? "")
-    .toString()
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-") // unsafe runs → a single hyphen (no doubles)
-    .replace(/^-+|-+$/g, "")     // trim hyphens from both ends
-    || "rsvp";                   // guarantee a non-empty, route-safe slug
+// Why not the title (the old rule): a title-derived slug published to a NEW
+// blob path on every rename, so links already shared with guests froze on the
+// previously published version; and two customers with the same event title
+// ("Wedding") collided on ONE blob path, letting one invitation overwrite the
+// other. An event id is stable and unique, so republishing always overwrites
+// the same blob and a shared link never breaks.
+
+export const EVENT_SLUG_PREFIX = "event-";
+
+// Slug shape both the blob-path guard and the sync route validate against.
+const EVENT_SLUG_RE = /^event-[1-9][0-9]*$/;
+
+// Build the canonical slug for an event id. Returns null — never a fallback
+// slug — when the id is missing or not a positive integer, so a canvas that is
+// not bound to an event can NOT publish over some other path.
+//
+// Ids arrive as strings (URL params, JSON bodies), so parsing is deliberately
+// strict rather than a bare Number(): "1e3", "0x1c8" and " 456 " all coerce to
+// a DIFFERENT, valid event id, which would publish over another customer's
+// invitation. Only plain decimal digits are accepted.
+export function eventSlug(eventId: string | number | null | undefined): string | null {
+  if (eventId === null || eventId === undefined) return null;
+  const raw = typeof eventId === "number" ? String(eventId) : String(eventId).trim();
+  if (!/^[1-9][0-9]*$/.test(raw)) return null;
+  const id = Number(raw);
+  if (!Number.isSafeInteger(id)) return null;
+  return `${EVENT_SLUG_PREFIX}${id}`;
 }
 
-// The published invitation is always served from the public canvas host, so a
-// shared link is identical regardless of where the editor itself runs (localhost,
-// LAN, preview deploy). Keep this as the ONE source of the public base URL.
+export function isEventSlug(slug: string | null | undefined): boolean {
+  return typeof slug === "string" && EVENT_SLUG_RE.test(slug);
+}
+
+// The one place the published blob path is spelled out.
+export function eventBlobPath(slug: string): string {
+  return `events/${slug}.json`;
+}
+
+// Guard used by the upload-token route: the browser may only ever write to the
+// deterministic path of a real event slug, never to an arbitrary blob key.
+export function isEventBlobPath(pathname: string | null | undefined): boolean {
+  if (typeof pathname !== "string") return false;
+  const match = /^events\/(.+)\.json$/.exec(pathname);
+  return !!match && isEventSlug(match[1]);
+}
+
+// ── INTERNAL URL — NOT the link customers get ────────────────────────────────
+// The canvas host serves the raw published invitation. iFastNet embeds it as the
+// iframe source inside the customer-facing page
+// (https://vi-up.com/e/{event-title-slug}, returned by /api/canvas-sync).
+//
+// Never copy or open this URL for a user: on its own it is missing the
+// user_event wrapper. Share Link and Live Preview both use the vi-up.com URL
+// that iFastNet hands back — see src/lib/publishEvent.ts.
 export const LIVE_EVENT_BASE_URL = "https://canvas.vi-up.com";
 
-// Build the canonical public link for a published event slug:
-//   https://canvas.vi-up.com/e/{slug}
+// Build the internal canvas URL for a published event slug:
+//   https://canvas.vi-up.com/e/event-{eventId}
 //
-// NOTE ON OLD LINKS: the published blob is stored at events/{slug}.json keyed by
-// this title-derived slug. Renaming the title publishes to a NEW slug, so a link
-// shared under the OLD title keeps pointing at the previously published blob and
-// is not automatically redirected. Re-share the link after a title change.
+// Stable for the life of the event: renaming the title, or republishing any
+// number of times, keeps writing to the same slug.
 export function liveEventUrl(slug: string): string {
   return `${LIVE_EVENT_BASE_URL}/e/${slug}`;
 }
