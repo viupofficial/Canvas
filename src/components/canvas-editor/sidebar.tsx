@@ -3,6 +3,7 @@ import React, { useEffect, useState } from 'react';
 import type { EditorHandle } from '@/src/components/CanvasEditor';
 import { useEventData, giftQrImages, QR_DEFAULT_SIZE, QR_MIN_SIZE, QR_MAX_SIZE, QR_MAX_IMAGES } from '@/src/store/EventDataContext';
 import LivePreviewPanel from '@/src/components/canvas-editor/LivePreviewPanel';
+import MobileToolbar from '@/src/components/canvas-editor/mobile-toolbar';
 import { prayerPage } from "@/src/components/template-list/prayerTemplate";
 import { countdownPage } from "@/src/components/template-list/timeBoxTemplate";
 import { itineraryPage } from "@/src/components/template-list/itineraryTemplate";
@@ -2466,8 +2467,15 @@ export default function Sidebar({
   rules,
   featureUsage,
   onLocationChanged,
+  activeTool,
+  onActiveToolChange,
 }: {
   editorRef?: React.RefObject<EditorHandle | null>;
+  // Optional controlled tool selection. Passed by ProjectEditor so the phone
+  // inspector can close the tool sheet when an element is selected; omit both
+  // and the sidebar keeps the selection in its own state.
+  activeTool?: Tab | null;
+  onActiveToolChange?: (tab: Tab | null) => void;
   isPhonePreview?: boolean;
   onEditImage?: (src: string, onReplace: (dataUrl: string) => void) => void;
   // Bumped by the parent whenever the active page reloads, so the Background
@@ -2494,7 +2502,14 @@ export default function Sidebar({
   // Free/legacy canvases pass no rules → full access.
   const pkgRules = rules ?? getPackageRules(null);
   const usage = featureUsage ?? EMPTY_FEATURE_USAGE;
-  const [active, setActive] = useState<Tab | null>(null);
+  const [internalActive, setInternalActive] = useState<Tab | null>(null);
+  const toolControlled = activeTool !== undefined;
+  const active = toolControlled ? activeTool : internalActive;
+  const setActive = (next: Tab | null | ((prev: Tab | null) => Tab | null)) => {
+    const value = typeof next === 'function' ? next(active) : next;
+    if (toolControlled) onActiveToolChange?.(value);
+    else setInternalActive(value);
+  };
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
   const [phoneOpen, setPhoneOpen] = useState(false);
   const [bgColor, setBgColor] = useState<string>('#ffffff');
@@ -2663,8 +2678,11 @@ export default function Sidebar({
     </aside>
   );
 
-  const tabPanel = active ? (
-    <aside className="w-60 lg:w-72 p-3 lg:p-4 border-r border-[#BBA8A7] transition-all duration-200 h-full overflow-y-auto shrink-0">
+  // Body of the active tool panel, without any layout chrome. The desktop
+  // sidebar wraps it in a fixed-width column; the phone toolbar renders the same
+  // nodes inside its slide-up sheet.
+  const panelBody = active ? (
+    <>
       {(PREVIEW_TABS as readonly string[]).includes(active) && (
         <LivePreviewPanel activeTab={active as PreviewTabName} />
       )}
@@ -2896,6 +2914,12 @@ export default function Sidebar({
           <p className="text-xs text-gray-400">Click a category to view items.</p>
         </div>
       )}
+    </>
+  ) : null;
+
+  const tabPanel = panelBody ? (
+    <aside className="w-60 lg:w-72 p-3 lg:p-4 border-r border-[#BBA8A7] transition-all duration-200 h-full overflow-y-auto shrink-0">
+      {panelBody}
     </aside>
   ) : null;
 
@@ -2927,14 +2951,36 @@ export default function Sidebar({
           {iconNav}
           {tabPanel}
         </div>
+
+        {/* Phone viewport still gets the bottom rail + slide-up sheet. */}
+        <MobileToolbar
+          activeTab={active}
+          onTabChange={(id) => toggle(id, SIDEBAR_ITEMS.find((s) => s.id === id)?.disabled)}
+          onClose={() => setActive(null)}
+          contentComponent={panelBody}
+          greyedTabs={rsvpMoneyGreyed ? ['rsvp', 'money'] : undefined}
+        />
       </div>
     );
   }
 
   return (
-    <div className="hidden pc:flex h-full">
-      {iconNav}
-      {tabPanel}
-    </div>
+    <>
+      <div className="hidden pc:flex h-full">
+        {iconNav}
+        {tabPanel}
+      </div>
+
+      {/* Phone: the rail lives at the bottom of the screen and the selected
+          tool's panel slides up over the canvas. Same `active` state as the
+          desktop sidebar, so the two can never disagree. */}
+      <MobileToolbar
+        activeTab={active}
+        onTabChange={(id) => toggle(id, SIDEBAR_ITEMS.find((s) => s.id === id)?.disabled)}
+        onClose={() => setActive(null)}
+        contentComponent={panelBody}
+        greyedTabs={rsvpMoneyGreyed ? ['rsvp', 'money'] : undefined}
+      />
+    </>
   );
 }

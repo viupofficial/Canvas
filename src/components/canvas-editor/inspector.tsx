@@ -7,6 +7,12 @@ import {
   AlignStartHorizontal,
   AlignCenterHorizontal,
   AlignEndHorizontal,
+  Menu,
+  ChevronLeft,
+  ChevronRight,
+  ChevronDown,
+  ChevronUp,
+  Trash2,
 } from "lucide-react";
 import { FONT_GROUPS } from "@/src/lib/fonts";
 import LayersPanel from "@/src/components/canvas-editor/LayersPanel";
@@ -285,6 +291,21 @@ function SpacingRow(props: { editorRef?: React.RefObject<any> }) {
  * @param {{ selected: any | null; updateSelected: (patch: Record<string, any>) => void; }}
  * @returns {JSX.Element}
  */
+// Sections of the Design tab, in the order they appear down the desktop
+// column. On a phone the inspector shows exactly one of these at a time.
+type DesignSection = "position" | "typography" | "border" | "color" | "appearance";
+type PhoneSection = DesignSection | "layers" | "artboard";
+
+const PHONE_SECTIONS: { id: PhoneSection; label: string }[] = [
+  { id: "position", label: "Position" },
+  { id: "typography", label: "Typography" },
+  { id: "border", label: "Border" },
+  { id: "color", label: "Color Options" },
+  { id: "appearance", label: "Appearance" },
+  { id: "layers", label: "Layers" },
+  { id: "artboard", label: "Artboard" },
+];
+
 export default function Inspector(props: {
   selected: any | null;
   updateSelected: (patch: Record<string, any>) => void;
@@ -306,6 +327,51 @@ export default function Inspector(props: {
   } = props;
   const [tab, setTab] = React.useState<"design" | "layers" | "artboard">("design");
   const [showTextStyles, setShowTextStyles] = React.useState(false);
+
+  // ── PHONE INSPECTOR ──────────────────────────────────────────────────────
+  // The inspector has no room for a column on a phone, so it becomes a sheet
+  // above the tool rail showing one section at a time. The bubble bar pages
+  // through the sections (swipe or arrows) and its hamburger lists them all.
+  const [designSection, setDesignSection] =
+    React.useState<DesignSection>("position");
+  const [sectionMenuOpen, setSectionMenuOpen] = React.useState(false);
+  const [phoneCollapsed, setPhoneCollapsed] = React.useState(false);
+
+  // Which entry the bubble is currently on. Layers/Artboard are whole tabs;
+  // everything else is a section of the Design tab.
+  const phoneSectionId: PhoneSection =
+    tab === "layers" ? "layers" : tab === "artboard" ? "artboard" : designSection;
+  const phoneIndex = PHONE_SECTIONS.findIndex((s) => s.id === phoneSectionId);
+
+  const goToSection = (id: PhoneSection) => {
+    if (id === "layers" || id === "artboard") {
+      setTab(id);
+      return;
+    }
+    setTab("design");
+    setDesignSection(id);
+  };
+
+  const stepSection = (delta: number) => {
+    const next = PHONE_SECTIONS[phoneIndex + delta];
+    if (next) goToSection(next.id);
+  };
+
+  // Horizontal drag on the bubble pages between sections. Pointer events cover
+  // touch and mouse; taps on the bubble's own buttons fall under the threshold
+  // and are ignored.
+  const swipeStartRef = React.useRef<number | null>(null);
+  const onBubblePointerDown = (e: React.PointerEvent) => {
+    swipeStartRef.current = e.clientX;
+  };
+  const onBubblePointerUp = (e: React.PointerEvent) => {
+    const start = swipeStartRef.current;
+    swipeStartRef.current = null;
+    if (start == null) return;
+    const dx = e.clientX - start;
+    if (Math.abs(dx) < 40) return;
+    stepSection(dx < 0 ? 1 : -1);
+  };
   // When on, editing width or height scales both axes by the same factor so the
   // element resizes uniformly (keeps proportions).
   const [lockUniform, setLockUniform] = React.useState(false);
@@ -323,8 +389,16 @@ export default function Inspector(props: {
   const inputCls =
     "w-full rounded-[100px] px-[10px] py-[6px] text-[13px] text-[#7D5B59] font-[600] bg-[#F2E8E6B2] outline-none";
   const labelCls = "block text-[11px] text-[#7D5B5980] font-[600] mb-1";
-  const sectionCls =
-    "flex flex-col gap-3 border-b-[1px] border-[#EDE2DE] pb-4 p-4";
+  // Desktop stacks every section down the column. The phone shows one section
+  // at a time, laid out as a single horizontal strip of controls that scrolls
+  // sideways — a toolbar rather than a form.
+  const secCls = (id: DesignSection) => {
+    const base =
+      "flex border-b-[1px] border-[#EDE2DE] " +
+      "flex-row items-end gap-2 overflow-x-auto px-3 py-2 [&>*]:shrink-0 " +
+      "pc:flex-col pc:items-stretch pc:gap-3 pc:overflow-x-visible pc:p-4";
+    return designSection === id ? base : `${base} hidden pc:flex`;
+  };
 
   const bgParsed = parseColor(selected?.backgroundColor, '#F8F7F6');
   const strokeParsed = parseColor(selected?.stroke, '#F8F7F6');
@@ -388,15 +462,142 @@ export default function Inspector(props: {
   // };
 
   return (
-    <aside className="w-60 lg:w-80 min-w-0 lg:shrink-0 bg-brand-cream border-[#EDE2DE] border-[1px] overflow-y-auto h-full">
-      <div className="border-b-[1px] border-[#EDE2DE] pb-3 p-4">
+    <aside
+      className={[
+        // Phone: a sheet that floats above the tool rail, only while something
+        // is selected. Desktop: the sidebar column, unchanged.
+        "fixed inset-x-0 bottom-[var(--mobile-rail-h)] z-[45] w-full h-auto max-h-[52vh]",
+        "rounded-t-[18px] shadow-[0_-8px_24px_rgba(0,0,0,0.15)] bg-[#F8F7F6]",
+        "pc:static pc:inset-auto pc:z-auto pc:h-full pc:max-h-none",
+        "pc:rounded-none pc:shadow-none pc:bg-transparent",
+        "pc:w-60 lg:w-80 min-w-0 lg:shrink-0 border-[#EDE2DE] border-[1px] overflow-y-auto",
+        selected ? "" : "hidden pc:block",
+      ].join(" ")}
+    >
+      {/* ── Phone: section bubble ─────────────────────────────────────────
+          Swipe across it (or use the arrows) to page through the inspector;
+          the hamburger opens the full section list. */}
+      <div className="pc:hidden sticky top-0 z-10 bg-[#F8F7F6] border-b-[1px] border-[#EDE2DE]">
+        <span className="block mx-auto mt-1.5 h-1 w-9 rounded-full bg-[#BBA8A7]" />
+
+        <div
+          className="flex items-center gap-0.5 px-1.5 py-1 select-none touch-pan-y"
+          onPointerDown={onBubblePointerDown}
+          onPointerUp={onBubblePointerUp}
+          onPointerCancel={() => (swipeStartRef.current = null)}
+        >
+          <button
+            type="button"
+            onClick={() => setSectionMenuOpen((o) => !o)}
+            aria-haspopup="menu"
+            aria-expanded={sectionMenuOpen}
+            aria-label="Choose inspector section"
+            className="p-1.5 rounded-[10px] text-[#7D5B59] hover:bg-[#F2E8E6B2] shrink-0"
+          >
+            <Menu size={18} />
+          </button>
+
+          <button
+            type="button"
+            onClick={() => stepSection(-1)}
+            disabled={phoneIndex <= 0}
+            aria-label="Previous section"
+            className="p-1 rounded-[10px] text-[#7D5B59] hover:bg-[#F2E8E6B2] disabled:opacity-25 shrink-0"
+          >
+            <ChevronLeft size={18} />
+          </button>
+
+          <span className="flex-1 text-center text-[13px] font-[700] text-[#7D5B59] truncate">
+            {PHONE_SECTIONS[phoneIndex]?.label ?? "Inspector"}
+          </span>
+
+          <button
+            type="button"
+            onClick={() => stepSection(1)}
+            disabled={phoneIndex >= PHONE_SECTIONS.length - 1}
+            aria-label="Next section"
+            className="p-1 rounded-[10px] text-[#7D5B59] hover:bg-[#F2E8E6B2] disabled:opacity-25 shrink-0"
+          >
+            <ChevronRight size={18} />
+          </button>
+
+          {selected && (
+            <button
+              type="button"
+              onClick={() => editorRef?.current?.deleteActiveObject()}
+              aria-label="Delete element"
+              className="p-1 rounded-[10px] text-red-500 hover:bg-red-50 shrink-0"
+            >
+              <Trash2 size={17} />
+            </button>
+          )}
+
+          <button
+            type="button"
+            onClick={() => setPhoneCollapsed((c) => !c)}
+            aria-label={phoneCollapsed ? "Expand inspector" : "Collapse inspector"}
+            className="p-1 rounded-[10px] text-[#7D5B59] hover:bg-[#F2E8E6B2] shrink-0"
+          >
+            {phoneCollapsed ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
+          </button>
+        </div>
+
+        {/* Position within the section list. */}
+        <div className="flex items-center justify-center gap-1 pb-1.5">
+          {PHONE_SECTIONS.map((s, i) => (
+            <span
+              key={s.id}
+              className={`h-1.5 rounded-full transition-all ${
+                i === phoneIndex ? "w-4 bg-[#7D5B59]" : "w-1.5 bg-[#D8C9C6]"
+              }`}
+            />
+          ))}
+        </div>
+
+        {sectionMenuOpen && (
+          <div
+            className="fixed inset-0 z-[55]"
+            onClick={() => setSectionMenuOpen(false)}
+            aria-hidden
+          />
+        )}
+        {sectionMenuOpen && (
+          // Fixed, and anchored just above the tool rail: the sheet's height
+          // follows its section, so a dropdown hanging off the bubble would
+          // fall behind the rail whenever the active section is a short one.
+          <div className="fixed left-2 bottom-[calc(var(--mobile-rail-h)+8px)] w-[190px] max-h-[280px] overflow-y-auto bg-white rounded-[12px] shadow-lg border border-[#EDE2DE] z-[60]">
+            {PHONE_SECTIONS.map((s) => (
+              <button
+                key={s.id}
+                type="button"
+                role="menuitem"
+                onClick={() => {
+                  goToSection(s.id);
+                  setPhoneCollapsed(false);
+                  setSectionMenuOpen(false);
+                }}
+                className={`w-full text-left px-4 py-2 text-[13px] border-b border-[#F2E8E6B2] last:border-b-0 ${
+                  s.id === phoneSectionId
+                    ? "bg-[#F2E8E6B2] text-[#7D5B59] font-[700]"
+                    : "text-[#7D5B59] hover:bg-[#F9F5F4]"
+                }`}
+              >
+                {s.label}
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+
+      <div className={phoneCollapsed ? "hidden pc:block" : ""}>
+      <div className="hidden pc:block border-b-[1px] border-[#EDE2DE] pb-3 p-4">
         <h3 className="font-[600] text-[20px] capitalize">
           {tab === "layers" ? "Layers" : tab === "artboard" ? "Artboard" : selected?.type ?? "Inspector"}
         </h3>
       </div>
 
       {/* Tab switcher: Design / Layers / Artboard */}
-      <div className="flex gap-1 p-2 border-b-[1px] border-[#EDE2DE]">
+      <div className="hidden pc:flex gap-1 p-2 border-b-[1px] border-[#EDE2DE]">
         {(["design", "layers", "artboard"] as const).map((t) => (
           <button
             key={t}
@@ -429,13 +630,13 @@ export default function Inspector(props: {
       ) : (
         <div className="flex flex-col">
           {/* ── Position ───────────────────────────────────────── */}
-          <div className={sectionCls}>
-            <h5 className="font-[600] text-[13px] text-[#7D5B59]">Position</h5>
+          <div className={secCls("position")}>
+            <h5 className="hidden pc:block font-[600] text-[13px] text-[#7D5B59]">Position</h5>
 
             {/* Align to frame (object alignment — distinct from text paragraph
                 align in Typography). Moves the selection to an edge/center of the
                 active canvas/artboard via the editor's scene-coordinate logic. */}
-            <div>
+            <div className="w-[200px] pc:w-auto">
               <label className={labelCls}>Align to frame</label>
               <div className="flex gap-1">
                 {([
@@ -460,7 +661,7 @@ export default function Inspector(props: {
               </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-2 gap-3 w-[180px] pc:w-auto">
               <Scrubbable
                 value={Math.round(selected.left ?? 0)}
                 onScrub={(v) => updateSelected({ left: v })}
@@ -490,7 +691,7 @@ export default function Inspector(props: {
             {/* Width / Height — drive Fabric's scaleX/scaleY so the displayed
                 size in the canvas matches the input. The lock on the right keeps
                 both axes scaled by the same factor (uniform resize). */}
-            <div className="flex items-end gap-2">
+            <div className="flex items-end gap-2 w-[230px] pc:w-auto">
               <Scrubbable
                 className="flex-1"
                 min={1}
@@ -568,6 +769,7 @@ export default function Inspector(props: {
 
             {/* Angle / Rotation */}
             <Scrubbable
+              className="w-[120px] pc:w-auto"
               value={Math.round(selected.angle ?? 0)}
               onScrub={(v) => updateSelected({ angle: ((v % 360) + 360) % 360 })}
             >
@@ -590,9 +792,9 @@ export default function Inspector(props: {
           </div>
 
           {/* ── Typography ─────────────────────────────────────── */}
-          <div className={sectionCls}>
+          <div className={secCls("typography")}>
             <div className="flex items-center justify-between relative">
-              <h5 className="font-[600] text-[13px] text-[#7D5B59]">Typography</h5>
+              <h5 className="hidden pc:block font-[600] text-[13px] text-[#7D5B59]">Typography</h5>
               <button
                 type="button"
                 onClick={() => setShowTextStyles((v) => !v)}
@@ -641,7 +843,7 @@ export default function Inspector(props: {
             )}
 
             {/* Font family + weight */}
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-2 gap-3 w-[180px] pc:w-auto">
               <div>
                 <label className={labelCls}>Font Family</label>
                 <select
@@ -691,7 +893,7 @@ export default function Inspector(props: {
             </div>
 
             {/* Font size + line height */}
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-2 gap-3 w-[180px] pc:w-auto">
               <Scrubbable
                 min={1}
                 value={selected.fontSize ?? 24}
@@ -724,6 +926,7 @@ export default function Inspector(props: {
 
             {/* Letter spacing */}
             <Scrubbable
+              className="w-[110px] pc:w-auto"
               value={selected.charSpacing ?? 0}
               onScrub={(v) => updateSelected({ charSpacing: v })}
             >
@@ -738,7 +941,7 @@ export default function Inspector(props: {
             </Scrubbable>
 
             {/* Text align buttons */}
-            <div>
+            <div className="w-[150px] pc:w-auto">
               <label className={labelCls}>Align Text</label>
               <div className="flex gap-1">
                 {([
@@ -765,7 +968,7 @@ export default function Inspector(props: {
             </div>
 
             {/* Text shadow toggle + settings */}
-            <div className="flex flex-col gap-2">
+            <div className="flex flex-col gap-2 w-[210px] pc:w-auto">
               <div className="flex items-center justify-between">
                 <label className={labelCls + " mb-0"}>Text Shadow</label>
                 <button
@@ -858,7 +1061,7 @@ export default function Inspector(props: {
             </div>
 
             {/* Style buttons: I S U */}
-            <div className="flex gap-2">
+            <div className="flex gap-2 w-[130px] pc:w-auto">
               <button
                 className={`flex-1 py-[6px] rounded-[8px] text-[13px] font-[700] italic border border-[#EDE2DE] ${
                   selected.fontStyle === "italic"
@@ -905,8 +1108,8 @@ export default function Inspector(props: {
               Rect for per-corner paths, and add the props to
               SELECTION_PROPS/FABRIC_EXPORT_PROPS so they persist.
           <div className={sectionCls}>
-            <h5 className="font-[600] text-[13px] text-[#7D5B59]">Corner Radius</h5>
-            <div className="grid grid-cols-2 gap-3">
+            <h5 className="hidden pc:block font-[600] text-[13px] text-[#7D5B59]">Corner Radius</h5>
+            <div className="grid grid-cols-2 gap-3 w-[180px] pc:w-auto">
               <div>
                 <label className={labelCls}>Top Left</label>
                 <input
@@ -952,10 +1155,10 @@ export default function Inspector(props: {
           */}
 
           {/* ── Border ─────────────────────────────────────────── */}
-          <div className={sectionCls}>
-            <h5 className="font-[600] text-[13px] text-[#7D5B59]">Border</h5>
+          <div className={secCls("border")}>
+            <h5 className="hidden pc:block font-[600] text-[13px] text-[#7D5B59]">Border</h5>
 
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-2 gap-3 w-[180px] pc:w-auto">
               <Scrubbable
                 min={0}
                 value={selected.strokeWidth ?? 0}
@@ -1013,7 +1216,7 @@ export default function Inspector(props: {
               </div>
             </div>
 
-            <div>
+            <div className="w-[190px] pc:w-auto">
               <label className={labelCls}>Box Shadow</label>
               <input
                 className={inputCls}
@@ -1023,7 +1226,7 @@ export default function Inspector(props: {
               />
             </div>
 
-            <div>
+            <div className="w-[190px] pc:w-auto">
               <label className={labelCls}>Background</label>
               <input
                 className={inputCls}
@@ -1035,9 +1238,9 @@ export default function Inspector(props: {
           </div>
 
           {/* ── Color Options ──────────────────────────────────── */}
-          <div className={sectionCls}>
+          <div className={secCls("color")}>
             <div className="flex items-center justify-between">
-              <h5 className="font-[600] text-[13px] text-[#7D5B59]">Color Options</h5>
+              <h5 className="hidden pc:block font-[600] text-[13px] text-[#7D5B59]">Color Options</h5>
               {supportsFill && (
                 <button
                   type="button"
@@ -1081,7 +1284,11 @@ export default function Inspector(props: {
               </div>
             </div> */}
 
+            {/* Each colour row gets a fixed width in the phone strip;
+                `pc:contents` dissolves the wrapper on desktop so the column
+                keeps its original spacing. */}
             {supportsFill && (
+              <div className="w-[250px] pc:contents">
               <ColorRow
                 label="Fill"
                 value={selected.fill}
@@ -1091,8 +1298,10 @@ export default function Inspector(props: {
                 onRevert={() => updateSelected({ fill: orig?.fill ?? DEFAULT_FILL })}
                 onInvert={() => updateSelected({ fill: buildRgba(invertHex(fillParsed.hex), fillParsed.opacity) })}
               />
+              </div>
             )}
 
+            <div className="w-[250px] pc:contents">
             <ColorRow
               label="Stroke"
               value={selected.stroke}
@@ -1102,7 +1311,9 @@ export default function Inspector(props: {
               onRevert={() => updateSelected({ stroke: orig?.stroke ?? DEFAULT_STROKE })}
               onInvert={() => updateSelected({ stroke: buildRgba(invertHex(strokeParsed.hex), strokeParsed.opacity) })}
             />
+            </div>
 
+            <div className="w-[250px] pc:contents">
             <ColorRow
               label="Background"
               value={selected.backgroundColor}
@@ -1111,13 +1322,14 @@ export default function Inspector(props: {
               onRevert={() => updateSelected({ backgroundColor: orig?.backgroundColor ?? DEFAULT_BG })}
               onInvert={() => updateSelected({ backgroundColor: buildRgba(invertHex(bgParsed.hex), bgParsed.opacity) })}
             />
+            </div>
           </div>
 
           {/* ── Appearance ─────────────────────────────────────── */}
-          <div className={sectionCls}>
-            <h5 className="font-[600] text-[13px] text-[#7D5B59]">Appearance</h5>
+          <div className={secCls("appearance")}>
+            <h5 className="hidden pc:block font-[600] text-[13px] text-[#7D5B59]">Appearance</h5>
 
-            <div>
+            <div className="w-[220px] pc:w-auto">
               <div className="flex items-center justify-between mb-1">
                 <label className={labelCls + " mb-0"}>Opacity</label>
                 <span className="text-[12px] text-[#7D5B59] font-[600]">
@@ -1140,7 +1352,7 @@ export default function Inspector(props: {
           {/* ── Animation ──────────────────────────────────────── */}
           {/* Hidden for now — keep for later. */}
           {/* <div className={sectionCls}>
-            <h5 className="font-[600] text-[13px] text-[#7D5B59]">Animation</h5>
+            <h5 className="hidden pc:block font-[600] text-[13px] text-[#7D5B59]">Animation</h5>
             <div>
               <label className={labelCls}>Preset</label>
               <select
@@ -1174,8 +1386,10 @@ export default function Inspector(props: {
             </p>
           </div> */}
 
-          {/* ── Delete ─────────────────────────────────────────── */}
-          <div className="p-4">
+          {/* ── Delete ───────────────────────────────────────────
+              Phone puts this in the bubble bar as a trash icon instead — a
+              full-width red bar would dominate the strip. */}
+          <div className="hidden pc:block p-4">
             <button
               className="w-full py-2 bg-red-500 text-white rounded-[10px] text-[13px] font-[600]"
               onClick={() => editorRef?.current?.deleteActiveObject()}
@@ -1185,6 +1399,7 @@ export default function Inspector(props: {
           </div>
         </div>
       )}
+      </div>
     </aside>
   );
 }

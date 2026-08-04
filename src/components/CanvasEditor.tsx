@@ -166,6 +166,17 @@ export type EditorHandle = {
   getThumbnail: () => string;
   goToPage: (index: number) => void;
   reorderPages: (from: number, to: number) => void;
+  // ── Page management ────────────────────────────────────────────────────────
+  // Driven by the desktop page bar, the phone header's ⋮ menu and the phone
+  // edge hold-and-swipe gesture. `removePage` asks for confirmation itself
+  // unless the caller has already confirmed (skipConfirm).
+  addPage: () => void;
+  removePage: (opts?: { skipConfirm?: boolean }) => void;
+  getPageCount: () => number;
+  getCurrentPageIndex: () => number;
+  // False for the envelope page and when only one page is left — both are
+  // undeletable, so callers can grey the delete action out instead of failing.
+  canDeleteCurrentPage: () => boolean;
   // ── Layer tab ──────────────────────────────────────────────────────────────
   // All scoped to the active page (the canvas only ever holds its objects).
   getLayers: () => LayerInfo[];
@@ -464,6 +475,24 @@ const [currentPage, setCurrentPage] = useState(0);
   onPagesChangeRef.current = props.onPagesChange;
   const onContentReplacedRef = useRef(props.onContentReplaced);
   onContentReplacedRef.current = props.onContentReplaced;
+  // Everything the phone swipe-to-change-page gesture needs. The fabric
+  // listeners are registered once during init, so they read the live values
+  // through this ref instead of closing over that first render's copies. It is
+  // filled in further down, right after goToPage/showPageToast exist.
+  const pageNavRef = useRef<{
+    goToPage: (index: number) => void;
+    count: number;
+    current: number;
+    toast: (message: string) => void;
+  }>({ goToPage: () => {}, count: 1, current: 0, toast: () => {} });
+  // Start of an in-flight canvas swipe (null when the press isn't a candidate).
+  const canvasSwipeRef = useRef<{ x: number; y: number; t: number } | null>(null);
+  // What was selected immediately BEFORE the current press. Fabric selects
+  // whatever a press lands on before it fires mouse:down, so by then
+  // getActiveObject() already returns the just-touched element — this is the
+  // only way to tell "the user is dragging their selection" from "the user
+  // swiped across something".
+  const prePressActiveRef = useRef<any>(null);
   // The background most recently pushed via "Apply to all pages". New pages
   // inherit it so an all-pages background also covers pages created later.
   const globalBgRef = useRef<{ backgroundImage?: any; backgroundColor?: any } | null>(null);
@@ -1677,6 +1706,11 @@ const [currentPage, setCurrentPage] = useState(0);
       setPages(updated);
       setCurrentPage(newCurrent);
     },
+    addPage: () => addPage(),
+    removePage: (opts?: { skipConfirm?: boolean }) => removePage(opts),
+    getPageCount: () => pages.length,
+    getCurrentPageIndex: () => currentPage,
+    canDeleteCurrentPage: () => pages.length > 1 && !isCurrentPageEnvelope(),
   }));
 
   useEffect(() => {
@@ -1692,6 +1726,7 @@ const [currentPage, setCurrentPage] = useState(0);
     let cleanupResize: (() => void) | null = null;
     let cleanupKeyboard: (() => void) | null = null;
     let cleanupWheel: (() => void) | null = null;
+    let cleanupPrePress: (() => void) | null = null;
 
     async function init() {
       try {
@@ -2086,6 +2121,116 @@ const [currentPage, setCurrentPage] = useState(0);
         canvas.on('selection:updated', resetSmartGuideMemory);
         canvas.on('object:added', resetSmartGuideMemory);
         canvas.on('object:removed', resetSmartGuideMemory);
+
+        // ── Phone: swipe the canvas sideways to change page ─────────────────
+        // Swipe left for the next page, right for the previous one; at either
+        // end of the deck nothing happens. Screen coordinates, not scene ones,
+        // so the threshold means the same thing at any zoom/fit. The edge
+        // strips sit above the canvas in the DOM, so their hold-and-swipe never
+        // reaches fabric and the two gestures can't collide.
+        //
+        // Most pages are covered edge to edge by an element (the envelope, a
+        // full-bleed background), so requiring bare canvas would make the
+        // gesture unusable exactly where it's needed. Instead the swipe wins
+        // over an element that ISN'T selected yet: fabric would start dragging
+        // it the moment the finger moves, so its movement is pinned for the
+        // duration of the press and restored on release. Tap to select, then
+        // drag — an already-selected element is still dragged straight away.
+        const SWIPE_NAV_PX = 60;   // sideways travel that counts as a swipe
+        const SWIPE_NAV_MS = 700;  // slower than this is a drag, not a swipe
+        const isPhoneViewport = () =>
+          typeof window !== 'undefined' &&
+          window.matchMedia('(max-width: 499px)').matches;
+        // Fabric hands us the raw DOM event, which is a pointer event on some
+        // paths and a touch event on others.
+        const clientPointOf = (e: any) => {
+          const t = e?.touches?.[0] ?? e?.changedTouches?.[0];
+          return { x: t?.clientX ?? e?.clientX ?? 0, y: t?.clientY ?? e?.clientY ?? 0 };
+        };
+
+        // The element whose movement is pinned for the current press, with the
+        // lock flags it had before, so they can be handed straight back.
+        let pinned: { obj: any; lockX: boolean; lockY: boolean } | null = null;
+        const unpinSwipeTarget = () => {
+          if (!pinned) return;
+          pinned.obj.lockMovementX = pinned.lockX;
+          pinned.obj.lockMovementY = pinned.lockY;
+          pinned = null;
+        };
+
+        const isPartOfSelection = (target: any, active: any) =>
+          !!target &&
+          !!active &&
+          (target === active || !!active._objects?.includes?.(target));
+
+        // Capture phase on the document, so it runs before fabric's own
+        // handler on the canvas element and sees the pre-press selection.
+        const recordPrePressSelection = () => {
+          prePressActiveRef.current = canvas.getActiveObject?.() ?? null;
+        };
+        document.addEventListener('pointerdown', recordPrePressSelection, true);
+        document.addEventListener('touchstart', recordPrePressSelection, true);
+        cleanupPrePress = () => {
+          document.removeEventListener('pointerdown', recordPrePressSelection, true);
+          document.removeEventListener('touchstart', recordPrePressSelection, true);
+        };
+
+        canvas.on('mouse:down', (opt: any) => {
+          unpinSwipeTarget();
+          canvasSwipeRef.current = null;
+          if (!isPhoneViewport()) return;
+          const active = canvas.getActiveObject?.() as any;
+          // Mid-edit text swallows the gesture — the caret is the point there.
+          if (active?.isEditing) return;
+          const target = opt.target;
+          // Was already selected before this press → the user means to move it,
+          // not to turn the page.
+          if (isPartOfSelection(target, prePressActiveRef.current)) return;
+          if (target) {
+            pinned = {
+              obj: target,
+              lockX: !!target.lockMovementX,
+              lockY: !!target.lockMovementY,
+            };
+            target.lockMovementX = true;
+            target.lockMovementY = true;
+          }
+          const p = clientPointOf(opt.e);
+          canvasSwipeRef.current = { x: p.x, y: p.y, t: Date.now() };
+        });
+
+        canvas.on('mouse:up', (opt: any) => {
+          unpinSwipeTarget();
+          const start = canvasSwipeRef.current;
+          canvasSwipeRef.current = null;
+          if (!start) return;
+          const p = clientPointOf(opt.e);
+          const dx = p.x - start.x;
+          const dy = p.y - start.y;
+
+          // Fabric selects whatever a press lands on. A drag was never a
+          // selection gesture, so give the selection back to whatever held it
+          // before — otherwise the element the finger happened to cross stays
+          // selected and the NEXT swipe reads as "drag my selection" instead.
+          // Tap to select, then drag, is still exactly as it was.
+          if (Math.hypot(dx, dy) > 10) {
+            const active = canvas.getActiveObject?.();
+            if (active && active !== prePressActiveRef.current) {
+              canvas.discardActiveObject();
+              canvas.requestRenderAll();
+            }
+          }
+
+          if (Date.now() - start.t > SWIPE_NAV_MS) return;
+          // Mostly horizontal, and far enough to be meant.
+          if (Math.abs(dx) < SWIPE_NAV_PX || Math.abs(dx) < Math.abs(dy) * 1.5) return;
+          const { goToPage: go, count, current, toast } = pageNavRef.current;
+          const next = dx < 0 ? current + 1 : current - 1;
+          // Nothing on that side of the deck — the swipe simply does nothing.
+          if (next < 0 || next >= count) return;
+          go(next);
+          toast(`Page ${next + 1} of ${count}`);
+        });
 
         // Text tool: click to add text at default size, drag to add textbox with that width.
         const getScenePoint = (e: any) => {
@@ -2501,6 +2646,8 @@ const [currentPage, setCurrentPage] = useState(0);
       cleanupKeyboard = null;
       cleanupWheel?.();
       cleanupWheel = null;
+      cleanupPrePress?.();
+      cleanupPrePress = null;
     };
   }, []);
 
@@ -3608,7 +3755,9 @@ const applyBgToOtherPages = (patch: { backgroundImage?: any; backgroundColor?: a
     setCurrentPage(newIndex);
   };
 
-  const removePage = () => {
+  // `skipConfirm` is for callers that already confirmed in their own UI (the
+  // phone ⋮ menu asks inline) — everything else gets the native prompt.
+  const removePage = (opts?: { skipConfirm?: boolean }) => {
     const canvas = fabricRef.current;
     if (!canvas) return;
     if (pages.length <= 1) return; // keep at least one page
@@ -3617,7 +3766,11 @@ const applyBgToOtherPages = (patch: { backgroundImage?: any; backgroundColor?: a
       alert("The envelope page cannot be deleted. You can only change its color and texture.");
       return;
     }
-    if (typeof window !== 'undefined' && !window.confirm(`Delete page ${currentPage + 1}? This cannot be undone.`)) return;
+    if (
+      !opts?.skipConfirm &&
+      typeof window !== 'undefined' &&
+      !window.confirm(`Delete page ${currentPage + 1}? This cannot be undone.`)
+    ) return;
     flushPending();
     const removedIndex = currentPage;
     const nextIndex = removedIndex === 0 ? 0 : removedIndex - 1;
@@ -4153,6 +4306,101 @@ const applyBgToOtherPages = (patch: { backgroundImage?: any; backgroundColor?: a
     previewRafRef.current = requestAnimationFrame(tick);
   }, []);
 
+  // ── Phone edge gesture: hold, then swipe → new page ────────────────────────
+  // A phone has no page bar (that row is `hidden pc:flex`), so the two slim
+  // strips down the left and right of the canvas are how a page gets added
+  // there. The hold is what makes it deliberate: a tap, a flick or a stray
+  // thumb resting on the edge never adds anything — the finger has to sit
+  // still for EDGE_HOLD_MS first, and only then does a sideways swipe count.
+  const EDGE_HOLD_MS = 320;
+  const EDGE_SWIPE_PX = 56;   // sideways travel that commits the new page
+  const EDGE_CANCEL_PX = 14;  // moving further than this before the hold lands cancels it
+  type EdgeSide = "left" | "right";
+
+  // Render state (drives the strip's appearance); the ref below is the one the
+  // pointer handlers read, so they never see a stale value mid-gesture.
+  const [edgeGesture, setEdgeGesture] = useState<{ side: EdgeSide; armed: boolean } | null>(null);
+  const edgeGestureRef = useRef<{
+    side: EdgeSide;
+    x: number;
+    y: number;
+    armed: boolean;
+    fired: boolean;
+  } | null>(null);
+  const edgeHoldTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [pageToast, setPageToast] = useState<string | null>(null);
+  const pageToastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const buzz = (pattern: number | number[]) => {
+    try { navigator.vibrate?.(pattern); } catch { /* unsupported — silent */ }
+  };
+
+  const showPageToast = (message: string) => {
+    setPageToast(message);
+    if (pageToastTimerRef.current) clearTimeout(pageToastTimerRef.current);
+    pageToastTimerRef.current = setTimeout(() => setPageToast(null), 1600);
+  };
+
+  // Hand the fabric swipe listeners (registered once, during init) this
+  // render's page state and callbacks.
+  pageNavRef.current = {
+    goToPage,
+    count: pages.length,
+    current: currentPage,
+    toast: showPageToast,
+  };
+
+  const endEdgeGesture = () => {
+    if (edgeHoldTimerRef.current) {
+      clearTimeout(edgeHoldTimerRef.current);
+      edgeHoldTimerRef.current = null;
+    }
+    edgeGestureRef.current = null;
+    setEdgeGesture(null);
+  };
+
+  useEffect(() => () => {
+    if (edgeHoldTimerRef.current) clearTimeout(edgeHoldTimerRef.current);
+    if (pageToastTimerRef.current) clearTimeout(pageToastTimerRef.current);
+  }, []);
+
+  const onEdgePointerDown = (side: EdgeSide) => (e: React.PointerEvent<HTMLDivElement>) => {
+    if (e.pointerType === "mouse" && e.button !== 0) return;
+    // Capture so the swipe keeps reporting to this strip once the finger has
+    // travelled off it and over the canvas.
+    try { e.currentTarget.setPointerCapture(e.pointerId); } catch {}
+    edgeGestureRef.current = { side, x: e.clientX, y: e.clientY, armed: false, fired: false };
+    setEdgeGesture({ side, armed: false });
+    if (edgeHoldTimerRef.current) clearTimeout(edgeHoldTimerRef.current);
+    edgeHoldTimerRef.current = setTimeout(() => {
+      const g = edgeGestureRef.current;
+      if (!g) return;
+      g.armed = true;
+      setEdgeGesture({ side: g.side, armed: true });
+      buzz(10);
+    }, EDGE_HOLD_MS);
+  };
+
+  const onEdgePointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
+    const g = edgeGestureRef.current;
+    if (!g || g.fired) return;
+    const dx = e.clientX - g.x;
+    const dy = e.clientY - g.y;
+    if (!g.armed) {
+      // Still holding — any real movement means this was a swipe/scroll, not a hold.
+      if (Math.hypot(dx, dy) > EDGE_CANCEL_PX) endEdgeGesture();
+      return;
+    }
+    // Armed: a mostly-horizontal swipe (either direction) adds the page.
+    if (Math.abs(dx) >= EDGE_SWIPE_PX && Math.abs(dx) > Math.abs(dy)) {
+      g.fired = true;
+      addPage();
+      buzz([12, 40, 12]);
+      showPageToast(`Page ${pages.length + 1} added`);
+      endEdgeGesture();
+    }
+  };
+
   return (
     // Phone: the canvas gets the whole middle — every bit of padding here is
     // height the artboard loses, and there is no control bar below it either
@@ -4409,6 +4657,62 @@ const applyBgToOtherPages = (patch: { backgroundImage?: any; backgroundColor?: a
             </div>
           )}
 
+          {/* ── Phone-only "add page" edge strips ─────────────────────────────
+              Hold one, then swipe sideways, and a page is appended. They sit
+              above the canvas, so the outer ~20px of each side belongs to the
+              gesture rather than to fabric — deliberate: the grip line marks
+              it, and elements can still be dragged inwards off that band. */}
+          {(["left", "right"] as const).map((side) => {
+            const active = edgeGesture?.side === side;
+            const armed = !!active && edgeGesture!.armed;
+            return (
+              <div
+                key={side}
+                role="button"
+                aria-label="Hold and swipe to add a page"
+                onPointerDown={onEdgePointerDown(side)}
+                onPointerMove={onEdgePointerMove}
+                onPointerUp={endEdgeGesture}
+                onPointerCancel={endEdgeGesture}
+                onLostPointerCapture={endEdgeGesture}
+                style={{ touchAction: "none" }}
+                className={`pc:hidden absolute top-0 bottom-0 ${
+                  side === "left" ? "left-0" : "right-0"
+                } w-[20px] z-30 flex items-center justify-center select-none transition-colors ${
+                  armed ? "bg-[#7D5B59]/10" : ""
+                }`}
+              >
+                <span
+                  className={`w-[3px] rounded-full transition-all duration-200 ${
+                    armed
+                      ? "h-[120px] bg-[#7D5B59]"
+                      : active
+                      ? "h-[80px] bg-[#7D5B59]/60"
+                      : "h-[56px] bg-[#7D5B59]/25"
+                  }`}
+                />
+              </div>
+            );
+          })}
+
+          {/* Told only once the hold has landed — before that there is nothing
+              to explain, and the strip's grip line is doing the hinting. */}
+          {edgeGesture?.armed && (
+            <div className="pc:hidden absolute inset-x-0 top-3 z-40 flex justify-center pointer-events-none">
+              <span className="rounded-full bg-[#7D5B59] text-white text-[11px] font-semibold px-3 py-1 shadow-lg">
+                Swipe across to add a page
+              </span>
+            </div>
+          )}
+
+          {pageToast && (
+            <div className="pc:hidden absolute inset-x-0 bottom-4 z-40 flex justify-center pointer-events-none">
+              <span className="rounded-full bg-[#7D5B59] text-white text-[11px] font-semibold px-3 py-1 shadow-lg">
+                {pageToast}
+              </span>
+            </div>
+          )}
+
         </div>
 
       </div>
@@ -4452,7 +4756,7 @@ const applyBgToOtherPages = (patch: { backgroundImage?: any; backgroundColor?: a
     + Page
   </button>
   <button
-    onClick={removePage}
+    onClick={() => removePage()}
     disabled={pages.length <= 1 || isCurrentPageEnvelope()}
     className="disabled:opacity-40 disabled:cursor-not-allowed"
     title={isCurrentPageEnvelope() ? "Cannot delete the envelope page" : "Delete current page"}

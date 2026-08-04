@@ -2,7 +2,7 @@
 
 'use client';
 
-import { Upload, LogIn, Link2, FileText, Check, Loader2, Gift } from 'lucide-react';
+import { Upload, LogIn, Link2, FileText, Check, Loader2, Gift, Plus, Trash2, AlertTriangle } from 'lucide-react';
 import { RefObject, useState, useRef, useEffect } from "react";
 import { useRouter, usePathname } from "next/navigation"; // ✅ ADD THIS
 import { EditorHandle } from "@/src/components/CanvasEditor";
@@ -71,6 +71,13 @@ export default function EditorHeader(props: {
    */
   titleSyncStatus?: "idle" | "saving" | "saved" | "error";
   titleSyncError?: string;
+  /**
+   * Page state, mirrored from the editor. Only the phone ⋮ menu uses it — that
+   * menu is the phone's page control, since the desktop page bar under the
+   * canvas is hidden below 500px.
+   */
+  pageCount?: number;
+  currentPageIndex?: number;
 }) {
   const router = useRouter();
   const pathname = usePathname();
@@ -113,6 +120,13 @@ export default function EditorHeader(props: {
   const [previewOpen, setPreviewOpen] = useState(false);
   const previewRef = useRef<HTMLDivElement>(null);
 
+  // ── PHONE ⋮ MENU (page actions) ──────────────────────────────────────────
+  // Deleting a page is destructive and there is no undo for it, so the item
+  // arms itself first and only deletes on the second tap.
+  const [moreOpen, setMoreOpen] = useState(false);
+  const moreRef = useRef<HTMLDivElement>(null);
+  const [deleteArmed, setDeleteArmed] = useState(false);
+
   // Close dropdowns when clicking outside
   useEffect(() => {
     function handleOutsideClick(e: MouseEvent) {
@@ -124,6 +138,10 @@ export default function EditorHeader(props: {
       }
       if (previewRef.current && !previewRef.current.contains(e.target as Node)) {
         setPreviewOpen(false);
+      }
+      if (moreRef.current && !moreRef.current.contains(e.target as Node)) {
+        setMoreOpen(false);
+        setDeleteArmed(false);
       }
     }
     document.addEventListener("mousedown", handleOutsideClick);
@@ -224,6 +242,33 @@ export default function EditorHeader(props: {
     console.log('Profile action triggered');
   };
 
+  // ── Page actions (phone ⋮ menu) ──────────────────────────────────────────
+  // The same editor handle the desktop page bar drives; the gesture on the
+  // canvas edges adds pages the same way.
+  const pageCount = props.pageCount ?? 1;
+  const currentPageIndex = props.currentPageIndex ?? 0;
+
+  const closeMoreMenu = () => {
+    setMoreOpen(false);
+    setDeleteArmed(false);
+  };
+
+  const handleAddPage = () => {
+    editorRef.current?.addPage?.();
+    closeMoreMenu();
+  };
+
+  const handleDeletePage = () => {
+    // First tap arms, second deletes — removePage is told to skip its own
+    // native confirm because this menu already asked.
+    if (!deleteArmed) {
+      setDeleteArmed(true);
+      return;
+    }
+    editorRef.current?.removePage?.({ skipConfirm: true });
+    closeMoreMenu();
+  };
+
   // The share dropdown is only available in the designer flow. Everywhere else
   // (editor mode, teaser, legacy non-/designer paths) the Share button is inert.
   const canShare = mode
@@ -309,8 +354,8 @@ export default function EditorHeader(props: {
   };
 
   return (
-    <header className="grid pc:grid-cols-[1fr_auto_1fr] h-auto pc:h-[78px] lg:h-[111px] w-full items-center gap-2 pc:gap-4 bg-[#EDE2DE] p-3 pc:px-4 pc:py-0 lg:p-0">
-      <div className="flex items-center justify-start lg:pl-[106px] gap-2 pc:gap-0">
+    <header className="relative shrink-0 grid grid-cols-[auto_minmax(0,1fr)_auto] pc:grid-cols-[1fr_auto_1fr] h-[54px] pc:h-[78px] lg:h-[111px] w-full items-center gap-1 pc:gap-4 bg-[#EDE2DE] px-2 py-0 pc:px-4 pc:py-0 lg:p-0">
+      <div className="flex items-center justify-start lg:pl-[106px] gap-0.5 pc:gap-0">
         {teaser || !canGoHome ? (
           // Teaser mode, or any route other than /designer: the logo is
           // decorative only — no link back to the homepage filing system.
@@ -324,8 +369,8 @@ export default function EditorHeader(props: {
         )}
 
         {/* Hamburger Menu - Mobile Only */}
-        <button className="pc:hidden p-2 hover:bg-[#D4C9C4] rounded-lg transition-colors">
-          <svg className="w-6 h-6 text-[#7D5B59]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <button className="pc:hidden p-1.5 hover:bg-[#D4C9C4] rounded-lg transition-colors">
+          <svg className="w-5 h-5 text-[#7D5B59]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
           </svg>
         </button>
@@ -341,12 +386,12 @@ export default function EditorHeader(props: {
         </div>
 
         {/* Mobile Undo/Redo */}
-        <div className="flex items-center gap-2 pc:hidden">
-          <button onClick={handleUndoClick} className="p-2 hover:bg-[#D4C9C4] rounded-lg transition-colors">
+        <div className="flex items-center gap-0.5 pc:hidden">
+          <button onClick={handleUndoClick} className="p-1.5 hover:bg-[#D4C9C4] rounded-lg transition-colors">
             <img src="/Undo.svg" alt="Undo" className="w-[18px] h-[18px]" />
           </button>
 
-          <button onClick={handleRedoClick} className="p-2 hover:bg-[#D4C9C4] rounded-lg transition-colors">
+          <button onClick={handleRedoClick} className="p-1.5 hover:bg-[#D4C9C4] rounded-lg transition-colors">
             <img src="/Redo.svg" alt="Redo" className="w-[18px] h-[18px]" />
           </button>
         </div>
@@ -380,15 +425,15 @@ export default function EditorHeader(props: {
       </div>
 
       {/* Mobile Event Name (compact) */}
-      <div className="flex pc:hidden items-center gap-2 flex-1 justify-center order-3 w-full">
+      <div className="flex pc:hidden items-center justify-center gap-1 min-w-0">
         <input
           type="text"
           value={eventName}
           onChange={(event) => setEventName(event.target.value)}
-          className="font-bold text-[14px] text-center bg-transparent border-none outline-none flex-1 max-w-[150px]"
+          className="font-bold text-[14px] text-center text-[#7D5B59] bg-transparent border-none outline-none min-w-0 w-full max-w-[150px] truncate"
           aria-label="Event name"
         />
-        <button onClick={handleSaveClick} className="p-2 hover:bg-[#D4C9C4] rounded-lg transition-colors">
+        <button onClick={handleSaveClick} className="p-1.5 shrink-0 hover:bg-[#D4C9C4] rounded-lg transition-colors">
           <img
             src="/cloud-save.svg"
             className="h-[18px] w-[24px] transition-[filter] duration-200"
@@ -664,21 +709,90 @@ export default function EditorHeader(props: {
       </div>
 
       {/* Mobile Right Section */}
-      <div className="flex pc:hidden items-center justify-end gap-2 order-4">
+      <div className="flex pc:hidden items-center justify-end gap-0.5">
         <button
           onClick={() => setPreviewOpen((o) => !o)}
-          className="p-2 hover:bg-[#D4C9C4] rounded-lg transition-colors"
+          className="p-1.5 hover:bg-[#D4C9C4] rounded-lg transition-colors"
           title="Preview"
         >
           <img src="/preview.svg" alt="Preview" className="h-5 w-5" />
         </button>
 
-        {/* More Options Menu */}
-        <button className="p-2 hover:bg-[#D4C9C4] rounded-lg transition-colors">
-          <svg className="w-5 h-5 text-[#7D5B59]" fill="currentColor" viewBox="0 0 24 24">
-            <path d="M12 8c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2zm0 2c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm0 6c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2z"/>
-          </svg>
-        </button>
+        {/* More Options Menu — the phone's page controls live here. */}
+        <div className="relative" ref={moreRef}>
+          <button
+            onClick={() => {
+              setMoreOpen((o) => !o);
+              setDeleteArmed(false);
+            }}
+            aria-haspopup="menu"
+            aria-expanded={moreOpen}
+            aria-label="More options"
+            className="p-1.5 hover:bg-[#D4C9C4] rounded-lg transition-colors"
+          >
+            <svg className="w-5 h-5 text-[#7D5B59]" fill="currentColor" viewBox="0 0 24 24">
+              <path d="M12 8c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2zm0 2c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm0 6c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2z"/>
+            </svg>
+          </button>
+
+          {moreOpen && (
+            <nav
+              role="menu"
+              className="absolute right-0 top-[calc(100%+8px)] min-w-[220px] bg-white rounded-[15px] shadow-lg p-2 z-[1000]"
+            >
+              <div className="px-3 py-1.5 text-[11px] font-semibold text-[#7D5B59]/60">
+                Page {currentPageIndex + 1} of {pageCount}
+              </div>
+
+              <button
+                type="button"
+                role="menuitem"
+                onClick={handleAddPage}
+                className="w-full flex items-center gap-2 px-3 py-2 text-[#7D5B59] font-semibold rounded-[10px] hover:bg-[#f7f2f1] text-left text-sm"
+              >
+                <Plus className="w-4 flex-shrink-0" />
+                <span>Add Page</span>
+              </button>
+
+              {/* Disabled for the envelope page (permanent) and for the last
+                  remaining page — both are refused by the editor anyway. */}
+              {(() => {
+                const canDelete = editorRef.current?.canDeleteCurrentPage?.() ?? false;
+                return (
+                  <button
+                    type="button"
+                    role="menuitem"
+                    disabled={!canDelete}
+                    onClick={handleDeletePage}
+                    title={
+                      canDelete
+                        ? undefined
+                        : pageCount <= 1
+                        ? "The last page cannot be deleted"
+                        : "The envelope page cannot be deleted"
+                    }
+                    className={`w-full flex items-center gap-2 px-3 py-2 font-semibold rounded-[10px] text-left text-sm disabled:opacity-40 disabled:cursor-not-allowed ${
+                      deleteArmed
+                        ? "bg-[#FDECEC] text-[#B23B3B]"
+                        : "text-[#B23B3B] hover:bg-[#FDECEC]"
+                    }`}
+                  >
+                    {deleteArmed ? (
+                      <AlertTriangle className="w-4 flex-shrink-0" />
+                    ) : (
+                      <Trash2 className="w-4 flex-shrink-0" />
+                    )}
+                    <span>
+                      {deleteArmed
+                        ? `Tap again to delete page ${currentPageIndex + 1}`
+                        : "Delete Page"}
+                    </span>
+                  </button>
+                );
+              })()}
+            </nav>
+          )}
+        </div>
       </div>
 
       {/* Mobile Preview Dropdown */}

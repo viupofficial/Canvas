@@ -16,6 +16,9 @@
 :root {
   --background: #F8F7F6;
   --foreground: #7D5B59;
+  /* Height of the phone tool rail (canvas-editor/mobile-toolbar). Anything that
+     has to sit directly on top of it — the inspector sheet — offsets by this. */
+  --mobile-rail-h: 68px;
 }
 
 @theme inline {

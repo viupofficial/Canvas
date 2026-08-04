@@ -1,6 +1,6 @@
 "use client";
-import React, { useState, useRef } from 'react';
-import { Menu, X, ChevronDown } from 'lucide-react';
+import React, { useRef } from 'react';
+import { X } from 'lucide-react';
 
 type Tab =
   | 'templates'
@@ -19,6 +19,17 @@ type Tab =
 interface MobileToolbarProps {
   activeTab: Tab | null;
   onTabChange: (tab: Tab) => void;
+  /**
+   * Panel body for the active tab — the same content the desktop sidebar shows
+   * in its second column. Rendered in a sheet that slides up from the rail so
+   * the tool's controls sit over the canvas instead of beside it.
+   */
+  contentComponent?: React.ReactNode;
+  /** Closes the sheet (backdrop tap, X button). */
+  onClose?: () => void;
+  /** Tabs to render dimmed (package/teaser gating). Still tappable — the
+   *  parent's handler decides whether the tap does anything. */
+  greyedTabs?: Tab[];
 }
 
 const TOOLBAR_ITEMS: { id: Tab; label: string; icon: string }[] = [
@@ -38,108 +49,99 @@ const TOOLBAR_ITEMS: { id: Tab; label: string; icon: string }[] = [
 export default function MobileToolbar({
   activeTab,
   onTabChange,
+  contentComponent,
+  onClose,
+  greyedTabs,
 }: MobileToolbarProps) {
   const scrollContainerRef = useRef<HTMLDivElement>(null);
-  const [showMenu, setShowMenu] = useState(false);
+
+  // The sheet is only "open" when a tab is selected AND that tab has a panel to
+  // show. Tools that act immediately (Text drops a textbox) leave it closed.
+  const sheetOpen = !!activeTab && !!contentComponent;
+  const activeLabel = TOOLBAR_ITEMS.find((t) => t.id === activeTab)?.label ?? '';
+  const isGreyed = (id: Tab) => !!greyedTabs?.includes(id);
 
   return (
     <>
-      {/* Mobile Bottom Toolbar - Only show on small screens */}
-      <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-[#EDE2DE] z-40 pc:hidden">
-        {/* Icon Toolbar */}
+      {/* Backdrop — sits under the sheet/rail, over the canvas. */}
+      <div
+        className={`fixed inset-0 bg-black/30 z-30 pc:hidden transition-opacity duration-200 ${
+          sheetOpen ? 'opacity-100' : 'opacity-0 pointer-events-none'
+        }`}
+        onClick={() => onClose?.()}
+        aria-hidden={!sheetOpen}
+      />
+
+      {/* Sheet + rail share one fixed container, so the sheet always sits
+          exactly on top of the rail without hard-coded offsets. */}
+      <div className="fixed bottom-0 left-0 right-0 z-40 pc:hidden">
+        {/* Slide-up tool panel */}
         <div
-          className="flex items-center gap-0.5 p-2 overflow-x-auto scroll-smooth"
-          ref={scrollContainerRef}
+          role="dialog"
+          aria-modal="false"
+          aria-label={activeLabel}
+          className={`bg-[#F8F7F6] rounded-t-[18px] overflow-hidden transition-[max-height] duration-300 ease-out ${
+            sheetOpen
+              ? 'max-h-[62vh] shadow-[0_-8px_24px_rgba(0,0,0,0.15)]'
+              : 'max-h-0'
+          }`}
         >
-          {/* Hamburger Menu */}
-          <button
-            onClick={() => setShowMenu(!showMenu)}
-            className="flex flex-col items-center justify-center gap-0.5 min-w-[50px] py-2 px-2 rounded-[12px] hover:bg-[#F2E8E6B2] transition-colors text-[#7D5B59]"
-            title="Menu"
-            aria-label="Menu"
-          >
-            <Menu size={20} />
-            <span className="text-[9px] font-medium">Menu</span>
-          </button>
-
-          <div className="w-px h-8 bg-[#EDE2DE] mx-1" />
-
-          {/* Toolbar Icons - Primary tabs */}
-          {TOOLBAR_ITEMS.slice(0, 8).map((item) => (
+          {/* Grab handle + close. No title here — every tool panel already
+              renders its own heading. */}
+          <div className="flex items-center px-2 pt-1.5 pb-1 relative">
+            <span className="absolute left-1/2 -translate-x-1/2 top-2 h-1 w-9 rounded-full bg-[#BBA8A7]" />
             <button
-              key={item.id}
-              data-tab={item.id}
-              onClick={() => {
-                onTabChange(item.id);
-                setShowMenu(false);
-              }}
-              className={`flex flex-col items-center justify-center gap-0.5 min-w-[50px] py-2 px-2 rounded-[12px] transition-all ${
-                activeTab === item.id
-                  ? 'bg-[#8C6B6B] text-white shadow-md'
-                  : 'bg-transparent text-[#7D5B59] hover:bg-[#F2E8E6B2]'
-              }`}
-              title={item.label}
-              aria-label={item.label}
+              onClick={() => onClose?.()}
+              className="ml-auto p-1 rounded-full text-[#7D5B59] hover:bg-[#EDE2DE] transition-colors"
+              aria-label="Close panel"
             >
-              <img
-                src={item.icon}
-                alt={item.label}
-                className="w-5 h-5"
-                style={{
-                  filter: activeTab === item.id ? 'brightness(0) invert(1)' : 'none',
-                }}
-              />
-              <span className="text-[9px] font-medium text-center leading-tight whitespace-nowrap">
-                {item.label.split(' ')[0]}
-              </span>
+              <X size={18} />
             </button>
-          ))}
+          </div>
 
-          {/* More indicator */}
-          <div className="flex items-center gap-0.5 min-w-[50px] py-2 px-2 text-[#B98587]">
-            <ChevronDown size={16} />
+          {/* Panel body — scrolls inside the sheet. */}
+          <div className="overflow-y-auto overscroll-contain max-h-[calc(62vh-38px)] px-3 pb-3">
+            {contentComponent}
           </div>
         </div>
-      </div>
 
-      {/* Mobile Menu Overlay */}
-      {showMenu && (
-        <div
-          className="fixed inset-0 bg-black/30 z-30 pc:hidden"
-          onClick={() => setShowMenu(false)}
-        />
-      )}
-
-      {/* Mobile Menu Dropdown */}
-      {showMenu && (
-        <div className="fixed bottom-20 right-4 left-4 bg-white rounded-lg shadow-lg border border-[#EDE2DE] z-40 pc:hidden max-h-64 overflow-y-auto">
-          <div className="flex flex-col">
-            {TOOLBAR_ITEMS.slice(8).map((item) => (
+        {/* Icon rail — every tool lives here; the row scrolls sideways rather
+            than hiding the last few behind an overflow menu. */}
+        <div className="bg-white border-t border-[#EDE2DE] h-[var(--mobile-rail-h)]">
+          <div
+            className="flex items-center gap-0.5 p-2 h-full overflow-x-auto scroll-smooth"
+            ref={scrollContainerRef}
+          >
+            {TOOLBAR_ITEMS.map((item) => (
               <button
                 key={item.id}
-                onClick={() => {
-                  onTabChange(item.id);
-                  setShowMenu(false);
-                }}
-                className={`text-left px-4 py-3 border-b border-[#F2E8E6B2] last:border-b-0 transition-colors ${
+                data-tab={item.id}
+                onClick={() => onTabChange(item.id)}
+                className={`flex flex-col items-center justify-center gap-0.5 min-w-[50px] shrink-0 py-2 px-2 rounded-[12px] transition-all ${
                   activeTab === item.id
-                    ? 'bg-[#F2E8E6B2] text-[#7D5B59] font-semibold'
-                    : 'text-[#7D5B59] hover:bg-[#F9F5F4]'
-                }`}
+                    ? 'bg-[#8C6B6B] text-white shadow-md'
+                    : 'bg-transparent text-[#7D5B59] hover:bg-[#F2E8E6B2]'
+                } ${isGreyed(item.id) ? 'opacity-40' : ''}`}
+                title={item.label}
+                aria-label={item.label}
+                aria-pressed={activeTab === item.id}
               >
-                <div className="flex items-center gap-3">
-                  <img
-                    src={item.icon}
-                    alt={item.label}
-                    className="w-5 h-5"
-                  />
-                  <span className="text-[14px] font-medium">{item.label}</span>
-                </div>
+                <img
+                  src={item.icon}
+                  alt={item.label}
+                  className="w-5 h-5"
+                  style={{
+                    filter: activeTab === item.id ? 'brightness(0) invert(1)' : 'none',
+                  }}
+                />
+                <span className="text-[9px] font-medium text-center leading-tight whitespace-nowrap">
+                  {item.label.split(' ')[0]}
+                </span>
               </button>
             ))}
           </div>
         </div>
-      )}
+      </div>
     </>
   );
 }

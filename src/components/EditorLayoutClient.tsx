@@ -8,7 +8,6 @@ import {
 } from "@/src/lib/presentationMode";
 import Inspector from "./canvas-editor/inspector";
 import PhonePreviewWrapper from "./canvas-editor/PhonePreviewWrapper";
-import MobileToolbar from "./canvas-editor/mobile-toolbar";
 import { Monitor, Smartphone } from "lucide-react";
 
 
@@ -31,6 +30,8 @@ export default function EditorLayoutClient({
   userId,
   eventId,
   packageId,
+  onPhoneSelection,
+  onPagesChange,
 }: {
   editorRef?: React.RefObject<EditorHandle | null>,
   contacts: any[];
@@ -50,6 +51,11 @@ export default function EditorLayoutClient({
   userId?: string | number | null;
   eventId?: string | number | null;
   packageId?: number | null;
+  // Fired when an element is selected on a phone-sized viewport.
+  onPhoneSelection?: () => void;
+  // Mirrors the editor's page count / active page outwards, so surfaces above
+  // this one (the header's phone ⋮ menu) can show and act on it.
+  onPagesChange?: (count: number, current: number) => void;
 }) {
   const internalRef = useRef<EditorHandle | null>(null);
   const editorRef = editorRefProp ?? internalRef;
@@ -62,7 +68,6 @@ export default function EditorLayoutClient({
     DEFAULT_PRESENTATION_MODE
   );
   const [internalPreviewMode, setInternalPreviewMode] = useState<"desktop" | "phone">("desktop");
-  const [mobileActiveTab, setMobileActiveTab] = useState<any>(null);
 
   const previewMode = previewModeProp ?? internalPreviewMode;
   const setPreviewMode = setPreviewModeProp ?? setInternalPreviewMode;
@@ -75,10 +80,21 @@ export default function EditorLayoutClient({
 
   const handlePagesChange = useCallback((count: number, current: number) => {
     setPagesInfo({ count, current });
-  }, []);
+    onPagesChange?.(count, current);
+  }, [onPagesChange]);
 
   const onSelectionChange = (obj: any | null) => {
     setSelected(obj);
+    // On a phone the tool panel and the inspector both live at the bottom of the
+    // screen, so selecting an element hands that space over to the inspector.
+    // Desktop shows them side by side and needs no such trade.
+    if (
+      obj &&
+      typeof window !== "undefined" &&
+      window.matchMedia("(max-width: 499px)").matches
+    ) {
+      onPhoneSelection?.();
+    }
   };
 
   const updateSelected = (patch: Record<string, any>) => {
@@ -212,7 +228,9 @@ export default function EditorLayoutClient({
           )}
         </div>
       ) : (
-        <div className="hidden pc:block">
+        /* `contents` on phone so the Inspector's own responsive classes decide
+           what shows — it renders a bottom sheet there, not this column. */
+        <div className="contents pc:block">
           <Inspector
             selected={selected}
             updateSelected={updateSelected}
@@ -225,8 +243,8 @@ export default function EditorLayoutClient({
         </div>
       )}
 
-      {/* Mobile Toolbar */}
-      <MobileToolbar activeTab={mobileActiveTab} onTabChange={setMobileActiveTab} />
+      {/* The phone tool rail + slide-up panel are rendered by <Sidebar> so they
+          share its tab state — see canvas-editor/sidebar.tsx. */}
       </div>
     </>
   );
