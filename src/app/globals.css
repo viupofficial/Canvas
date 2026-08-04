@@ -1533,7 +1533,11 @@ star-fly-in {
   width: 100%;
   max-width: 400px;
   margin: 0 auto 0px;
-  padding: 1.5rem 1rem 1.25rem;
+  /* The floating RSVP circle sits ~17px above the footer and overlaps the card's
+     bottom edge. The extra bottom padding lifts the last row (calendar links /
+     map buttons) clear of it; the card is bottom-anchored, so it grows taller
+     upward rather than shifting position. */
+  padding: 1.5rem 1rem 3rem;
   border-radius: 16px 16px 16px 16px;
   box-shadow: 0 -4px 12px rgba(0, 0, 0, 0.08);
   display: flex;

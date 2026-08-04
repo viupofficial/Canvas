@@ -809,7 +809,7 @@ const generateICS = (event: any, loc?: any) => {
                             />
 
                             <div className="calendar-links"
-                                style={{ gap: "5px", paddingTop: "20px", paddingBottom: "15px" }}>
+                                style={{ width: "100%", gap: "5px", paddingTop: "20px", paddingBottom: "15px" }}>
 
                                <button
                                  type="button"
@@ -826,9 +826,11 @@ const generateICS = (event: any, loc?: any) => {
                                    document.body.removeChild(a);
                                    URL.revokeObjectURL(url);
                                  }}
-                                 style={{ background: "transparent", border: 0, padding: 0, cursor: "pointer" }}
+                                 style={{ width: "100%", background: "transparent", border: 0, padding: 0, cursor: "pointer" }}
                                >
-                                 <img src="/AppleCal_btn.png" style={{ width: "50%" }} />
+                                 {/* Tailwind preflight makes images display:block, so
+                                     text-align can't centre them — margin auto does. */}
+                                 <img src="/AppleCal_btn.png" style={{ width: "50%", margin: "0 auto" }} />
                                </button>
 
                                 <a
@@ -836,7 +838,7 @@ const generateICS = (event: any, loc?: any) => {
   rel="noopener noreferrer"
   href={generateGoogleCalendarLink(calendar, location)}
 >
-  <img src="/GoogleCal_btn.png" style={{ width: "50%" }} />
+  <img src="/GoogleCal_btn.png" style={{ width: "50%", margin: "0 auto" }} />
 </a>
 
                             </div>
@@ -888,8 +890,9 @@ const generateICS = (event: any, loc?: any) => {
                             <div style={{
                                 display: "flex",
                                 justifyContent: "center",
-                                gap: "10px",
-                                paddingTop: "20px"
+                                alignItems: "center",
+                                gap: "64px",
+                                paddingTop: "10px"
                             }}>
 
 <a
