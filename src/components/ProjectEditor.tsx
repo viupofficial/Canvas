@@ -194,6 +194,15 @@ function ProjectEditorInner({
   // Bumped whenever the active page's content is (re)loaded — the Background panel
   // watches this to re-read and display the current page's background.
   const [bgReadNonce, setBgReadNonce] = useState(0);
+  // Which sidebar tool is open. Owned here (rather than inside Sidebar) so the
+  // phone inspector can close the tool sheet when an element is selected.
+  const [activeTool, setActiveTool] = useState<any>(null);
+  // Page count / active page, mirrored out of the editor. The phone has no page
+  // bar under the canvas, so the header's ⋮ menu shows and edits this instead.
+  const [pagesInfo, setPagesInfo] = useState({ count: 1, current: 0 });
+  const handlePagesChange = useCallback((count: number, current: number) => {
+    setPagesInfo({ count, current });
+  }, []);
 
   const { eventData } = useEventData();
 
@@ -931,6 +940,8 @@ function ProjectEditorInner({
           eventId={eventId ?? null}
           designId={designId ?? null}
           packageId={effectivePackageId}
+          pageCount={pagesInfo.count}
+          currentPageIndex={pagesInfo.current}
         />
 
         <div className="flex w-full gap-2 lg:gap-6 flex-1 min-h-0 overflow-hidden">

@@ -86,6 +86,13 @@ export default function EditorHeader(props: {
   eventId?: number | null;
   designId?: number | null;
   packageId?: number | null;
+  /**
+   * Page state, mirrored from the editor. Only the phone ⋮ menu uses it — that
+   * menu is the phone's page control, since the desktop page bar under the
+   * canvas is hidden below 500px.
+   */
+  pageCount?: number;
+  currentPageIndex?: number;
 }) {
   const router = useRouter();
   const pathname = usePathname();
@@ -133,6 +140,13 @@ export default function EditorHeader(props: {
   // "live" while the publish + sync is in flight — same duplicate-click guard as
   // Share Link, since Live Preview now runs the identical publish flow.
   const [previewStatus, setPreviewStatus] = useState<"idle" | "live">("idle");
+
+  // ── PHONE ⋮ MENU (page actions) ──────────────────────────────────────────
+  // Deleting a page is destructive and there is no undo for it, so the item
+  // arms itself first and only deletes on the second tap.
+  const [moreOpen, setMoreOpen] = useState(false);
+  const moreRef = useRef<HTMLDivElement>(null);
+  const [deleteArmed, setDeleteArmed] = useState(false);
 
   // Close dropdowns when clicking outside
   useEffect(() => {
