@@ -762,6 +762,9 @@ const generateICS = (event: any, loc?: any) => {
                                 fontWeight: 600,
                                 marginBottom: "6px",
                                 width: "100%",
+                                // Long unbroken titles must wrap, not push the
+                                // popup wider than the phone frame.
+                                overflowWrap: "anywhere",
                               }}>
                                 {calendar.title}
                               </p>
@@ -797,7 +800,13 @@ const generateICS = (event: any, loc?: any) => {
                             {/* Self-rendered month grid (not the Google embed, which is
                                 cross-origin and can't pin arbitrary dates/titles). Shows
                                 the sidebar date highlighted with the title chip on it. */}
-                            <EventMiniCalendar date={calendar?.date} title={calendar?.title} />
+                            <EventMiniCalendar
+                              date={calendar?.date}
+                              title={calendar?.title}
+                              startTime={calendar?.startTime}
+                              endTime={calendar?.endTime}
+                              address={location?.address}
+                            />
 
                             <div className="calendar-links"
                                 style={{ gap: "5px", paddingTop: "20px", paddingBottom: "15px" }}>

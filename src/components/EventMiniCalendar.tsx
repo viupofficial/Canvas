@@ -12,9 +12,15 @@ import { parseCalendarDate } from "@/src/lib/calendar/googleCalendarEmbed";
 export default function EventMiniCalendar({
   date,
   title,
+  startTime,
+  endTime,
+  address,
 }: {
   date?: string | null;
   title?: string | null;
+  startTime?: string | null;
+  endTime?: string | null;
+  address?: string | null;
 }) {
   const parsed = parseCalendarDate(date);
   // No/invalid date ⇒ show the current month with nothing pinned.
@@ -22,6 +28,11 @@ export default function EventMiniCalendar({
   const year = parsed?.year ?? now.getFullYear();
   const month = (parsed?.month ?? now.getMonth() + 1) - 1; // 0-based
   const selectedDay = parsed?.day ?? null;
+
+  // Google-Calendar-style detail card, opened by tapping the pinned day. The
+  // day chip only ever shows a truncated title so long titles can't stretch
+  // their grid column; the full text lives here.
+  const [showDetails, setShowDetails] = React.useState(false);
 
   const daysInMonth = new Date(year, month + 1, 0).getDate();
   const daysInPrevMonth = new Date(year, month, 0).getDate();
@@ -48,10 +59,25 @@ export default function EventMiniCalendar({
   const weekdays = ["MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN"];
   const accent = "#7D5B59";
   const eventTitle = title?.trim() || "";
+  const hasEvent = selectedDay !== null;
+
+  const longDate =
+    selectedDay !== null
+      ? new Date(year, month, selectedDay).toLocaleDateString("en-GB", {
+          weekday: "long",
+          day: "numeric",
+          month: "long",
+          year: "numeric",
+        })
+      : "";
+  const timeRange = [startTime?.trim(), endTime?.trim()]
+    .filter(Boolean)
+    .join(" – ");
 
   return (
     <div
       style={{
+        position: "relative",
         width: "100%",
         maxWidth: "350px",
         fontFamily: "Montserrat",
@@ -101,13 +127,19 @@ export default function EventMiniCalendar({
           return (
             <div
               key={i}
+              // minWidth:0 stops a long title chip from widening its 1fr column
+              // (grid items default to min-width:auto), which used to blow the
+              // day columns out of alignment.
               style={{
                 display: "flex",
                 flexDirection: "column",
                 alignItems: "center",
+                minWidth: 0,
                 minHeight: "40px",
                 paddingTop: "2px",
+                cursor: isSelected ? "pointer" : "default",
               }}
+              onClick={isSelected ? () => setShowDetails(true) : undefined}
             >
               <span
                 style={{
@@ -128,6 +160,7 @@ export default function EventMiniCalendar({
               {isSelected && eventTitle && (
                 <span
                   style={{
+                    display: "block",
                     maxWidth: "100%",
                     fontSize: "7.5px",
                     fontWeight: 600,
@@ -149,6 +182,107 @@ export default function EventMiniCalendar({
           );
         })}
       </div>
+
+      {/* Tap-the-day detail card: the full title and time, unclipped. */}
+      {showDetails && hasEvent && (
+        <div
+          onClick={() => setShowDetails(false)}
+          style={{
+            position: "absolute",
+            inset: 0,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            padding: "10px",
+            background: "rgba(0,0,0,0.08)",
+            borderRadius: "8px",
+            boxSizing: "border-box",
+            zIndex: 5,
+          }}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              width: "100%",
+              maxHeight: "100%",
+              overflowY: "auto",
+              background: "#fff",
+              borderRadius: "10px",
+              boxShadow: "0 6px 24px rgba(0,0,0,0.18)",
+              padding: "14px 14px 16px",
+              boxSizing: "border-box",
+            }}
+          >
+            <div style={{ display: "flex", justifyContent: "flex-end" }}>
+              <button
+                type="button"
+                aria-label="Close event details"
+                onClick={() => setShowDetails(false)}
+                style={{
+                  border: 0,
+                  background: "transparent",
+                  cursor: "pointer",
+                  fontSize: "16px",
+                  lineHeight: 1,
+                  color: "#7a7a7a",
+                  padding: 0,
+                }}
+              >
+                ×
+              </button>
+            </div>
+
+            <div style={{ display: "flex", gap: "10px", alignItems: "flex-start" }}>
+              <span
+                style={{
+                  flex: "0 0 auto",
+                  width: "12px",
+                  height: "12px",
+                  borderRadius: "3px",
+                  background: accent,
+                  marginTop: "5px",
+                }}
+              />
+              <div style={{ minWidth: 0 }}>
+                <div
+                  style={{
+                    fontSize: "16px",
+                    fontWeight: 600,
+                    color: "#3c3c3c",
+                    lineHeight: 1.3,
+                    overflowWrap: "anywhere",
+                  }}
+                >
+                  {eventTitle || "Event"}
+                </div>
+                <div
+                  style={{
+                    fontSize: "12px",
+                    color: "#6b6b6b",
+                    marginTop: "4px",
+                    overflowWrap: "anywhere",
+                  }}
+                >
+                  {longDate}
+                  {timeRange ? ` · ${timeRange}` : ""}
+                </div>
+                {address?.trim() && (
+                  <div
+                    style={{
+                      fontSize: "12px",
+                      color: "#6b6b6b",
+                      marginTop: "4px",
+                      overflowWrap: "anywhere",
+                    }}
+                  >
+                    {address}
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
