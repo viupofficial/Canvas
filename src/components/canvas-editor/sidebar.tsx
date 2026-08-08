@@ -9,6 +9,9 @@ import {
   QR_MIN_SIZE,
   QR_MAX_SIZE,
   GIFT_MAX_ACCOUNTS,
+  PACK_TYPE_MAX_LENGTH,
+  PACK_TYPE_DEFAULT_OPTION_1,
+  PACK_TYPE_DEFAULT_OPTION_2,
   type GiftAccount,
 } from '@/src/store/EventDataContext';
 import LivePreviewPanel from '@/src/components/canvas-editor/LivePreviewPanel';
@@ -979,6 +982,11 @@ function RSVPTab() {
   // OFF unless explicitly saved as ON — designs made before this existed keep the
   // form they were published with. See RSVPConfig.packTypeEnabled.
   const [packTypeOn, setPackTypeOn] = useState(current?.packTypeEnabled === true);
+  // The two category names. Blank means "use the default wording" — the stored
+  // value is what guests see AND what is submitted as pack_type, so the
+  // placeholders show the fallback the invitation will actually use.
+  const [packTypeOption1, setPackTypeOption1] = useState(current?.packTypeOption1 ?? '');
+  const [packTypeOption2, setPackTypeOption2] = useState(current?.packTypeOption2 ?? '');
   // navColor / circleColor accept a solid hex string OR a gradient descriptor
   // (rendered via cssBackground in the footer). textColor stays solid-only —
   // it feeds CSS `color` and currentColor icon masks, which can't take a gradient.
@@ -1001,6 +1009,18 @@ function RSVPTab() {
     const next = !packTypeOn;
     setPackTypeOn(next);
     pushField('packTypeEnabled', next);
+  };
+
+  // Keep the raw text locally (so a trailing space can be typed mid-word) but
+  // store it trimmed and capped — the stored value IS the submitted pack_type.
+  const changePackTypeOption = (
+    field: 'packTypeOption1' | 'packTypeOption2',
+    value: string,
+    set: (v: string) => void,
+  ) => {
+    const next = value.slice(0, PACK_TYPE_MAX_LENGTH);
+    set(next);
+    pushField(field, next.trim());
   };
 
   // Original colors captured once, so each Revert restores the starting value.
@@ -1071,8 +1091,17 @@ function RSVPTab() {
       return;
     }
     // setSection REPLACES the whole config, so every field the tab owns has to be
-    // listed here — omitting packTypeEnabled would silently reset it on Save.
-    setSection('rsvpConfig', { enabled: rsvpOn, maxGuest, packTypeEnabled: packTypeOn, navColor, navOpacity, textColor, textOpacity, circleColor, circleOpacity });
+    // listed here — omitting any of the Guest Category fields would silently
+    // reset them on Save. Labels are stored trimmed; blank is allowed and means
+    // "use the default wording" (packTypeOptions() applies the fallback).
+    setSection('rsvpConfig', {
+      enabled: rsvpOn,
+      maxGuest,
+      packTypeEnabled: packTypeOn,
+      packTypeOption1: packTypeOption1.trim(),
+      packTypeOption2: packTypeOption2.trim(),
+      navColor, navOpacity, textColor, textOpacity, circleColor, circleOpacity,
+    });
   };
 
   return (
@@ -1140,6 +1169,39 @@ function RSVPTab() {
             />
           </button>
         </div>
+
+        {/* The two category names guests choose between. Whatever is typed here
+            is what the guest sees AND what is stored as the RSVP's pack_type. */}
+        {packTypeOn && (
+          <div className="flex flex-col gap-3 -mt-1">
+            <div>
+              <label className="text-xs text-gray-500">Category 1</label>
+              <input
+                type="text"
+                value={packTypeOption1}
+                maxLength={PACK_TYPE_MAX_LENGTH}
+                onChange={(e) => changePackTypeOption('packTypeOption1', e.target.value, setPackTypeOption1)}
+                placeholder={PACK_TYPE_DEFAULT_OPTION_1}
+                className="mt-1 w-full px-3 py-2 border rounded-md text-sm"
+              />
+            </div>
+            <div>
+              <label className="text-xs text-gray-500">Category 2</label>
+              <input
+                type="text"
+                value={packTypeOption2}
+                maxLength={PACK_TYPE_MAX_LENGTH}
+                onChange={(e) => changePackTypeOption('packTypeOption2', e.target.value, setPackTypeOption2)}
+                placeholder={PACK_TYPE_DEFAULT_OPTION_2}
+                className="mt-1 w-full px-3 py-2 border rounded-md text-sm"
+              />
+            </div>
+            <p className="text-[11px] text-gray-400 leading-snug">
+              Leave blank to use {PACK_TYPE_DEFAULT_OPTION_1} and {PACK_TYPE_DEFAULT_OPTION_2}. Max{' '}
+              {PACK_TYPE_MAX_LENGTH} characters each.
+            </p>
+          </div>
+        )}
 
         <div>
           <div className="flex items-center justify-between mb-1">

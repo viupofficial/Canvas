@@ -376,6 +376,8 @@ const CanvasEditor = forwardRef<
       enabled?: boolean;
       maxGuest?: number;
       packTypeEnabled?: boolean;
+      packTypeOption1?: string;
+      packTypeOption2?: string;
       // Solid CSS color or gradient descriptor (src/lib/gradient.ts).
       navColor: string | GradientDescriptor;
       navOpacity: number;

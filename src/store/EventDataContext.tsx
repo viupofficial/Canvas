@@ -146,21 +146,49 @@ export function legacyGiftFields(accounts: GiftAccount[]) {
     qrSize: clampQrSize(first?.qrSize),
   };
 }
-/** How a guest is attending, as stored by the PHP RSVP record's `pack_type`
- *  column. These exact lowercase strings go to the API — the capitalised
- *  "Family"/"Friends" wording is display only. */
-export type PackType = "family" | "friends";
+/** A guest category, as stored by the PHP RSVP record's `pack_type` column.
+ *  Free text: the host names the two options themselves ("Bride Family",
+ *  "Colleagues", …) and the chosen label is submitted verbatim — it is not
+ *  lowercased, slugged or mapped back to a fixed pair. */
+export type PackType = string;
+
+/** Longest guest-category label the PHP `pack_type` column accepts. */
+export const PACK_TYPE_MAX_LENGTH = 100;
+
+/** Labels used when a design has Guest Category on but no custom names — i.e.
+ *  every invitation saved before the options became editable. */
+export const PACK_TYPE_DEFAULT_OPTION_1 = "Family";
+export const PACK_TYPE_DEFAULT_OPTION_2 = "Friends";
+
+/** The two category labels to show, in order. One reader for every surface
+ *  (public footer, live preview panel), so a blank or missing custom name
+ *  always falls back to the original wording instead of rendering an empty
+ *  button. Trimmed, since that is exactly what gets submitted as pack_type. */
+export function packTypeOptions(
+  rsvp?: { packTypeOption1?: string; packTypeOption2?: string } | null,
+): [string, string] {
+  return [
+    rsvp?.packTypeOption1?.trim() || PACK_TYPE_DEFAULT_OPTION_1,
+    rsvp?.packTypeOption2?.trim() || PACK_TYPE_DEFAULT_OPTION_2,
+  ];
+}
 
 export type RSVPConfig = {
   // Whether RSVP is available on the invitation. Treated as ON when undefined so
   // pre-existing designs (saved before this toggle existed) keep showing RSVP.
   enabled?: boolean;
   maxGuest?: number;
-  // Whether guests are asked "Are you coming as? Family / Friends" when they
-  // accept. Unlike `enabled`, this is OFF when undefined: it is an opt-in extra
-  // question, so designs saved before it existed must keep the shorter form they
-  // were published with. Read it as `=== true`, never `!== false`.
+  // Whether guests are asked "Are you coming as?" when they accept. Unlike
+  // `enabled`, this is OFF when undefined: it is an opt-in extra question, so
+  // designs saved before it existed must keep the shorter form they were
+  // published with. Read it as `=== true`, never `!== false`.
   packTypeEnabled?: boolean;
+  // The two category names the host chose, submitted verbatim as pack_type.
+  // Absent on designs saved before the labels became editable — which is why
+  // every consumer reads them through packTypeOptions() instead of directly,
+  // so those keep showing Family / Friends.
+  packTypeOption1?: string;
+  packTypeOption2?: string;
   // Nav bar / circle colors accept a solid CSS color string or a gradient
   // descriptor (see src/lib/gradient.ts); consumers render via cssBackground().
   navColor?: string | GradientDescriptor;

@@ -8,7 +8,7 @@ import { buildGoogleCalendarLink } from "@/src/lib/calendar/googleCalendarLink"
 import EventMiniCalendar from "@/src/components/EventMiniCalendar"
 import type { CalendarExportInput } from "@/src/lib/calendar/normalizeEvent"
 import { submitCanvasRSVP, submitCanvasGuestbook, getCanvasGuestbook } from "@/src/lib/viupApi"
-import type { PackType } from "@/src/store/EventDataContext"
+import { packTypeOptions, type PackType } from "@/src/store/EventDataContext"
 import { cssBackground, type GradientDescriptor } from "@/src/lib/gradient"
 import { computeFooterNav } from "@/src/lib/footerNav"
 
@@ -58,6 +58,9 @@ export default function EventFooter({
     // "Guest Category" (RSVP sidebar). Undefined ⇒ OFF — it is an opt-in extra
     // question, so invitations saved before it existed keep the shorter form.
     packTypeEnabled?: boolean;
+    // Host-chosen category names. Blank/absent ⇒ Family / Friends.
+    packTypeOption1?: string;
+    packTypeOption2?: string;
     // Solid CSS color or gradient descriptor (src/lib/gradient.ts).
     navColor?: string | GradientDescriptor;
     navOpacity?: number;
@@ -228,12 +231,20 @@ export default function EventFooter({
   // "Guest Category" — opt-in, so only an explicit `true` asks the question.
   // Anything else (undefined on older invitations, or false) keeps the form as-is.
   const packTypeEnabled = rsvpConfig?.packTypeEnabled === true;
+  // The host's two category names (or Family / Friends when unset). The label
+  // shown IS the value submitted as pack_type — no slugging or mapping.
+  const packTypeChoices = packTypeOptions(rsvpConfig);
+  // A selection only counts while it still matches one of the configured
+  // options. If the host renames a category mid-session the stale answer stops
+  // being valid, which sends the guest back to the category card rather than
+  // submitting a label that no longer exists.
+  const selectedPackType = packTypeChoices.includes(packType as string) ? packType : null;
   // The Guest Category card sits between "Accept" and the details form: an
   // accepting guest sees it until they pick one, and the form only mounts once
   // they have. Decliners skip it entirely. Derived rather than a separate step
   // variable so there is one source of truth for where the flow is.
   const showPackTypeStep =
-    rsvpStatus === "accept" && packTypeEnabled && packType === null && !rsvpMessage;
+    rsvpStatus === "accept" && packTypeEnabled && selectedPackType === null && !rsvpMessage;
     const formatDate = (dateStr: string) => {
   const date = new Date(dateStr);
 
@@ -498,17 +509,14 @@ const generateICS = (event: any, loc?: any) => {
                         an attendee can never reach the form without a category. */}
                     {showPackTypeStep && (
                         <div className="rsvp-options">
-                            {([
-                                { value: "family", label: "Family" },
-                                { value: "friends", label: "Friends" },
-                            ] as { value: PackType; label: string }[]).map((opt) => (
+                            {packTypeChoices.map((label: PackType, i: number) => (
                                 <button
-                                    key={opt.value}
+                                    key={`${i}-${label}`}
                                     type="button"
                                     style={{ fontFamily: "Montserrat", textAlign: "center", fontWeight: 700, fontSize: "16px" }}
-                                    onClick={() => setPackType(opt.value)}
+                                    onClick={() => setPackType(label)}
                                 >
-                                    {opt.label}
+                                    {label}
                                 </button>
                             ))}
                         </div>
@@ -557,7 +565,7 @@ const generateICS = (event: any, loc?: any) => {
                                 // Belt-and-braces: the Guest Category card gates this
                                 // form, so an attendee cannot reach Submit without a
                                 // category. Never post an empty one if that changes.
-                                if (rsvpStatus === "accept" && packTypeEnabled && !packType) return;
+                                if (rsvpStatus === "accept" && packTypeEnabled && !selectedPackType) return;
 
                                 setRsvpSubmitting(true);
                                 setRsvpMessage(null);
@@ -569,11 +577,11 @@ const generateICS = (event: any, loc?: any) => {
                                         phone,
                                         status,
                                         pax,
-                                        // "" (the helper's default) when the guest
-                                        // declined or the host left the question off,
-                                        // so those RSVPs post exactly as they did
-                                        // before this field existed.
-                                        packType: rsvpStatus === "accept" ? (packType ?? "") : "",
+                                        // The chosen label verbatim — never lowercased,
+                                        // slugged or mapped. "" when the guest declined
+                                        // or the host left the question off, so those
+                                        // RSVPs post exactly as they did before.
+                                        packType: rsvpStatus === "accept" ? (selectedPackType ?? "") : "",
                                     });
                                     setRsvpMessage({ type: "success", text: "Thank you for your RSVP!" });
                                     setTimeout(() => {
@@ -593,7 +601,7 @@ const generateICS = (event: any, loc?: any) => {
                                 the answer from the Guest Category card into the markup so
                                 the published form carries pack_type the way status does. */}
                             {rsvpStatus === "accept" && packTypeEnabled && (
-                                <input type="hidden" name="pack_type" id="pack-type" value={packType ?? ""} />
+                                <input type="hidden" name="pack_type" id="pack-type" value={selectedPackType ?? ""} />
                             )}
 
                             <div className="form-group">

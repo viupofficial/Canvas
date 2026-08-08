@@ -1,6 +1,6 @@
 "use client";
 
-import { useEventDataOptional, giftAccounts, type CalendarData, type GiftData, type LocationData } from "@/src/store/EventDataContext";
+import { useEventDataOptional, giftAccounts, packTypeOptions, type CalendarData, type GiftData, type LocationData } from "@/src/store/EventDataContext";
 import { cssBackground, firstColorHex, type GradientDescriptor } from "@/src/lib/gradient";
 import GiftCarousel from "@/src/components/GiftCarousel";
 
@@ -194,6 +194,8 @@ function RSVPCard({
   rsvpConfig: {
     maxGuest?: number;
     packTypeEnabled?: boolean;
+    packTypeOption1?: string;
+    packTypeOption2?: string;
     navColor?: string | GradientDescriptor;
     navOpacity?: number;
     textColor?: string;
@@ -242,7 +244,7 @@ function RSVPCard({
             Are you coming as?
           </p>
           <div className="flex gap-2 mb-2">
-            {["Family", "Friends"].map((label) => (
+            {packTypeOptions(rsvpConfig).map((label) => (
               <button
                 key={label}
                 className="flex-1 py-1 rounded text-[10px] font-bold border"
