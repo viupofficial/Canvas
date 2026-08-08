@@ -373,6 +373,9 @@ const CanvasEditor = forwardRef<
     calendar: any;
     location: any;
     rsvpConfig?: {
+      enabled?: boolean;
+      maxGuest?: number;
+      packTypeEnabled?: boolean;
       // Solid CSS color or gradient descriptor (src/lib/gradient.ts).
       navColor: string | GradientDescriptor;
       navOpacity: number;
@@ -1063,7 +1066,9 @@ const [currentPage, setCurrentPage] = useState(0);
         moneyGift: props.moneyGift,
         calendar: props.calendar,
         location: props.location,
-        rsvpConfig: props.rsvpConfig ?? null,
+        // Same store-first read as exportHTML — /preview-local must show the RSVP
+        // settings currently being edited, not the defaults.
+        rsvpConfig: eventCtx?.eventData.rsvpConfig ?? props.rsvpConfig ?? null,
         borders: globalBordersRef.current,
         userId: props.userId ?? null,
         eventId: props.eventId ?? null,
@@ -3563,7 +3568,13 @@ const [currentPage, setCurrentPage] = useState(0);
     moneyGift: props.moneyGift ?? null,
     calendar: props.calendar ?? null,
     location: props.location ?? null,
-    rsvpConfig: props.rsvpConfig ?? null,
+    // Unlike the four above, rsvpConfig is NOT threaded down as a prop — the RSVP
+    // sidebar writes it straight into the shared store. Reading only props here
+    // published `null` every time, so max guests, the nav colors, the RSVP toggle
+    // and Guest Category never reached /e/{slug}; the defaults happened to match
+    // the sidebar defaults, which is why it went unnoticed. Store first, prop as
+    // the fallback for surfaces that render outside a provider.
+    rsvpConfig: eventCtx?.eventData.rsvpConfig ?? props.rsvpConfig ?? null,
     userId: props.userId ?? null,
     eventId: props.eventId ?? null,
     packageId: props.packageId ?? null,
@@ -3589,7 +3600,7 @@ const [currentPage, setCurrentPage] = useState(0);
     console.error("export-to-rsvp upload error:", err);
     throw new Error(err?.message ? `Publish failed: ${err.message}` : "Publish failed.");
   }
-}, [currentPage, musicUrl, pages, serializeCanvas, props]);
+}, [currentPage, musicUrl, pages, serializeCanvas, props, eventCtx]);
 
   // Render every page to a PNG on an offscreen StaticCanvas and assemble them
   // into a single PDF (one page per canvas page), named after the event.

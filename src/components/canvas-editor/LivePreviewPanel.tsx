@@ -193,6 +193,7 @@ function RSVPCard({
 }: {
   rsvpConfig: {
     maxGuest?: number;
+    packTypeEnabled?: boolean;
     navColor?: string | GradientDescriptor;
     navOpacity?: number;
     textColor?: string;
@@ -230,6 +231,30 @@ function RSVPCard({
           Decline
         </button>
       </div>
+      {/* Guest Category, previewed exactly as an accepting guest sees it. Opt-in,
+          so an unset/false flag leaves this card as it was. */}
+      {rsvpConfig?.packTypeEnabled === true && (
+        <>
+          <p
+            className="text-[11px] text-center italic mb-2"
+            style={{ color: textColor, opacity: textOpacity }}
+          >
+            Are you coming as?
+          </p>
+          <div className="flex gap-2 mb-2">
+            {["Family", "Friends"].map((label) => (
+              <button
+                key={label}
+                className="flex-1 py-1 rounded text-[10px] font-bold border"
+                style={{ color: navColor, borderColor: navColor, opacity: navOpacity }}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+        </>
+      )}
+
       <div className="text-[10px]" style={{ color: textColor, opacity: textOpacity }}>
         Max guests: <span className="font-semibold">{maxGuest}</span>
       </div>

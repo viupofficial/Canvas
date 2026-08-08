@@ -146,11 +146,21 @@ export function legacyGiftFields(accounts: GiftAccount[]) {
     qrSize: clampQrSize(first?.qrSize),
   };
 }
+/** How a guest is attending, as stored by the PHP RSVP record's `pack_type`
+ *  column. These exact lowercase strings go to the API — the capitalised
+ *  "Family"/"Friends" wording is display only. */
+export type PackType = "family" | "friends";
+
 export type RSVPConfig = {
   // Whether RSVP is available on the invitation. Treated as ON when undefined so
   // pre-existing designs (saved before this toggle existed) keep showing RSVP.
   enabled?: boolean;
   maxGuest?: number;
+  // Whether guests are asked "Are you coming as? Family / Friends" when they
+  // accept. Unlike `enabled`, this is OFF when undefined: it is an opt-in extra
+  // question, so designs saved before it existed must keep the shorter form they
+  // were published with. Read it as `=== true`, never `!== false`.
+  packTypeEnabled?: boolean;
   // Nav bar / circle colors accept a solid CSS color string or a gradient
   // descriptor (see src/lib/gradient.ts); consumers render via cssBackground().
   navColor?: string | GradientDescriptor;

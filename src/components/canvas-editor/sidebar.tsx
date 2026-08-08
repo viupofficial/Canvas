@@ -975,6 +975,10 @@ function RSVPTab() {
   };
 
   const [maxGuest, setMaxGuest] = useState<number | ''>(current?.maxGuest ?? '');
+  // Guest Category ("Are you coming as? Family / Friends"). Opt-in, so it starts
+  // OFF unless explicitly saved as ON — designs made before this existed keep the
+  // form they were published with. See RSVPConfig.packTypeEnabled.
+  const [packTypeOn, setPackTypeOn] = useState(current?.packTypeEnabled === true);
   // navColor / circleColor accept a solid hex string OR a gradient descriptor
   // (rendered via cssBackground in the footer). textColor stays solid-only —
   // it feeds CSS `color` and currentColor icon masks, which can't take a gradient.
@@ -991,6 +995,12 @@ function RSVPTab() {
     value: NonNullable<typeof current>[K],
   ) => {
     updateEventData('rsvpConfig', { [field]: value } as any);
+  };
+
+  const togglePackType = () => {
+    const next = !packTypeOn;
+    setPackTypeOn(next);
+    pushField('packTypeEnabled', next);
   };
 
   // Original colors captured once, so each Revert restores the starting value.
@@ -1060,7 +1070,9 @@ function RSVPTab() {
       alert("Please enter max guest");
       return;
     }
-    setSection('rsvpConfig', { enabled: rsvpOn, maxGuest, navColor, navOpacity, textColor, textOpacity, circleColor, circleOpacity });
+    // setSection REPLACES the whole config, so every field the tab owns has to be
+    // listed here — omitting packTypeEnabled would silently reset it on Save.
+    setSection('rsvpConfig', { enabled: rsvpOn, maxGuest, packTypeEnabled: packTypeOn, navColor, navOpacity, textColor, textOpacity, circleColor, circleOpacity });
   };
 
   return (
@@ -1105,6 +1117,30 @@ function RSVPTab() {
             className="mt-1 w-full px-3 py-2 border rounded-md text-sm"
           />
         </div>
+
+        {/* Guest Category — asks accepting guests whether they are Family or
+            Friends. Stored on the RSVP record's pack_type, separately from pax. */}
+        <div className="flex items-center justify-between">
+          <label className="text-xs text-gray-500">Guest Category</label>
+          <button
+            type="button"
+            role="switch"
+            aria-checked={packTypeOn}
+            aria-label="Toggle Guest Category"
+            title={packTypeOn ? 'Disable Guest Category' : 'Enable Guest Category'}
+            onClick={togglePackType}
+            className={`relative inline-flex h-5 w-9 shrink-0 items-center rounded-full transition-colors ${
+              packTypeOn ? 'bg-[#8C6B6B]' : 'bg-gray-300'
+            }`}
+          >
+            <span
+              className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${
+                packTypeOn ? 'translate-x-[18px]' : 'translate-x-[2px]'
+              }`}
+            />
+          </button>
+        </div>
+
         <div>
           <div className="flex items-center justify-between mb-1">
             <label className="block text-[11px] text-[#7D5B5980] font-[600]">Navigation Bar</label>

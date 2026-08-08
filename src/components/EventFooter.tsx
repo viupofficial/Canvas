@@ -8,6 +8,7 @@ import { buildGoogleCalendarLink } from "@/src/lib/calendar/googleCalendarLink"
 import EventMiniCalendar from "@/src/components/EventMiniCalendar"
 import type { CalendarExportInput } from "@/src/lib/calendar/normalizeEvent"
 import { submitCanvasRSVP, submitCanvasGuestbook, getCanvasGuestbook } from "@/src/lib/viupApi"
+import type { PackType } from "@/src/store/EventDataContext"
 import { cssBackground, type GradientDescriptor } from "@/src/lib/gradient"
 import { computeFooterNav } from "@/src/lib/footerNav"
 
@@ -54,6 +55,9 @@ export default function EventFooter({
   rsvpConfig?: {
     enabled?: boolean;
     maxGuest?: number;
+    // "Guest Category" (RSVP sidebar). Undefined ⇒ OFF — it is an opt-in extra
+    // question, so invitations saved before it existed keep the shorter form.
+    packTypeEnabled?: boolean;
     // Solid CSS color or gradient descriptor (src/lib/gradient.ts).
     navColor?: string | GradientDescriptor;
     navOpacity?: number;
@@ -103,6 +107,9 @@ export default function EventFooter({
 
   const [activeCard, setActiveCard] = useState<string | null>(null);
   const [rsvpStatus, setRsvpStatus] = useState<null | "accept" | "decline">(null);
+  // Which category an accepting guest picked. Only ever set while accepting —
+  // declining resets it to null so no pack_type is sent with a "Not Attending".
+  const [packType, setPackType] = useState<PackType | null>(null);
   // Which account's number was just copied (one copy button per slide).
   const [copiedIndex, setCopiedIndex] = useState<number | null>(null);
   // While a panel is fading out it stays mounted with the `is-closing` class so
@@ -147,6 +154,7 @@ export default function EventFooter({
     setTimeout(() => {
       setActiveCard(null);
       setRsvpStatus(null);
+      setPackType(null);
       // Forget which Info section was open so the next open starts fresh on
       // the Calendar/Location chooser instead of a stale section.
       setInfoTab(null);
@@ -217,6 +225,15 @@ export default function EventFooter({
   // RSVP toggle (from the RSVP sidebar). Undefined ⇒ ON for backward compat;
   // only an explicit `false` hides RSVP. Gated together with the package check.
   const rsvpEnabled = showRsvpAndMoneyGift && rsvpConfig?.enabled !== false;
+  // "Guest Category" — opt-in, so only an explicit `true` asks the question.
+  // Anything else (undefined on older invitations, or false) keeps the form as-is.
+  const packTypeEnabled = rsvpConfig?.packTypeEnabled === true;
+  // The Guest Category card sits between "Accept" and the details form: an
+  // accepting guest sees it until they pick one, and the form only mounts once
+  // they have. Decliners skip it entirely. Derived rather than a separate step
+  // variable so there is one source of truth for where the flow is.
+  const showPackTypeStep =
+    rsvpStatus === "accept" && packTypeEnabled && packType === null && !rsvpMessage;
     const formatDate = (dateStr: string) => {
   const date = new Date(dateStr);
 
@@ -447,7 +464,7 @@ const generateICS = (event: any, loc?: any) => {
                             paddingBottom: "10px",
                         }}
                     >
-                        Will you attend the event?
+                        {showPackTypeStep ? "Are you coming as?" : "Will you attend the event?"}
                     </p>
 
                     {/* Step 1: Accept / Decline choice */}
@@ -465,10 +482,35 @@ const generateICS = (event: any, loc?: any) => {
                                 type="button"
                                 className="decline"
                                 style={{ fontFamily: "Montserrat", textAlign: "center", fontWeight: 700, fontSize: "16px" }}
-                                onClick={() => setRsvpStatus("decline")}
+                                onClick={() => {
+                                    // Declining never carries a category.
+                                    setPackType(null);
+                                    setRsvpStatus("decline");
+                                }}
                             >
                                 Decline
                             </button>
+                        </div>
+                    )}
+
+                    {/* Step 2: Guest Category — its own card between Accept and the
+                        details form. Picking one advances straight to the form, so
+                        an attendee can never reach the form without a category. */}
+                    {showPackTypeStep && (
+                        <div className="rsvp-options">
+                            {([
+                                { value: "family", label: "Family" },
+                                { value: "friends", label: "Friends" },
+                            ] as { value: PackType; label: string }[]).map((opt) => (
+                                <button
+                                    key={opt.value}
+                                    type="button"
+                                    style={{ fontFamily: "Montserrat", textAlign: "center", fontWeight: 700, fontSize: "16px" }}
+                                    onClick={() => setPackType(opt.value)}
+                                >
+                                    {opt.label}
+                                </button>
+                            ))}
                         </div>
                     )}
 
@@ -497,8 +539,9 @@ const generateICS = (event: any, loc?: any) => {
                         </p>
                     )}
 
-                    {/* Step 2: Form shown after choosing Accept or Decline */}
-                    {rsvpStatus !== null && !rsvpMessage && (
+                    {/* Step 3: the details form — after Decline, or after an
+                        attendee has answered the Guest Category card. */}
+                    {rsvpStatus !== null && !showPackTypeStep && !rsvpMessage && (
                         <form className="rsvp-form" style={{ display: "flex", marginTop: "0.5rem" }}
                             onSubmit={async (e) => {
                                 e.preventDefault();
@@ -511,6 +554,10 @@ const generateICS = (event: any, loc?: any) => {
                                 if (!name) return;
                                 if (rsvpStatus === "accept" && !phone) return;
                                 if (rsvpStatus === "accept" && pax < 1) return;
+                                // Belt-and-braces: the Guest Category card gates this
+                                // form, so an attendee cannot reach Submit without a
+                                // category. Never post an empty one if that changes.
+                                if (rsvpStatus === "accept" && packTypeEnabled && !packType) return;
 
                                 setRsvpSubmitting(true);
                                 setRsvpMessage(null);
@@ -522,6 +569,11 @@ const generateICS = (event: any, loc?: any) => {
                                         phone,
                                         status,
                                         pax,
+                                        // "" (the helper's default) when the guest
+                                        // declined or the host left the question off,
+                                        // so those RSVPs post exactly as they did
+                                        // before this field existed.
+                                        packType: rsvpStatus === "accept" ? (packType ?? "") : "",
                                     });
                                     setRsvpMessage({ type: "success", text: "Thank you for your RSVP!" });
                                     setTimeout(() => {
@@ -536,6 +588,13 @@ const generateICS = (event: any, loc?: any) => {
                             }}
                         >
                             <input type="hidden" name="status" value={rsvpStatus === "accept" ? "Attending" : "Not Attending"} />
+
+                            {/* The submit handler sends the value from state; this mirrors
+                                the answer from the Guest Category card into the markup so
+                                the published form carries pack_type the way status does. */}
+                            {rsvpStatus === "accept" && packTypeEnabled && (
+                                <input type="hidden" name="pack_type" id="pack-type" value={packType ?? ""} />
+                            )}
 
                             <div className="form-group">
                                 <input type="text" name="name" ref={rsvpNameRef} required disabled={rsvpSubmitting} placeholder=" " />
@@ -570,7 +629,18 @@ const generateICS = (event: any, loc?: any) => {
                                 <button type="submit" disabled={rsvpSubmitting || !hasEventInfo}>
                                     {rsvpSubmitting ? "Submitting..." : "Submit"}
                                 </button>
-                                <button type="button" onClick={() => setRsvpStatus(null)} disabled={rsvpSubmitting}>Cancel</button>
+                                <button
+                                    type="button"
+                                    onClick={() => {
+                                        // Back to Accept/Decline — start the next
+                                        // attempt with no category pre-selected.
+                                        setRsvpStatus(null);
+                                        setPackType(null);
+                                    }}
+                                    disabled={rsvpSubmitting}
+                                >
+                                    Cancel
+                                </button>
                             </div>
                         </form>
                     )}
