@@ -756,13 +756,20 @@ function ProjectEditorInner({
   // 1s debounce window tore down the pending timer before it ever fired, and the
   // published page silently kept the old name.
   //
+  // `force` skips the "unchanged since last sync" guard. The publish paths pass
+  // it so EVERY publish re-asserts the title, because PHP rebuilds the public
+  // slug from it: an event whose public page drifted out of step — renamed
+  // before this existed, or synced by a build that only wrote events.event_name
+  // — heals on the next Live Preview / Share Link with no manual DB work. The
+  // debounce never forces, so typing still sends at most one request per pause.
+  //
   // Resolves (never rejects) on every no-op path — nothing to send, no event to
   // send it to, or an over-long title — so callers can always await it.
-  const flushTitleSync = useCallback(async (): Promise<void> => {
+  const flushTitleSync = useCallback(async (opts?: { force?: boolean }): Promise<void> => {
     if (!isEventMode || userId == null || eventId == null || designId == null) return;
     const cleanTitle = String(eventName || "").trim();
     if (!cleanTitle || cleanTitle.length > 120) return;
-    if (cleanTitle === lastSyncedTitleRef.current) return;
+    if (!opts?.force && cleanTitle === lastSyncedTitleRef.current) return;
 
     const seq = ++titleSyncSeqRef.current;
     setTitleSaving(true);
@@ -912,11 +919,12 @@ function ProjectEditorInner({
             // /e/[slug] reads the uploaded blob, not the designs row.
             forceSaveNow();
             try {
-              // The title is NOT fire-and-forget: PHP names the public page from
-              // events.event_name, and this handler ends in a cross-origin
+              // The title is NOT fire-and-forget: PHP rebuilds the public page's
+              // slug and heading from it, and this handler ends in a cross-origin
               // navigation that would kill a still-pending debounced sync. Await
-              // it so the page we open is named after the title on screen.
-              await flushTitleSyncRef.current();
+              // it — forced, so the page we open is always named after the title
+              // on screen even if PHP's copy drifted.
+              await flushTitleSyncRef.current({ force: true });
               // Identical flow to Share Link — same helper, same order — so both
               // buttons always land on the same customer-facing URL.
               const { publicShareUrl } = await publishAndSyncCanvas(editor, eventName, {
@@ -964,7 +972,7 @@ function ProjectEditorInner({
           }
           titleSyncError={titleError}
           // Share Link awaits this before publishing — see flushTitleSync.
-          onFlushTitle={() => flushTitleSyncRef.current()}
+          onFlushTitle={() => flushTitleSyncRef.current({ force: true })}
           // Share Link publishes to events/event-{eventId}.json and then reports
           // these ids to iFastNet via /api/canvas-sync.
           userId={userId ?? null}
