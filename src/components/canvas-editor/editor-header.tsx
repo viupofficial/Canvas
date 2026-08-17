@@ -77,6 +77,14 @@ export default function EditorHeader(props: {
   titleSyncStatus?: "idle" | "saving" | "saved" | "error";
   titleSyncError?: string;
   /**
+   * Flush a pending title edit to PHP and resolve once it landed. Share Link
+   * awaits this before publishing: PHP derives the public page's slug and title
+   * from events.event_name, so publishing while a rename is still sitting in the
+   * 1s debounce would hand back a link named after the PREVIOUS title. Never
+   * rejects — a title that cannot sync must not block the share.
+   */
+  onFlushTitle?: () => Promise<void>;
+  /**
    * Identity of the event this canvas belongs to. Share Link needs it twice:
    * the published blob is keyed on the event id, and the same ids are reported
    * to iFastNet after publishing so PHP knows which canvas serves the event.
@@ -360,6 +368,9 @@ export default function EditorHeader(props: {
     setShareError("");
     setShareStatus("link");
     try {
+      // Land any pending rename in PHP first, so the copied link carries the
+      // title currently on screen rather than the last debounced one.
+      await props.onFlushTitle?.();
       const { publicShareUrl } = await publishAndSyncCanvas(editor, eventName, {
         userId: props.userId,
         eventId: props.eventId,

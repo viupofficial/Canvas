@@ -745,6 +745,48 @@ function ProjectEditorInner({
     };
   }, []);
 
+  // Push the current title to PHP now and RESOLVE ONLY WHEN IT LANDED.
+  //
+  // Both the debounced autosync below and the publish paths (Live Preview /
+  // Share Link) go through this. The publish paths must await it: PHP builds the
+  // public https://vi-up.com/e/{slug} page — its slug AND its <title> — from
+  // events.event_name, so a rename that has not reached PHP yet publishes under
+  // the PREVIOUS name. That was easy to hit, because Live Preview ends in a
+  // cross-origin `window.location.href` — renaming and pressing it within the
+  // 1s debounce window tore down the pending timer before it ever fired, and the
+  // published page silently kept the old name.
+  //
+  // Resolves (never rejects) on every no-op path — nothing to send, no event to
+  // send it to, or an over-long title — so callers can always await it.
+  const flushTitleSync = useCallback(async (): Promise<void> => {
+    if (!isEventMode || userId == null || eventId == null || designId == null) return;
+    const cleanTitle = String(eventName || "").trim();
+    if (!cleanTitle || cleanTitle.length > 120) return;
+    if (cleanTitle === lastSyncedTitleRef.current) return;
+
+    const seq = ++titleSyncSeqRef.current;
+    setTitleSaving(true);
+    setTitleSaved(false);
+    setTitleError("");
+    try {
+      await syncCanvasTitle({ userId, eventId, designId, title: cleanTitle });
+      if (seq !== titleSyncSeqRef.current) return; // superseded by a newer edit
+      lastSyncedTitleRef.current = cleanTitle;
+      setTitleSaved(true);
+    } catch (e) {
+      if (seq !== titleSyncSeqRef.current) return;
+      console.error("[ProjectEditor] title sync failed", e);
+      setTitleError((e as Error)?.message || "Failed to sync title.");
+    } finally {
+      if (seq === titleSyncSeqRef.current) setTitleSaving(false);
+    }
+  }, [eventName, isEventMode, userId, eventId, designId]);
+
+  // Keep a ref so the publish handlers below always call the latest closure
+  // without re-creating themselves on every keystroke.
+  const flushTitleSyncRef = useRef(flushTitleSync);
+  flushTitleSyncRef.current = flushTitleSync;
+
   // Debounced title autosync — event-bound canvases only. Fires ~1s after the
   // user stops typing; skips empty / over-long / unchanged titles; never runs in
   // free-design mode (no event_id/design_id). The cleanup cancels the pending
@@ -756,29 +798,11 @@ function ProjectEditorInner({
     if (cleanTitle === lastSyncedTitleRef.current) return;
 
     const timer = setTimeout(() => {
-      const seq = ++titleSyncSeqRef.current;
-      setTitleSaving(true);
-      setTitleSaved(false);
-      setTitleError("");
-      syncCanvasTitle({ userId, eventId, designId, title: cleanTitle })
-        .then(() => {
-          if (seq !== titleSyncSeqRef.current) return; // superseded by a newer edit
-          lastSyncedTitleRef.current = cleanTitle;
-          setTitleSaved(true);
-        })
-        .catch((e) => {
-          if (seq !== titleSyncSeqRef.current) return;
-          console.error("[ProjectEditor] title sync failed", e);
-          setTitleError((e as Error)?.message || "Failed to sync title.");
-        })
-        .finally(() => {
-          if (seq !== titleSyncSeqRef.current) return;
-          setTitleSaving(false);
-        });
+      void flushTitleSync();
     }, 1000);
 
     return () => clearTimeout(timer);
-  }, [eventName, isEventMode, userId, eventId, designId]);
+  }, [eventName, isEventMode, userId, eventId, designId, flushTitleSync]);
 
   // ── Image editor state ──────────────────────────────────────────────────────
   const [imageEditorOpen, setImageEditorOpen] = useState(false);
@@ -888,6 +912,11 @@ function ProjectEditorInner({
             // /e/[slug] reads the uploaded blob, not the designs row.
             forceSaveNow();
             try {
+              // The title is NOT fire-and-forget: PHP names the public page from
+              // events.event_name, and this handler ends in a cross-origin
+              // navigation that would kill a still-pending debounced sync. Await
+              // it so the page we open is named after the title on screen.
+              await flushTitleSyncRef.current();
               // Identical flow to Share Link — same helper, same order — so both
               // buttons always land on the same customer-facing URL.
               const { publicShareUrl } = await publishAndSyncCanvas(editor, eventName, {
@@ -934,6 +963,8 @@ function ProjectEditorInner({
             titleError ? "error" : titleSaving ? "saving" : titleSaved ? "saved" : "idle"
           }
           titleSyncError={titleError}
+          // Share Link awaits this before publishing — see flushTitleSync.
+          onFlushTitle={() => flushTitleSyncRef.current()}
           // Share Link publishes to events/event-{eventId}.json and then reports
           // these ids to iFastNet via /api/canvas-sync.
           userId={userId ?? null}
