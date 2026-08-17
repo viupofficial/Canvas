@@ -10,7 +10,7 @@ import React, {
 } from "react";
 import type { Canvas as FabricCanvas } from "fabric";
 import type { GradientDescriptor } from "@/src/lib/gradient";
-import { Copy, Trash, Trash2, ClipboardPaste, ArrowUpToLine, ArrowDownToLine, Eye, EyeOff, X, Pencil, Crop, ImageUp, ArrowUp, ArrowDown, Type, Layers, ChevronDown, Group as GroupIcon, Ungroup as UngroupIcon } from "lucide-react";
+import { Copy, Trash, Trash2, ClipboardPaste, ArrowUpToLine, ArrowDownToLine, Eye, EyeOff, X, Pencil, Crop, ImageUp, ArrowUp, ArrowDown, Type, Layers, ChevronDown, Group as GroupIcon, Ungroup as UngroupIcon, RotateCcw, Maximize, Minimize } from "lucide-react";
 import EventFooter from "../components/EventFooter";
 import MusicPlayer from "../components/MusicPlayer";
 import '../app/globals.css'
@@ -214,6 +214,19 @@ const HISTORY_DEBOUNCE_MS = 120;
 // so we scale it by the same factor the canvas is CSS-scaled to fit its wrap.
 const CANVAS_REF_WIDTH = 396;
 const CANVAS_REF_HEIGHT = 704;
+// ── Editor zoom ────────────────────────────────────────────────────────────
+// Zoom here means "look closer at the paper", not "move fabric's camera": it is
+// a VISUAL scale of the whole artboard (canvas element + the floating footer),
+// applied on top of the fit-to-workspace scale as CSS display size. Fabric's
+// own setZoom() is deliberately never used for it — that scales objects inside
+// a fixed-size canvas and would leak into snapshots/exports. The backstore
+// stays CANVAS_REF_WIDTH × CANVAS_REF_HEIGHT and object data is untouched.
+const EDITOR_ZOOM_MIN = 0.5;   //  50%
+const EDITOR_ZOOM_MAX = 1.5;   // 150%
+const EDITOR_ZOOM_STEP = 0.1;  //  10% per click / wheel notch
+// 0.1 steps accumulate float dust (1.0999999…) — snap back onto the grid.
+const clampEditorZoom = (v: number) =>
+  Math.min(EDITOR_ZOOM_MAX, Math.max(EDITOR_ZOOM_MIN, Math.round(v * 100) / 100));
 type PageHistory = { undo: string[]; redo: string[] };
 const FABRIC_EXPORT_PROPS = [
   "action",
@@ -458,8 +471,17 @@ const [currentPage, setCurrentPage] = useState(0);
   // band and keep elements above the footer visible.
   const footerScaleDivRef = useRef<HTMLDivElement | null>(null);
   const [isDragOver, setIsDragOver] = useState(false);
+  const [isFullscreen, setIsFullscreen] = useState(false);
   const [zoom, setZoom] = useState(1);
   const zoomRef = useRef(1);
+  // The scrolling zoom viewport (the green workspace). It never resizes with its
+  // content — the fit scale is measured from its non-scrolling parent — so
+  // scrollbars appearing at zoom > 1 can't feed back into the fit calculation.
+  const zoomViewportRef = useRef<HTMLDivElement | null>(null);
+  // Non-scrolling frame around that viewport; the size we fit the artboard into.
+  const workspaceRef = useRef<HTMLDivElement | null>(null);
+  // Set by the init effect: re-lays out the artboard at (fit × zoom).
+  const fitCanvasRef = useRef<() => void>(() => {});
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; hidden: boolean; isImage: boolean; canGroup: boolean; isGroup: boolean } | null>(null);
   const clipboardRef = useRef<any>(null);
   // The image object currently being edited/replaced. Held in a ref so the edit
@@ -502,6 +524,9 @@ const [currentPage, setCurrentPage] = useState(0);
   // inherit it so an all-pages background also covers pages created later.
   const globalBgRef = useRef<{ backgroundImage?: any; backgroundColor?: any } | null>(null);
   const toggleFullscreenRef = useRef<() => void>(() => {});
+  // Same pattern as toggleFullscreen: the keyboard/wheel handlers are registered
+  // once during init, so they reach the live zoom setter through a ref.
+  const applyZoomRef = useRef<(next: number) => void>(() => {});
   const textToolRef = useRef(false);
   const textToolStartRef = useRef<{ x: number; y: number } | null>(null);
   const textToolDraggedRef = useRef(false);
@@ -1861,44 +1886,59 @@ const [currentPage, setCurrentPage] = useState(0);
           });
         }, 0);
 
-        // resize handler: fit canvas (CSS only) inside its wrap while preserving
-        // aspect ratio. Backstore dimensions stay at initialWidth x initialHeight
-        // so object coordinates and the user's manual zoom (setZoom) keep working.
+        // Layout handler: size the artboard (CSS only) to fit the workspace,
+        // preserving aspect ratio, then multiply by the editor zoom so the whole
+        // sheet — canvas element and the floating footer pinned to it — grows or
+        // shrinks as one piece. Backstore dimensions stay at
+        // initialWidth x initialHeight, so object coordinates, snapshots and the
+        // exported invitation are all completely unaffected by zoom.
+        //
+        // The available space is read from the WORKSPACE (the non-scrolling frame),
+        // not from the scroll viewport inside it: at zoom > 1 the artboard overflows
+        // and scrollbars appear, and measuring the scrolled box would shrink the
+        // fit, which could hide the scrollbars again — a layout feedback loop.
         const resizeCanvas = () => {
           const el = canvasEl.current;
           if (!el || !fabricRef.current) return;
-          // el.parentElement is fabric's .canvas-container; its parent is our wrap.
-          const wrap = el.parentElement?.parentElement;
-          if (!wrap) return;
-          const availW = wrap.clientWidth;
-          const availH = wrap.clientHeight;
+          // el.parentElement is fabric's .canvas-container; its parent is the
+          // stage that centres it inside the scroll viewport.
+          const stage = el.parentElement?.parentElement;
+          const workspace = workspaceRef.current;
+          if (!stage || !workspace) return;
+          const availW = workspace.clientWidth;
+          const availH = workspace.clientHeight;
           if (availW <= 0 || availH <= 0) return;
-          const scale = Math.min(availW / initialWidth, availH / initialHeight);
-          if (!isFinite(scale) || scale <= 0) return;
-          const displayW = initialWidth * scale;
-          const displayH = initialHeight * scale;
+          const fit = Math.min(availW / initialWidth, availH / initialHeight);
+          if (!isFinite(fit) || fit <= 0) return;
+          const scale = fit * zoomRef.current;
+          // Floor so a 100% artboard is never a sub-pixel wider than the viewport
+          // (which would raise scrollbars over a rounding error).
+          const displayW = Math.floor(initialWidth * scale);
+          const displayH = Math.floor(initialHeight * scale);
           fabricRef.current.setDimensions(
             { width: displayW, height: displayH },
             { cssOnly: true }
           );
-          // Record where the canvas actually renders inside the wrap so the
+          // Record where the canvas actually renders inside the stage so the
           // floating footer can be pinned to its bottom edge at the same scale.
+          // Both rects scroll together, so the offsets stay valid while panning.
           const container = el.parentElement; // fabric's .canvas-container
-          const wrapRect = wrap.getBoundingClientRect();
+          const stageRect = stage.getBoundingClientRect();
           const cRect = (container ?? el).getBoundingClientRect();
           setCanvasBox({
-            left: cRect.left - wrapRect.left,
-            top: cRect.top - wrapRect.top,
+            left: cRect.left - stageRect.left,
+            top: cRect.top - stageRect.top,
             width: displayW,
             height: displayH,
             scale,
           });
         };
+        fitCanvasRef.current = resizeCanvas;
 
-        // run once, on window resize, and whenever the wrap itself changes size
+        // run once, on window resize, and whenever the workspace changes size
         resizeCanvas();
         window.addEventListener('resize', resizeCanvas);
-        const wrapEl = elAtMount.parentElement?.parentElement;
+        const wrapEl = workspaceRef.current;
         const resizeObs = wrapEl ? new ResizeObserver(() => resizeCanvas()) : null;
         if (wrapEl && resizeObs) resizeObs.observe(wrapEl);
         cleanupResize = () => {
@@ -2384,39 +2424,29 @@ const [currentPage, setCurrentPage] = useState(0);
 
           if (e.ctrlKey && (e.key === '+' || e.key === '=')) {
             e.preventDefault();
-            const next = Math.min(zoomRef.current + 0.1, 3);
-            c.setZoom(next);
-            zoomRef.current = next;
-            setZoom(next);
-            c.requestRenderAll();
+            applyZoomRef.current(zoomRef.current + EDITOR_ZOOM_STEP);
             return;
           }
 
           if (e.ctrlKey && e.key === '-') {
             e.preventDefault();
-            const next = Math.max(zoomRef.current - 0.1, 0.3);
-            c.setZoom(next);
-            zoomRef.current = next;
-            setZoom(next);
-            c.requestRenderAll();
+            applyZoomRef.current(zoomRef.current - EDITOR_ZOOM_STEP);
             return;
           }
 
           if (e.ctrlKey && e.key === '0') {
             e.preventDefault();
-            c.setZoom(1);
-            zoomRef.current = 1;
-            setZoom(1);
-            c.requestRenderAll();
+            applyZoomRef.current(1);
             return;
           }
 
           if (e.ctrlKey && (e.key === 'n' || e.key === 'N')) {
             e.preventDefault();
+            // Reset the view: fabric's own transform back to identity (it is only
+            // ever moved by panning, never by the editor zoom) and the artboard
+            // back to its default 100% scale.
             c.setViewportTransform([1, 0, 0, 1, 0, 0]);
-            c.setZoom(1);
-            zoomRef.current = 1;
-            setZoom(1);
+            applyZoomRef.current(1);
             c.requestRenderAll();
             return;
           }
@@ -2601,14 +2631,8 @@ const [currentPage, setCurrentPage] = useState(0);
         const handleWheel = (e: WheelEvent) => {
           if (!e.ctrlKey) return;
           e.preventDefault();
-          const canvas = fabricRef.current;
-          if (!canvas) return;
-          const delta = e.deltaY > 0 ? -0.1 : 0.1;
-          const next = Math.min(Math.max(zoomRef.current + delta, 0.3), 3);
-          canvas.setZoom(next);
-          zoomRef.current = next;
-          setZoom(next);
-          canvas.requestRenderAll();
+          const delta = e.deltaY > 0 ? -EDITOR_ZOOM_STEP : EDITOR_ZOOM_STEP;
+          applyZoomRef.current(zoomRef.current + delta);
         };
         window.addEventListener('wheel', handleWheel, { passive: false });
         cleanupWheel = () => window.removeEventListener('wheel', handleWheel);
@@ -4186,36 +4210,48 @@ const applyBgToOtherPages = (patch: { backgroundImage?: any; backgroundColor?: a
   //template function end
 
   //zoom function start
-  const zoomIn = () => {
-    const canvas = fabricRef.current;
-    if (!canvas) return;
+  // The single entry point for editor zoom — buttons, Ctrl +/-/0 and Ctrl+wheel
+  // all land here. It only changes how large the artboard is DRAWN: the fabric
+  // backstore, every object's left/top/width/height and the exported HTML are
+  // untouched (see resizeCanvas / EDITOR_ZOOM_* for the reasoning).
+  const applyEditorZoom = useCallback((next: number) => {
+    const z = clampEditorZoom(next);
+    const viewport = zoomViewportRef.current;
+    // Zoom about the middle of what the user is looking at, so the artboard
+    // stays centred instead of drifting towards the top-left as it grows.
+    const before = viewport
+      ? {
+          x: (viewport.scrollLeft + viewport.clientWidth / 2) / Math.max(1, viewport.scrollWidth),
+          y: (viewport.scrollTop + viewport.clientHeight / 2) / Math.max(1, viewport.scrollHeight),
+        }
+      : null;
 
-    const next = Math.min(zoom + 0.1, 3);
-    canvas.setZoom(next);
-    zoomRef.current = next;
-    setZoom(next);
-    canvas.requestRenderAll();
-  };
-  
-  const zoomOut = () => {
-    const canvas = fabricRef.current;
-    if (!canvas) return;
+    zoomRef.current = z;
+    setZoom(z);
+    // Synchronous relayout, so the scroll anchoring below reads the new size.
+    fitCanvasRef.current();
 
-    const next = Math.max(zoom - 0.1, 0.3);
-    canvas.setZoom(next);
-    zoomRef.current = next;
-    setZoom(next);
-    canvas.requestRenderAll();
-  };
+    if (viewport && before) {
+      viewport.scrollLeft = before.x * viewport.scrollWidth - viewport.clientWidth / 2;
+      viewport.scrollTop = before.y * viewport.scrollHeight - viewport.clientHeight / 2;
+    }
+    // Nothing about the scene changed, but a re-render keeps the freshly
+    // resized canvas crisp against its new CSS box.
+    fabricRef.current?.requestRenderAll();
+  }, []);
+  applyZoomRef.current = applyEditorZoom;
+
+  const zoomIn = () => applyEditorZoom(zoomRef.current + EDITOR_ZOOM_STEP);
+  const zoomOut = () => applyEditorZoom(zoomRef.current - EDITOR_ZOOM_STEP);
 
   const resetZoom = () => {
-    const canvas = fabricRef.current;
-    if (!canvas) return;
-
-    canvas.setZoom(1);
-    zoomRef.current = 1;
-    setZoom(1);
-    canvas.requestRenderAll();
+    applyEditorZoom(1);
+    // Back to the default view: centred, no pan offset.
+    const viewport = zoomViewportRef.current;
+    if (viewport) {
+      viewport.scrollLeft = (viewport.scrollWidth - viewport.clientWidth) / 2;
+      viewport.scrollTop = (viewport.scrollHeight - viewport.clientHeight) / 2;
+    }
   };
   //zoom function end
 
@@ -4236,6 +4272,13 @@ const applyBgToOtherPages = (patch: { backgroundImage?: any; backgroundColor?: a
     }, 100);
   };
   toggleFullscreenRef.current = toggleFullscreen;
+  // Which icon the fullscreen button shows. Driven by the browser's own event so
+  // it stays right when fullscreen is left with Esc / F11 rather than the button.
+  useEffect(() => {
+    const onChange = () => setIsFullscreen(!!document.fullscreenElement);
+    document.addEventListener('fullscreenchange', onChange);
+    return () => document.removeEventListener('fullscreenchange', onChange);
+  }, []);
   //fullscreen function end
 
   // Play a single, bounded preview of an animation on the active object, then
@@ -4467,8 +4510,18 @@ const applyBgToOtherPages = (patch: { backgroundImage?: any; backgroundColor?: a
           </div>
         )}
 
+      {/* ── Workspace ────────────────────────────────────────────────────────
+          Three nested boxes, each with one job:
+            workspace  — never scrolls, never changes with its content; the size
+                         the artboard is fitted into, and the anchor for editor
+                         chrome that must NOT zoom (music player, edge strips…).
+            viewport   — the zoom viewport: scrolls when the zoomed artboard is
+                         bigger than the workspace, so nothing is silently cut off.
+            stage      — grows to the artboard (max-content, at least full size)
+                         and centres it; everything in here scales with zoom. */}
       <div
-  className={`relative flex justify-center items-center overflow-hidden flex-1 min-h-0 min-w-0 w-full bg-[#FBF7F6] ${
+  ref={workspaceRef}
+  className={`relative overflow-hidden flex-1 min-h-0 min-w-0 w-full bg-[#FBF7F6] ${
     isDragOver ? 'ring-2 ring-dashed ring-brand-accent' : ''
   }`}
   onDragOver={onDragOver}
@@ -4476,11 +4529,22 @@ const applyBgToOtherPages = (patch: { backgroundImage?: any; backgroundColor?: a
   onDragLeave={onDragLeave}
   onContextMenu={handleCanvasContextMenu}
 >
-
-
-<canvas ref={canvasEl} className="shadow block max-w-full h-auto" />
+        <div
+          ref={zoomViewportRef}
+          className={`absolute inset-0 overscroll-contain ${
+            // Scrolling only exists where it is needed — above 100% the artboard
+            // is larger than the workspace, so pan to reach the rest of it. At or
+            // below 100% it fits by construction and nothing can be cut off, so
+            // we keep the old clipping behaviour (a phone must never be able to
+            // drag the artboard sideways by the overlay's sub-pixel overhang).
+            zoom > 1 ? 'overflow-auto' : 'overflow-hidden'
+          }`}
+        >
+          <div className="relative w-max h-max min-w-full min-h-full flex justify-center items-center">
+<canvas ref={canvasEl} className="shadow block" />
           {/* Floating footer — pinned to the scaled canvas: same width, bottom edge,
-              and fit-scale so it tracks the canvas instead of the whole wrap. */}
+              and the canvas's own (fit × zoom) scale, so it grows and shrinks with
+              the artboard as one piece instead of tracking the workspace. */}
           {canvasBox && (
             <div
               className="absolute z-30"
@@ -4509,6 +4573,8 @@ const applyBgToOtherPages = (patch: { backgroundImage?: any; backgroundColor?: a
               </div>
             </div>
           )}
+          </div>
+        </div>
 
           {contextMenu && (
             <div
@@ -4753,11 +4819,40 @@ const applyBgToOtherPages = (patch: { backgroundImage?: any; backgroundColor?: a
     Tip: Select objects to move/resize/rotate
   </div>
 
-  <div className="flex items-center gap-2">
-  <button onClick={zoomOut}>-</button>
-<button onClick={zoomIn}>+</button>
-<button onClick={resetZoom}>Reset</button>
-<button onClick={toggleFullscreen}>Fullscreen</button>
+  {/* Zoom slider + icon controls. The slider is the whole zoom-in/zoom-out
+      control: dragging it (or arrowing it, which range inputs do natively)
+      steps through EDITOR_ZOOM_MIN…MAX in EDITOR_ZOOM_STEP increments. */}
+  <div className="flex items-center gap-3">
+  <input
+    type="range"
+    min={EDITOR_ZOOM_MIN}
+    max={EDITOR_ZOOM_MAX}
+    step={EDITOR_ZOOM_STEP}
+    value={zoom}
+    onChange={(e) => applyEditorZoom(parseFloat(e.target.value))}
+    aria-label="Zoom"
+    title={`Zoom ${Math.round(zoom * 100)}% — editor preview only, the invitation itself is unchanged`}
+    className="w-32 h-1 accent-[#7D5B59] cursor-pointer"
+  />
+<span className="tabular-nums w-11 text-right select-none">
+  {Math.round(zoom * 100)}%
+</span>
+<button
+  onClick={resetZoom}
+  title="Reset zoom (Ctrl 0)"
+  aria-label="Reset zoom"
+  className="p-1.5 rounded hover:bg-neutral-100 hover:text-[#7D5B59] transition-colors cursor-pointer"
+>
+  <RotateCcw size={16} />
+</button>
+<button
+  onClick={toggleFullscreen}
+  title={isFullscreen ? "Exit fullscreen (Ctrl F)" : "Fullscreen (Ctrl F)"}
+  aria-label={isFullscreen ? "Exit fullscreen" : "Fullscreen"}
+  className="p-1.5 rounded hover:bg-neutral-100 hover:text-[#7D5B59] transition-colors cursor-pointer"
+>
+  {isFullscreen ? <Minimize size={16} /> : <Maximize size={16} />}
+</button>
   </div>
   <div className="flex items-center gap-3">
   <button
