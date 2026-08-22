@@ -8,7 +8,7 @@ import { buildGoogleCalendarLink } from "@/src/lib/calendar/googleCalendarLink"
 import EventMiniCalendar from "@/src/components/EventMiniCalendar"
 import type { CalendarExportInput } from "@/src/lib/calendar/normalizeEvent"
 import { submitCanvasRSVP, submitCanvasGuestbook, getCanvasGuestbook } from "@/src/lib/viupApi"
-import { packTypeOptions, type PackType } from "@/src/store/EventDataContext"
+import { packTypeOptions, rsvpTexts, type PackType } from "@/src/store/EventDataContext"
 import { cssBackground, type GradientDescriptor } from "@/src/lib/gradient"
 import { computeFooterNav } from "@/src/lib/footerNav"
 
@@ -61,6 +61,10 @@ export default function EventFooter({
     // Host-chosen category names. Blank/absent ⇒ Family / Friends.
     packTypeOption1?: string;
     packTypeOption2?: string;
+    // Host-written wording for the RSVP card. Blank/absent ⇒ default wording.
+    title?: string;
+    question?: string;
+    paxNote?: string;
     // Solid CSS color or gradient descriptor (src/lib/gradient.ts).
     navColor?: string | GradientDescriptor;
     navOpacity?: number;
@@ -234,6 +238,9 @@ export default function EventFooter({
   // The host's two category names (or Family / Friends when unset). The label
   // shown IS the value submitted as pack_type — no slugging or mapping.
   const packTypeChoices = packTypeOptions(rsvpConfig);
+  // Heading / question / pax note — the host's wording when they typed one, the
+  // original sentences otherwise. `{pax}` in the note is already substituted.
+  const rsvpText = rsvpTexts(rsvpConfig, maxPax);
   // A selection only counts while it still matches one of the configured
   // options. If the host renames a category mid-session the stale answer stops
   // being valid, which sends the guest back to the category card rather than
@@ -463,7 +470,7 @@ const generateICS = (event: any, loc?: any) => {
                             paddingBottom: "12px",
                         }}
                     >
-                        RSVP
+                        {rsvpText.title}
                     </h2>
 
                     <p
@@ -475,7 +482,7 @@ const generateICS = (event: any, loc?: any) => {
                             paddingBottom: "10px",
                         }}
                     >
-                        {showPackTypeStep ? "Are you coming as?" : "Will you attend the event?"}
+                        {showPackTypeStep ? "Are you coming as?" : rsvpText.question}
                     </p>
 
                     {/* Step 1: Accept / Decline choice */}
@@ -628,7 +635,7 @@ const generateICS = (event: any, loc?: any) => {
 
                                     <p className="info-line">
                                         <span className="material-symbols-outlined">info</span>
-                                        If more than {maxPax} pax, please contact the family members.
+                                        {rsvpText.paxNote}
                                     </p>
                                 </>
                             )}

@@ -391,6 +391,10 @@ const CanvasEditor = forwardRef<
       packTypeEnabled?: boolean;
       packTypeOption1?: string;
       packTypeOption2?: string;
+      // Host-written wording for the RSVP card (blank/absent ⇒ default wording).
+      title?: string;
+      question?: string;
+      paxNote?: string;
       // Solid CSS color or gradient descriptor (src/lib/gradient.ts).
       navColor: string | GradientDescriptor;
       navOpacity: number;

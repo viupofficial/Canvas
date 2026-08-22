@@ -12,6 +12,11 @@ import {
   PACK_TYPE_MAX_LENGTH,
   PACK_TYPE_DEFAULT_OPTION_1,
   PACK_TYPE_DEFAULT_OPTION_2,
+  RSVP_TEXT_MAX_LENGTH,
+  RSVP_DEFAULT_TITLE,
+  RSVP_DEFAULT_QUESTION,
+  RSVP_DEFAULT_PAX_NOTE,
+  RSVP_PAX_TOKEN,
   type GiftAccount,
 } from '@/src/store/EventDataContext';
 import LivePreviewPanel from '@/src/components/canvas-editor/LivePreviewPanel';
@@ -987,6 +992,12 @@ function RSVPTab() {
   // placeholders show the fallback the invitation will actually use.
   const [packTypeOption1, setPackTypeOption1] = useState(current?.packTypeOption1 ?? '');
   const [packTypeOption2, setPackTypeOption2] = useState(current?.packTypeOption2 ?? '');
+  // Card wording. Blank means "use the default sentence" — the placeholders show
+  // exactly what guests read when the field is left empty, so clearing a box is
+  // a safe way back to the original text. See rsvpTexts().
+  const [rsvpTitle, setRsvpTitle] = useState(current?.title ?? '');
+  const [rsvpQuestion, setRsvpQuestion] = useState(current?.question ?? '');
+  const [rsvpPaxNote, setRsvpPaxNote] = useState(current?.paxNote ?? '');
   // navColor / circleColor accept a solid hex string OR a gradient descriptor
   // (rendered via cssBackground in the footer). textColor stays solid-only —
   // it feeds CSS `color` and currentColor icon masks, which can't take a gradient.
@@ -1019,6 +1030,18 @@ function RSVPTab() {
     set: (v: string) => void,
   ) => {
     const next = value.slice(0, PACK_TYPE_MAX_LENGTH);
+    set(next);
+    pushField(field, next.trim());
+  };
+
+  // Same shape as the category inputs: type freely (trailing spaces included),
+  // store trimmed and capped. Blank ⇒ the default wording is used.
+  const changeRsvpText = (
+    field: 'title' | 'question' | 'paxNote',
+    value: string,
+    set: (v: string) => void,
+  ) => {
+    const next = value.slice(0, RSVP_TEXT_MAX_LENGTH);
     set(next);
     pushField(field, next.trim());
   };
@@ -1100,6 +1123,9 @@ function RSVPTab() {
       packTypeEnabled: packTypeOn,
       packTypeOption1: packTypeOption1.trim(),
       packTypeOption2: packTypeOption2.trim(),
+      title: rsvpTitle.trim(),
+      question: rsvpQuestion.trim(),
+      paxNote: rsvpPaxNote.trim(),
       navColor, navOpacity, textColor, textOpacity, circleColor, circleOpacity,
     });
   };
@@ -1202,6 +1228,50 @@ function RSVPTab() {
             </p>
           </div>
         )}
+
+        {/* Card wording — heading, the question under it, and the note beside the
+            pax dropdown. Every field is optional: an empty box keeps the default
+            sentence shown as its placeholder. */}
+        <div className="flex flex-col gap-3">
+          <div>
+            <label className="text-xs text-gray-500">Title</label>
+            <input
+              type="text"
+              value={rsvpTitle}
+              maxLength={RSVP_TEXT_MAX_LENGTH}
+              onChange={(e) => changeRsvpText('title', e.target.value, setRsvpTitle)}
+              placeholder={RSVP_DEFAULT_TITLE}
+              className="mt-1 w-full px-3 py-2 border rounded-md text-sm"
+            />
+          </div>
+          <div>
+            <label className="text-xs text-gray-500">Question</label>
+            <input
+              type="text"
+              value={rsvpQuestion}
+              maxLength={RSVP_TEXT_MAX_LENGTH}
+              onChange={(e) => changeRsvpText('question', e.target.value, setRsvpQuestion)}
+              placeholder={RSVP_DEFAULT_QUESTION}
+              className="mt-1 w-full px-3 py-2 border rounded-md text-sm"
+            />
+          </div>
+          <div>
+            <label className="text-xs text-gray-500">Pax Note</label>
+            <textarea
+              value={rsvpPaxNote}
+              maxLength={RSVP_TEXT_MAX_LENGTH}
+              rows={2}
+              onChange={(e) => changeRsvpText('paxNote', e.target.value, setRsvpPaxNote)}
+              placeholder={RSVP_DEFAULT_PAX_NOTE}
+              className="mt-1 w-full px-3 py-2 border rounded-md text-sm resize-none"
+            />
+          </div>
+          <p className="text-[11px] text-gray-400 leading-snug">
+            Leave blank to use the default wording. Type{' '}
+            <span className="font-semibold">{RSVP_PAX_TOKEN}</span> in the Pax Note to show
+            the max guest number. Max {RSVP_TEXT_MAX_LENGTH} characters each.
+          </p>
+        </div>
 
         <div>
           <div className="flex items-center justify-between mb-1">
@@ -2564,25 +2634,80 @@ function BackgroundTab({
   );
 }
 
-function TemplatesTab({ editorRef }: { editorRef?: React.RefObject<EditorHandle | null> }) {
+function TemplatesTab({
+  editorRef,
+  appliedTemplateId,
+  onAppliedTemplateChange,
+  previousPagesRef,
+}: {
+  editorRef?: React.RefObject<EditorHandle | null>;
+  // Which template is currently switched ON (null ⇒ none). Owned by Sidebar so
+  // the state — and the saved design it would otherwise strand — survives the
+  // panel being unmounted when the user visits another tool.
+  appliedTemplateId: string | null;
+  onAppliedTemplateChange: (id: string | null) => void;
+  // The pages that were on the canvas before the template replaced them.
+  previousPagesRef: React.MutableRefObject<any[] | null>;
+}) {
+  // Click a template to switch it on, click the same one again to switch it off
+  // and get the previous design back. loadTemplate() REPLACES every page and
+  // clears the undo histories, so the pages are snapshotted before it runs —
+  // that snapshot is the only way back.
+  const toggleTemplate = (tpl: (typeof TEMPLATE_LIST)[number]) => {
+    const editor = editorRef?.current;
+    if (!editor?.loadTemplate) return;
+
+    if (appliedTemplateId === tpl.id) {
+      // Switching off discards whatever was edited on the template's pages and
+      // it cannot be undone, so confirm first (same rule as deleting a page).
+      if (
+        typeof window !== 'undefined' &&
+        !window.confirm(`Turn off "${tpl.name}"? Its pages are replaced by your previous design.`)
+      ) return;
+      const restore = previousPagesRef.current;
+      previousPagesRef.current = null;
+      onAppliedTemplateChange(null);
+      // A blank page is stored as null, which loadTemplate() drops — send an
+      // empty Fabric page instead so an all-blank design restores as one page.
+      const pages = (restore?.length ? restore : [null]).map((page) => page ?? { objects: [] });
+      editor.loadTemplate(pages);
+      return;
+    }
+
+    // Only snapshot when no template is on, so swapping straight from one
+    // template to another still remembers the user's own design.
+    if (!appliedTemplateId) {
+      previousPagesRef.current = editor.getProjectData?.().pages ?? null;
+    }
+    editor.loadTemplate(tpl.pages);
+    onAppliedTemplateChange(tpl.id);
+  };
+
   return (
     <div>
       <div className="text-[#191212] text-[17px] font-bold mb-3">Templates</div>
       <div className="grid grid-cols-2 gap-3">
-        {TEMPLATE_LIST.map((tpl) => (
-          <button
-            key={tpl.id}
-            onClick={() => {
-              if (editorRef?.current?.loadTemplate) {
-                editorRef.current.loadTemplate(tpl.pages);
-              }
-            }}
-            className="border rounded p-2 hover:shadow text-left"
-          >
-            <div className="text-sm font-semibold">{tpl.name}</div>
-            <div className="text-xs text-gray-500">{tpl.pages.length} pages</div>
-          </button>
-        ))}
+        {TEMPLATE_LIST.map((tpl) => {
+          const applied = appliedTemplateId === tpl.id;
+          return (
+            <button
+              key={tpl.id}
+              type="button"
+              aria-pressed={applied}
+              title={applied ? `Turn off ${tpl.name}` : `Use ${tpl.name}`}
+              onClick={() => toggleTemplate(tpl)}
+              className={`border rounded p-2 hover:shadow text-left transition-colors ${
+                applied ? 'border-[#8C6B6B] bg-[#F2E8E6]' : 'border-gray-200'
+              }`}
+            >
+              <div className="text-sm font-semibold">{tpl.name}</div>
+              <div className="text-xs text-gray-500">{tpl.pages.length} pages</div>
+              <div className={`text-[11px] mt-1 ${applied ? 'text-[#8C6B6B] font-semibold' : 'text-gray-400'}`}>
+                {applied ? 'On — click to turn off' : 'Click to use'}
+              </div>
+            </button>
+          );
+        })}
       </div>
     </div>
   );
@@ -2643,6 +2768,11 @@ export default function Sidebar({
     if (toolControlled) onActiveToolChange?.(value);
     else setInternalActive(value);
   };
+  // Templates tab: which template is switched on, plus the design that was on
+  // the canvas before it was applied (restored when it is switched off). Kept
+  // here rather than in TemplatesTab because that panel unmounts on tab switch.
+  const [appliedTemplateId, setAppliedTemplateId] = useState<string | null>(null);
+  const preTemplatePagesRef = React.useRef<any[] | null>(null);
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
   const [phoneOpen, setPhoneOpen] = useState(false);
   const [bgColor, setBgColor] = useState<string>('#ffffff');
@@ -3040,7 +3170,12 @@ export default function Sidebar({
       ) : active === 'wishlist' ? (
         <WishlistTab editorRef={editorRef} />
       ) : active === 'templates' ? (
-        <TemplatesTab editorRef={editorRef} />
+        <TemplatesTab
+          editorRef={editorRef}
+          appliedTemplateId={appliedTemplateId}
+          onAppliedTemplateChange={setAppliedTemplateId}
+          previousPagesRef={preTemplatePagesRef}
+        />
       ) : (
         <div className="text-sm text-gray-600">
           <p className="mb-2">Content for {SIDEBAR_ITEMS.find((s) => s.id === active)?.label} will appear here.</p>

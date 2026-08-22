@@ -173,6 +173,36 @@ export function packTypeOptions(
   ];
 }
 
+/** Longest custom RSVP wording the sidebar accepts. Generous enough for a
+ *  sentence in any language, short enough to keep the card from overflowing. */
+export const RSVP_TEXT_MAX_LENGTH = 160;
+
+/** The wording every invitation shows unless the host types their own. Kept
+ *  here so the footer, the live preview and the sidebar placeholders can never
+ *  drift apart. */
+export const RSVP_DEFAULT_TITLE = "RSVP";
+export const RSVP_DEFAULT_QUESTION = "Will you attend the event?";
+/** `{pax}` is substituted with the configured Max Guest Capacity, so the note
+ *  keeps following the number even when the host rewrites the sentence. */
+export const RSVP_PAX_TOKEN = "{pax}";
+export const RSVP_DEFAULT_PAX_NOTE =
+  `If more than ${RSVP_PAX_TOKEN} pax, please contact the family members.`;
+
+/** The three pieces of RSVP wording to render, in one reader for every surface
+ *  (public footer, live preview panel). A blank or missing custom string falls
+ *  back to the original wording, so designs saved before the texts became
+ *  editable read exactly as they were published. */
+export function rsvpTexts(
+  rsvp?: { title?: string; question?: string; paxNote?: string } | null,
+  maxPax: number = 3,
+): { title: string; question: string; paxNote: string } {
+  return {
+    title: rsvp?.title?.trim() || RSVP_DEFAULT_TITLE,
+    question: rsvp?.question?.trim() || RSVP_DEFAULT_QUESTION,
+    paxNote: (rsvp?.paxNote?.trim() || RSVP_DEFAULT_PAX_NOTE).split(RSVP_PAX_TOKEN).join(String(maxPax)),
+  };
+}
+
 export type RSVPConfig = {
   // Whether RSVP is available on the invitation. Treated as ON when undefined so
   // pre-existing designs (saved before this toggle existed) keep showing RSVP.
@@ -189,6 +219,13 @@ export type RSVPConfig = {
   // so those keep showing Family / Friends.
   packTypeOption1?: string;
   packTypeOption2?: string;
+  // Host-written RSVP wording: the card heading, the question under it, and the
+  // note beside the pax dropdown (where `{pax}` stands in for maxGuest). Blank
+  // or absent ⇒ the default wording, so nothing changes for older designs —
+  // read them through rsvpTexts() rather than directly.
+  title?: string;
+  question?: string;
+  paxNote?: string;
   // Nav bar / circle colors accept a solid CSS color string or a gradient
   // descriptor (see src/lib/gradient.ts); consumers render via cssBackground().
   navColor?: string | GradientDescriptor;

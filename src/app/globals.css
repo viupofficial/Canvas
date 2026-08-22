@@ -400,7 +400,10 @@ star-fly-in {
 
 .floating-star.visible {
   top: -28%;
-  left: 5%;
+  /* Percentage of .footer-side.right (the star's positioned ancestor). Measured
+     against the moved circle's center at 68% (.move-right): 5% left the star
+     ~7px short of it, which is ~7% of that side group's width. */
+  left: 12%;
   transform: translate(-50%, -50%) scale(1.2);
   opacity: 1;
 }
@@ -2630,6 +2633,34 @@ img[alt="Mayaxasyraff"],
 /* Only meaningful between two items; with one it would push it off-centre. */
 .footer-container.footer-nav-compact .footer-side.right a:nth-child(1) {
   margin-right: 0;
+}
+
+/* ── Slot items keep a constant footprint ─────────────────────────────────────
+   The two swappable slots either side of the RSVP circle sit in absolutely
+   positioned groups whose items are spaced by a fixed `gap`, so each item's own
+   width decides where its centre — and every item after it — lands. A wide
+   label ("Calendar", "Location") therefore pushed the whole group outward and
+   the gaps no longer matched the Money Gift / Info layout.
+
+   Pin the slot items to the icon width (the same 23px .footer-icon and
+   .footer-side i already use) and let the label overflow it, centred: Gift and
+   Info were already icon-width, so their spacing is unchanged, and Calendar /
+   Location now fall in exactly the same places. Guestbook and Contact are
+   fixtures in every layout, so they keep sizing to their labels. */
+.footer-side .moneygift-toggle,
+.footer-side .footer-calendar,
+.footer-side .footer-info {
+  flex: 0 0 23px;
+  width: 23px;
+  min-width: 0;
+}
+
+.footer-side .moneygift-toggle .footer-label,
+.footer-side .footer-calendar .footer-label,
+.footer-side .footer-info .footer-label {
+  /* Overflows the 23px box symmetrically (the item centres its children), so a
+     long label stays readable without taking part in the layout. */
+  white-space: nowrap;
 }
 
 /* The wide RSVP-era side padding only worked because the items were absolutely

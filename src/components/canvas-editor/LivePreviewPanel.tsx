@@ -1,6 +1,6 @@
 "use client";
 
-import { useEventDataOptional, giftAccounts, packTypeOptions, type CalendarData, type GiftData, type LocationData } from "@/src/store/EventDataContext";
+import { useEventDataOptional, giftAccounts, packTypeOptions, rsvpTexts, type CalendarData, type GiftData, type LocationData } from "@/src/store/EventDataContext";
 import { cssBackground, firstColorHex, type GradientDescriptor } from "@/src/lib/gradient";
 import GiftCarousel from "@/src/components/GiftCarousel";
 
@@ -196,6 +196,10 @@ function RSVPCard({
     packTypeEnabled?: boolean;
     packTypeOption1?: string;
     packTypeOption2?: string;
+    // Host-written wording for the RSVP card (blank/absent ⇒ default wording).
+    title?: string;
+    question?: string;
+    paxNote?: string;
     navColor?: string | GradientDescriptor;
     navOpacity?: number;
     textColor?: string;
@@ -210,14 +214,17 @@ function RSVPCard({
   const textColor = rsvpConfig?.textColor || "#000000";
   const textOpacity = (rsvpConfig?.textOpacity ?? 100) / 100;
   const maxGuest = rsvpConfig?.maxGuest ?? 3;
+  // Same reader the invitation uses, so the panel previews the host's wording
+  // (and the substituted pax number) exactly as guests will read it.
+  const rsvpText = rsvpTexts(rsvpConfig, maxGuest);
 
   return (
-    <CardFrame title="RSVP">
+    <CardFrame title={rsvpText.title}>
       <p
         className="text-[11px] text-center italic mb-2"
         style={{ color: textColor, opacity: textOpacity }}
       >
-        Will you attend the event?
+        {rsvpText.question}
       </p>
       <div className="flex gap-2 mb-2">
         <button
@@ -260,6 +267,13 @@ function RSVPCard({
       <div className="text-[10px]" style={{ color: textColor, opacity: textOpacity }}>
         Max guests: <span className="font-semibold">{maxGuest}</span>
       </div>
+      {/* The note an accepting guest sees beside the pax dropdown. */}
+      <p
+        className="text-[10px] leading-snug mt-1"
+        style={{ color: textColor, opacity: textOpacity }}
+      >
+        {rsvpText.paxNote}
+      </p>
     </CardFrame>
   );
 }
