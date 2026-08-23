@@ -52,12 +52,33 @@ export default function MusicPlayer({
   const ytId = useMemo(() => parseYouTubeId(url), [url]);
 
   // <audio> branch: follow `start` (the envelope flow / sidebar button flips it).
+  //
+  // There are no visible controls, so a rejected play() would leave the invite
+  // silent with no way for the guest to recover — retry on the first gesture
+  // anywhere on the page (browsers unlock audio from any user interaction).
   useEffect(() => {
     if (ytId) return;
     const a = audioRef.current;
     if (!a || !url) return;
-    if (start) a.play().catch(() => {});
-    else a.pause();
+    if (!start) {
+      a.pause();
+      return;
+    }
+
+    let cleanup: (() => void) | undefined;
+    a.play().catch(() => {
+      const retry = () => {
+        if (!startRef.current) return;
+        audioRef.current?.play().catch(() => {});
+      };
+      const events = ["pointerdown", "touchstart", "keydown", "click"] as const;
+      events.forEach((e) =>
+        document.addEventListener(e, retry, { once: true, passive: true })
+      );
+      cleanup = () =>
+        events.forEach((e) => document.removeEventListener(e, retry));
+    });
+    return () => cleanup?.();
   }, [ytId, url, start]);
 
   // YouTube branch: build a hidden player once per video id.
@@ -155,9 +176,28 @@ export default function MusicPlayer({
       src={url}
       autoPlay={start}
       loop
-      controls
+      // Native controls ONLY when a caller explicitly opts in. Without this the
+      // browser paints its media bar over the invitation (see the footer nav on
+      // /preview-local and /e/[slug]) — background music must stay invisible.
+      controls={visible}
+      aria-hidden={visible ? undefined : true}
+      tabIndex={visible ? undefined : -1}
       className={className}
-      style={{ ...(visible ? {} : { opacity: 0, pointerEvents: "none" }), ...style }}
+      style={{
+        // Zero-footprint hiding: `display:none` can stop playback in some
+        // browsers, so park it instead. Keep it out of layout entirely so no
+        // stray gap appears where the control bar used to be.
+        ...(visible
+          ? {}
+          : {
+              position: "absolute",
+              width: 0,
+              height: 0,
+              opacity: 0,
+              pointerEvents: "none",
+            }),
+        ...style,
+      }}
     />
   );
 }

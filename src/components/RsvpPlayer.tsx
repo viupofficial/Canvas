@@ -1611,12 +1611,11 @@ export default function RsvpPlayer({
       )}
 
       {musicUrl && (
-        <MusicPlayer
-          url={musicUrl}
-          start={musicStarted}
-          visible
-          style={{ position: "fixed", left: 12, bottom: 80, zIndex: 10 }}
-        />
+        // Background music only — no `visible`, so the browser's native media
+        // bar never paints over the invitation. Playback is driven by
+        // `musicStarted` (the envelope seal click, or immediately when there is
+        // no envelope).
+        <MusicPlayer url={musicUrl} start={musicStarted} />
       )}
     </>
   );
