@@ -77,6 +77,14 @@ export default function EditorHeader(props: {
   titleSyncStatus?: "idle" | "saving" | "saved" | "error";
   titleSyncError?: string;
   /**
+   * Renders the event title as read-only. Set for actors who may edit the
+   * canvas but not rename the event — a collaborator — because the title drives
+   * the PUBLIC invitation slug (https://vi-up.com/e/{title-slug}) and renaming
+   * it would break links guests already hold. Owners and designers leave this
+   * off and keep the existing editable title.
+   */
+  titleReadOnly?: boolean;
+  /**
    * Flush a pending title edit to PHP and resolve once it landed. Share Link
    * awaits this before publishing: PHP derives the public page's slug and title
    * from events.event_name, so publishing while a rename is still sitting in the
@@ -180,7 +188,9 @@ export default function EditorHeader(props: {
 
   const [localEventName, setLocalEventName] = useState("Bride & Groom");
   const eventName = props.eventName ?? localEventName;
+  const titleReadOnly = !!props.titleReadOnly;
   const setEventName = (name: string) => {
+    if (titleReadOnly) return;
     setLocalEventName(name);
     props.onEventNameChange?.(name);
   };
@@ -460,7 +470,11 @@ export default function EditorHeader(props: {
           type="text"
           value={eventName}
           onChange={(event) => setEventName(event.target.value)}
-          className="font-bold text-[15px] lg:text-[18px] text-right bg-transparent border-none outline-none w-[110px] lg:w-[140px]"
+          readOnly={titleReadOnly}
+          title={titleReadOnly ? "Only the event owner can rename this event" : undefined}
+          className={`font-bold text-[15px] lg:text-[18px] text-right bg-transparent border-none outline-none w-[110px] lg:w-[140px] ${
+            titleReadOnly ? "cursor-default select-none" : ""
+          }`}
           aria-label="Event name"
         />
 
@@ -488,7 +502,11 @@ export default function EditorHeader(props: {
           type="text"
           value={eventName}
           onChange={(event) => setEventName(event.target.value)}
-          className="font-bold text-[14px] text-center text-[#7D5B59] bg-transparent border-none outline-none min-w-0 w-full max-w-[150px] truncate"
+          readOnly={titleReadOnly}
+          title={titleReadOnly ? "Only the event owner can rename this event" : undefined}
+          className={`font-bold text-[14px] text-center text-[#7D5B59] bg-transparent border-none outline-none min-w-0 w-full max-w-[150px] truncate ${
+            titleReadOnly ? "cursor-default select-none" : ""
+          }`}
           aria-label="Event name"
         />
         <button onClick={handleSaveClick} className="p-1.5 shrink-0 hover:bg-[#D4C9C4] rounded-lg transition-colors">

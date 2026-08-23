@@ -10,7 +10,7 @@ import "@/src/app/globals.css";
 import { EventDataProvider, useEventData, type EventData } from "@/src/store/EventDataContext";
 import { ensureProject, saveProject } from "@/src/lib/projectStorage";
 import { getCanvasUser } from "@/src/lib/userSession";
-import { updateDesign, syncCanvasTitle, getCanvasName, getUser, num, type ViupEvent, type ViupDesign } from "@/src/lib/viupApi";
+import { updateDesign, syncCanvasTitle, getCanvasName, getUser, num, type ViupEvent, type ViupDesign, type EventAccess } from "@/src/lib/viupApi";
 import type { CanvasUser } from "@/src/lib/userSession";
 import { getPackageRules, readFeatureUsage, normalizeUsageCounter, type FeatureUsage } from "@/src/lib/packageRules";
 import { PackageToastHost, showPackageToast } from "@/src/components/PackageLimitToast";
@@ -75,6 +75,12 @@ export type ProjectEditorProps = {
   user?: CanvasUser | null;
   event?: ViupEvent | null;
   design?: ViupDesign | null;
+  /**
+   * What the ACTOR (the account driving this canvas) may do with this event, as
+   * decided by iFastNet — see EventCanvasGuard. Absent on the legacy
+   * project-id / teaser flows, which have no event and keep full local powers.
+   */
+  access?: EventAccess | null;
   // Decoded json_data from the design record: { version, eventData, canvas }.
   initialDesignJson?: any;
   // Internal: set by the outer wrapper when the user restored a local draft —
@@ -186,9 +192,22 @@ function ProjectEditorInner({
   designId,
   templateId,
   event,
+  access,
   initialDesignJson,
   restoredFromDraft,
 }: ProjectEditorProps) {
+  // ── Actor capabilities ────────────────────────────────────────────────────
+  // Straight from the backend verdict — never recomputed here. Flows with no
+  // event (legacy project-id, teaser) carry no verdict and keep today's powers.
+  //
+  // canRenameEvent is the important one: sync_canvas_title.php rewrites
+  // events.event_name, and PHP rebuilds the PUBLIC invitation slug
+  // (https://vi-up.com/e/{title-slug}) from that name. Letting a collaborator
+  // rename the event would change a URL guests may already be holding, so
+  // renaming stays with the owner/designer even though editing is shared.
+  const canRenameEvent = access ? access.canRenameEvent : true;
+  // Owner-only surfaces: package/billing upgrade, ownership, event deletion.
+  const canManageEvent = access ? access.canManageEvent : true;
   const editorRef = useRef<EditorHandle | null>(null);
   const [previewMode, setPreviewMode] = useState<"desktop" | "phone">("desktop");
   // Bumped whenever the active page's content is (re)loaded — the Background panel
@@ -223,12 +242,18 @@ function ProjectEditorInner({
   // gated so Premium events (nothing left to buy) just get a toast instead.
   const [upgradeOpen, setUpgradeOpen] = useState(false);
   const openUpgrade = useCallback(() => {
+    // Billing belongs to the event owner. A collaborator can edit the canvas
+    // but must not be able to buy a package against someone else's event.
+    if (!canManageEvent) {
+      showPackageToast("Only the event owner can change the package.", "warn");
+      return;
+    }
     if (rules.isPremiumPackage) {
       showPackageToast("You already have Premium.");
       return;
     }
     setUpgradeOpen(true);
-  }, [rules.isPremiumPackage]);
+  }, [rules.isPremiumPackage, canManageEvent]);
 
   // Handle the return from Stripe (create_upgrade_checkout.php). The actual
   // package update happens server-side in the Stripe webhook — we never trust
@@ -406,7 +431,7 @@ function ProjectEditorInner({
 
       // Manual save validation — designId/eventId are guaranteed by isEventMode,
       // but the title must not be blank when we're syncing it to MyEvent.
-      if (syncTitle && !cleanTitle) {
+      if (syncTitle && canRenameEvent && !cleanTitle) {
         setSaveError("Title cannot be empty.");
         return Promise.resolve(false);
       }
@@ -441,6 +466,8 @@ function ProjectEditorInner({
       // user/event/design key (never title-only). Then save the design itself.
       const titleStep =
         syncTitle &&
+        // Collaborators never push a title: it would rewrite the public slug.
+        canRenameEvent &&
         cleanTitle !== lastSyncedTitleRef.current &&
         eventId != null &&
         userId != null &&
@@ -548,7 +575,7 @@ function ProjectEditorInner({
         return true;
       });
     },
-    [isEventMode, projectId, eventName, eventData, userId, eventId, designId, event, featureUsage],
+    [isEventMode, projectId, eventName, eventData, userId, eventId, designId, event, featureUsage, canRenameEvent],
   );
 
   // Always call the freshest persist from the debounced timer.
@@ -767,6 +794,10 @@ function ProjectEditorInner({
   // send it to, or an over-long title — so callers can always await it.
   const flushTitleSync = useCallback(async (opts?: { force?: boolean }): Promise<void> => {
     if (!isEventMode || userId == null || eventId == null || designId == null) return;
+    // Read-only title for this actor — nothing to flush, and `force` (used by
+    // the publish paths to re-assert the title) must not become a back door
+    // that lets a collaborator rewrite the public slug.
+    if (!canRenameEvent) return;
     const cleanTitle = String(eventName || "").trim();
     if (!cleanTitle || cleanTitle.length > 120) return;
     if (!opts?.force && cleanTitle === lastSyncedTitleRef.current) return;
@@ -787,7 +818,7 @@ function ProjectEditorInner({
     } finally {
       if (seq === titleSyncSeqRef.current) setTitleSaving(false);
     }
-  }, [eventName, isEventMode, userId, eventId, designId]);
+  }, [eventName, isEventMode, userId, eventId, designId, canRenameEvent]);
 
   // Keep a ref so the publish handlers below always call the latest closure
   // without re-creating themselves on every keystroke.
@@ -800,6 +831,7 @@ function ProjectEditorInner({
   // request on every keystroke so only the final title is sent.
   useEffect(() => {
     if (!isEventMode || userId == null || eventId == null || designId == null) return;
+    if (!canRenameEvent) return;
     const cleanTitle = String(eventName || "").trim();
     if (!cleanTitle || cleanTitle.length > 120) return;
     if (cleanTitle === lastSyncedTitleRef.current) return;
@@ -809,7 +841,7 @@ function ProjectEditorInner({
     }, 1000);
 
     return () => clearTimeout(timer);
-  }, [eventName, isEventMode, userId, eventId, designId, flushTitleSync]);
+  }, [eventName, isEventMode, userId, eventId, designId, canRenameEvent, flushTitleSync]);
 
   // ── Image editor state ──────────────────────────────────────────────────────
   const [imageEditorOpen, setImageEditorOpen] = useState(false);
@@ -901,10 +933,11 @@ function ProjectEditorInner({
             }
             forceSaveNow({ syncTitle: true });
           }}
-          // Premium is the highest tier — no upgrade path, so hide the button
-          // entirely by not wiring a handler (EditorHeader only renders it when
-          // onUpgrade is present).
-          onUpgrade={rules.isPremiumPackage ? undefined : openUpgrade}
+          // Hidden entirely by not wiring a handler (EditorHeader only renders
+          // the button when one is present) for Premium, the highest tier with
+          // no upgrade path, and for any actor who cannot manage the event —
+          // billing belongs to the owner.
+          onUpgrade={rules.isPremiumPackage || !canManageEvent ? undefined : openUpgrade}
           onPreview={async () => {
             // Music still transferring? Publishing now would bake a design with
             // no track into the blob /e/[slug] reads — wait for it to finish.
@@ -958,7 +991,13 @@ function ProjectEditorInner({
           teaser={teaser}
           onLogin={() => { window.location.href = "https://vi-up.com/login"; }}
           eventName={eventName}
+          // Owner/designer only. For a collaborator the title renders as plain
+          // read-only text, because renaming rewrites the public invitation URL.
+          titleReadOnly={!canRenameEvent}
           onEventNameChange={(name: string) => {
+            // Belt-and-braces: the input is read-only for collaborators, so a
+            // change event here would have to come from outside the UI.
+            if (!canRenameEvent) return;
             // Update local state immediately (canvas editing is never blocked);
             // the debounced effect handles the PHP sync. Reset the per-edit sync
             // indicators so a fresh "saving → saved" cycle can show.
@@ -1031,7 +1070,7 @@ function ProjectEditorInner({
 
       {/* Stripe upgrade — form-POSTs to create_upgrade_checkout.php, never writes
           package_id from here. Only meaningful for event-bound canvases. */}
-      {isEventMode && eventId != null && (
+      {isEventMode && eventId != null && canManageEvent && (
         <PaymentUpgradeModal
           isOpen={upgradeOpen}
           onClose={() => setUpgradeOpen(false)}
