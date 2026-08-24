@@ -2635,6 +2635,82 @@ img[alt="Mayaxasyraff"],
   margin-right: 0;
 }
 
+/* ── RSVP off: no centre slot to reserve ──────────────────────────────────────
+   The full bar keeps its two icon groups clear of the centred RSVP circle by
+   absolutely positioning them with fixed offsets from the middle. With the RSVP
+   toggle off the circle (and its notch) are gone, so those offsets just leave a
+   wide empty gap between Guestbook/Gift and Info/Contact.
+
+   In that state only, put the groups back in normal flow and let each item take
+   an equal share of the bar, so the icons spread evenly across the full width —
+   the same even distribution the Basic footer row uses. Everything else (the
+   RSVP-on layout, Basic, compact) is untouched: these rules are scoped to
+   .footer-no-rsvp, which EventFooter sets only when RSVP is disabled.
+
+   The Info button's open-state offsets are tuned against the RSVP circle, so
+   they need re-pointing for this layout — see the .floating-star block below. */
+
+/* A later base rule pads the bar `8px 199px`, leaving a zero-width content box
+   the absolutely positioned groups simply ignored (their offsets resolve
+   against the padding box). Flow layout can't ignore it, so restore the sane
+   side padding the compact and preview footers already use. */
+.footer-container.footer-no-rsvp {
+  padding: 8px 20px;
+}
+
+.footer-container.footer-no-rsvp .footer-buttons {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-around;
+  height: auto;
+  /* Preserve the base group offset (.footer-side top: -5px) now that the items
+     are in normal flow instead of absolutely positioned. */
+  margin-top: calc(1.5rem - 5px);
+}
+
+/* `display: contents` dissolves the two group boxes so every item becomes a
+   direct flex child of the bar. Nesting them as two half-width groups would
+   only spread evenly while both hold the same number of items — with a slot
+   empty (compact) the lone side would centre in its half and leave a gap at the
+   edge. Flattening spreads by item count instead, so any 2–4 item combination
+   lands evenly. */
+.footer-container.footer-no-rsvp .footer-side.left,
+.footer-container.footer-no-rsvp .footer-side.right {
+  display: contents;
+}
+
+.footer-container.footer-no-rsvp .footer-side.right a:nth-child(1) {
+  margin-right: 0;
+}
+
+/* Beats the fixed 23px slot footprint below (3 classes vs 2), so Gift / Info /
+   Calendar / Location share the row equally with Guestbook and Contact. */
+.footer-container.footer-no-rsvp .footer-side > * {
+  flex: 1 1 0;
+  width: auto;
+  min-width: 0;
+}
+
+/* The Info star is absolutely positioned and normally resolves its offsets
+   against .footer-side.right, whose width is content-sized in the RSVP layout;
+   its open state (.visible) then flies it toward the shifted RSVP circle. Both
+   assumptions are gone here — the groups are flow-sized and there is no circle
+   — so anchor the star to its own button instead (centred on the 23px icon row
+   the label's 27px top margin reserves) and let opening it scale in place. */
+.footer-container.footer-no-rsvp .footer-side .footer-info {
+  position: relative;
+}
+
+.footer-container.footer-no-rsvp .floating-star,
+.footer-container.footer-no-rsvp .floating-star.visible {
+  top: 11px;
+  left: 50%;
+}
+
+.footer-container.footer-no-rsvp .floating-star.visible {
+  transform: translate(-50%, -50%) scale(1.2);
+}
+
 /* ── Slot items keep a constant footprint ─────────────────────────────────────
    The two swappable slots either side of the RSVP circle sit in absolutely
    positioned groups whose items are spaced by a fixed `gap`, so each item's own

@@ -1,5 +1,6 @@
 "use client";
 import React, { useCallback, useEffect, useRef, useState } from "react";
+import { preferredImageFormat } from "@/src/lib/imageDownscale";
 
 // Destructive image editor (MVP). Loads the selected image into its own Fabric
 // preview canvas, applies Fabric filters + an optional crop rectangle live, and
@@ -472,7 +473,13 @@ export default function ImageEditorModal({
     let dataUrl = "";
     try {
       dataUrl = canvas.toDataURL({
-        format: "png",
+        // Same standardisation as uploads (see imageDownscale.ts). PNG was
+        // chosen here for its alpha — crop and opacity both leave transparent
+        // pixels — and WebP keeps that while cutting the exported data URL,
+        // which is what gets uploaded to blob storage, by an order of magnitude.
+        // quality is ignored for the PNG fallback, which stays lossless.
+        format: preferredImageFormat(),
+        quality: 0.92,
         left,
         top,
         width,

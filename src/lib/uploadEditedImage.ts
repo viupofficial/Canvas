@@ -15,6 +15,17 @@ export function dataUrlToBlob(dataUrl: string): Blob {
   return new Blob([u8arr], { type: mime });
 }
 
+// Blob is served back with whatever contentType we upload it under, so the
+// extension and the header both have to follow the actual bytes — uploads are
+// WebP now (see imageDownscale.ts), and older/fallback paths still send PNG.
+const EXTENSIONS: Record<string, string> = {
+  "image/webp": "webp",
+  "image/png": "png",
+  "image/jpeg": "jpg",
+  "image/gif": "gif",
+  "image/svg+xml": "svg",
+};
+
 /**
  * Upload an edited image (from dataURL) to Vercel Blob storage.
  * Returns the public URL of the uploaded image.
@@ -22,11 +33,13 @@ export function dataUrlToBlob(dataUrl: string): Blob {
 export async function uploadEditedImage(dataUrl: string): Promise<string> {
   try {
     const blob = dataUrlToBlob(dataUrl);
-    const file = new File([blob], `edited-${Date.now()}.png`, { type: "image/png" });
+    const contentType = blob.type || "image/png";
+    const ext = EXTENSIONS[contentType] ?? "png";
+    const file = new File([blob], `edited-${Date.now()}.${ext}`, { type: contentType });
 
     const result = await upload(`edited-images/${Date.now()}-${Math.random().toString(36).slice(2)}`, file, {
       access: "public",
-      contentType: "image/png",
+      contentType,
       handleUploadUrl: "/api/upload-image",
     });
 
