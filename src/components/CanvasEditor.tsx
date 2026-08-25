@@ -33,6 +33,9 @@ import { useEventDataOptional } from "@/src/store/EventDataContext";
 import { useFabricEventSync } from "@/src/hooks/useFabricEventSync";
 import { FONT_GROUPS, loadGoogleFont, collectFontFamilies, preloadFonts } from "@/src/lib/fonts";
 import { downscaleImageFile } from "@/src/lib/imageDownscale";
+// Cheap to import: the MP3 encoder itself sits behind a dynamic import *inside*
+// optimizeAudioFile, so it only downloads when a music file is actually picked.
+import { optimizeAudioFile, validateAudioFile, formatBytes } from "@/src/lib/audioOptimize";
 import { saveLocalPreview } from "@/src/lib/localPreview";
 import { extractEnvelope } from "@/src/lib/extract-envelope";
 import { eventBlobPath, eventSlug } from "@/src/lib/slug";
@@ -3428,29 +3431,59 @@ const [currentPage, setCurrentPage] = useState(0);
 
     const input = e.currentTarget;
 
+    // Reject obvious non-audio / oversized picks here rather than letting the
+    // blob token reject them, so the user gets a readable reason. MP3s pass:
+    // audio/mpeg (and a blank type with a .mp3 name) are both accepted.
+    const invalid = validateAudioFile(file);
+    if (invalid) {
+      showPackageToast(invalid, "error");
+      input.value = "";
+      return;
+    }
+
     // Mark the upload in flight so Preview/Save can wait for it (see
     // isMusicUploading). Toast up-front so the user knows a full-length song is
     // still transferring even though the file dialog has closed.
     musicUploadingRef.current = true;
-    showPackageToast("Uploading music…", "warn");
+    showPackageToast("Preparing music…", "warn");
     try {
+      // Re-encode oversized tracks down to a background-music bitrate before
+      // they leave the browser — smaller blob, faster invite load. The helper
+      // is dynamically imported (the MP3 encoder never touches the Canvas'
+      // initial bundle) and returns the ORIGINAL file untouched whenever
+      // optimization is skipped or fails, so uploads stay as reliable as before.
+      const result = await optimizeAudioFile(file);
+      const toUpload = result.file;
+
+      showPackageToast(
+        result.optimized
+          ? `Uploading music… ${formatBytes(result.originalBytes)} → ${formatBytes(result.outputBytes)}`
+          : "Uploading music…",
+        "warn",
+      );
+
       // Stream straight to blob storage (no 4.5MB serverless body limit), so
       // full-length songs upload as reliably as short clips.
       const safeName =
-        (file.name || "music")
+        (toUpload.name || "music")
           .toLowerCase()
           .replace(/[^a-z0-9.]+/g, "-")
           .replace(/^-+|-+$/g, "") || "music";
-      const blob = await upload(`music/${Date.now()}-${safeName}`, file, {
+      const blob = await upload(`music/${Date.now()}-${safeName}`, toUpload, {
         access: "public",
-        contentType: file.type || "audio/mpeg",
+        contentType: toUpload.type || "audio/mpeg",
         handleUploadUrl: "/api/upload-music",
       });
       setMusicUrl(blob.url);
       setMusicPlaying(true);
       // Upload succeeded — count it (a cancelled file dialog never reaches here).
       props.onMusicChange?.(blob.url);
-      showPackageToast("Music uploaded — it's ready to save.", "success");
+      showPackageToast(
+        result.optimized
+          ? `Music uploaded (${formatBytes(result.originalBytes)} → ${formatBytes(result.outputBytes)}) — it's ready to save.`
+          : "Music uploaded — it's ready to save.",
+        "success",
+      );
     } catch (err: any) {
       console.error("Music upload failed", err);
       showPackageToast(
@@ -4491,7 +4524,10 @@ const applyBgToOtherPages = (patch: { backgroundImage?: any; backgroundColor?: a
       <input
         ref={musicInputRef}
         type="file"
-        accept="audio/*"
+        // Extensions listed alongside audio/* because some Android/Windows
+        // pickers report an MP3 with a blank or generic MIME type and would
+        // otherwise grey it out.
+        accept="audio/*,audio/mpeg,.mp3,.m4a,.aac,.wav,.ogg,.flac"
         onChange={handleMusic}
         style={{ display: "none" }}
       />

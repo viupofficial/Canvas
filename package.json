@@ -10,6 +10,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@breezystack/lamejs": "^1.2.7",
     "@tailwindcss/postcss": "^4.1.18",
     "@vercel/blob": "^2.4.0",
     "clsx": "^2.1.1",
