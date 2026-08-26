@@ -11,8 +11,21 @@
 // This only governs what we *write*. Nothing here touches reading: PNG / JPEG /
 // GIF / SVG data URLs saved by existing clients keep loading exactly as before,
 // because the canvas just hands whatever string it has to an <img>.
+//
+// Animated GIFs are the one format that can't go through the canvas at all —
+// rasterizing keeps a single frame — so they are uploaded to Blob storage
+// as-is and referenced by URL. That also keeps them out of the design JSON,
+// which matters more for GIFs than anything else here: they arrive at their
+// full recorded size (no downscale pass applies), and a few MB of base64 in
+// the page JSON would be carried by localStorage, every undo snapshot and
+// every autosave.
+
+import { uploadImageFile } from "./uploadEditedImage";
 
 const MAX_DIMENSION = 1920; // longest edge in px — ample for on-screen invites
+// Matches the ceiling /api/upload-image issues tokens for, so an oversized GIF
+// is refused here with a readable reason instead of failing at the token step.
+const MAX_GIF_BYTES = 10 * 1024 * 1024;
 const WEBP_QUALITY = 0.82; // photographic content
 // Graphics with alpha (stickers, logos) were PNG — i.e. lossless — before, and
 // lossy WebP fringes their hard edges. A higher quality keeps them clean and is
@@ -88,15 +101,38 @@ function mayCarryAlpha(type: string): boolean {
 /**
  * Returns a WebP data URL for the file, downscaled to MAX_DIMENSION.
  *
- * Falls back to the original data URL for vector/animated formats (rasterizing
- * those loses information) and on any processing error, and to the previous
- * JPEG/PNG behaviour on browsers that cannot encode WebP.
+ * Animated formats are the exception to the "returns a data URL" shape: a GIF
+ * is uploaded untouched and comes back as a Blob URL (see the note up top).
+ * Every other path still returns a data URL — falling back to the original for
+ * vectors and on any processing error, and to the previous JPEG/PNG behaviour
+ * on browsers that cannot encode WebP.
+ *
+ * Throws only for a GIF over MAX_GIF_BYTES, with a message fit to show the
+ * user; callers surface it as an upload failure.
  */
 export async function downscaleImageFile(file: File): Promise<string> {
   const original = await fileToDataUrl(file);
 
-  // Rasterizing these loses information (vectors / animation frames).
-  if (file.type === "image/svg+xml" || file.type === "image/gif") return original;
+  // Rasterizing a vector loses the vector, and there is nothing to upload it
+  // for — an SVG is small enough to live in the JSON.
+  if (file.type === "image/svg+xml") return original;
+
+  // Rasterizing a GIF would flatten it to one frame, so the file goes up whole.
+  // A failed upload falls back to the data URL rather than losing the user's
+  // image: heavier than we'd like in the JSON, but it still works.
+  if (file.type === "image/gif") {
+    if (file.size > MAX_GIF_BYTES) {
+      throw new Error(
+        `That GIF is ${(file.size / (1024 * 1024)).toFixed(1)}MB — the limit is ${MAX_GIF_BYTES / (1024 * 1024)}MB. Try a shorter or smaller one.`,
+      );
+    }
+    try {
+      return await uploadImageFile(file);
+    } catch (e) {
+      console.error("[imageDownscale] GIF upload failed, inlining instead", e);
+      return original;
+    }
+  }
 
   const webp = canEncodeWebp();
 

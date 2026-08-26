@@ -27,6 +27,23 @@ const EXTENSIONS: Record<string, string> = {
 };
 
 /**
+ * Upload an image File to Vercel Blob storage. Returns the public URL.
+ *
+ * Preferred over uploadEditedImage when the caller already holds a File (an
+ * upload straight off the picker): the bytes go up as-is instead of through a
+ * base64 round trip that inflates them by a third on the way.
+ */
+export async function uploadImageFile(file: File): Promise<string> {
+  const contentType = file.type || "image/png";
+  const result = await upload(
+    `edited-images/${Date.now()}-${Math.random().toString(36).slice(2)}`,
+    file,
+    { access: "public", contentType, handleUploadUrl: "/api/upload-image" },
+  );
+  return result.url;
+}
+
+/**
  * Upload an edited image (from dataURL) to Vercel Blob storage.
  * Returns the public URL of the uploaded image.
  */
@@ -36,15 +53,9 @@ export async function uploadEditedImage(dataUrl: string): Promise<string> {
     const contentType = blob.type || "image/png";
     const ext = EXTENSIONS[contentType] ?? "png";
     const file = new File([blob], `edited-${Date.now()}.${ext}`, { type: contentType });
-
-    const result = await upload(`edited-images/${Date.now()}-${Math.random().toString(36).slice(2)}`, file, {
-      access: "public",
-      contentType,
-      handleUploadUrl: "/api/upload-image",
-    });
-
-    console.log("[uploadEditedImage] successfully uploaded to:", result.url);
-    return result.url;
+    const url = await uploadImageFile(file);
+    console.log("[uploadEditedImage] successfully uploaded to:", url);
+    return url;
   } catch (err) {
     console.error("[uploadEditedImage] upload failed:", err);
     throw err;

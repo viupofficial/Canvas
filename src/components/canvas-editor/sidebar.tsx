@@ -51,6 +51,18 @@ import {
 } from "@/src/lib/packageRules";
 import { showPackageToast } from "@/src/components/PackageLimitToast";
 
+
+// downscaleImageFile rejects an over-sized GIF with a message written for the
+// user; anything else it can't process falls back to the original image. These
+// pickers had no rejection handler, so a refusal used to vanish silently.
+const reportImageFailure = (err: unknown) => {
+  console.error('[sidebar] image upload failed', err);
+  showPackageToast(
+    err instanceof Error && err.message ? err.message : "That image couldn't be added — please try again.",
+    'error',
+  );
+};
+
 // Invert a 6-digit hex color (Adobe-style negative). Falls back gracefully for non-hex input.
 function invertHex(color: string): string {
   const m = /^#?([0-9a-fA-F]{6})$/.exec((color ?? '').trim());
@@ -1607,7 +1619,9 @@ function MoneyGiftTab({ rules }: { rules: PackageRules }) {
     // Let the same file be picked again after a remove.
     e.target.value = '';
     if (!file) return;
-    downscaleImageFile(file).then((dataUrl) => patchAccount(index, { image: dataUrl }));
+    downscaleImageFile(file)
+      .then((dataUrl) => patchAccount(index, { image: dataUrl }))
+      .catch(reportImageFailure);
   };
 
   const handleSave = () => {
@@ -2348,7 +2362,7 @@ function BackgroundTab({
       setMirror('none');
       setFillType('picture');
       setSrc(dataUrl);
-    });
+    }).catch(reportImageFailure);
     input.value = '';
   };
 
@@ -2800,7 +2814,8 @@ export default function Sidebar({
         .then(() => downscaleImageFile(file))
         .then((dataUrl) => {
           setCustomAssets((prev) => ({ ...prev, [cat]: [...prev[cat], dataUrl as string] }));
-        });
+        })
+        .catch(reportImageFailure);
     });
   };
 

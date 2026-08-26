@@ -43,6 +43,7 @@ import { getPackageRules } from "@/src/lib/packageRules";
 import { normalizePresentationMode, type PresentationMode } from "@/src/lib/presentationMode";
 import { upload } from "@vercel/blob/client";
 import { uploadEditedImage } from "@/src/lib/uploadEditedImage";
+import { createGifOverlay, type GifOverlay } from "@/src/lib/gifOverlay";
 import { showPackageToast } from "@/src/components/PackageLimitToast";
 import {
   ENABLE_SMART_SNAPPING,
@@ -231,6 +232,24 @@ const EDITOR_ZOOM_STEP = 0.1;  //  10% per click / wheel notch
 const clampEditorZoom = (v: number) =>
   Math.min(EDITOR_ZOOM_MAX, Math.max(EDITOR_ZOOM_MIN, Math.round(v * 100) / 100));
 type PageHistory = { undo: string[]; redo: string[] };
+// Anything not inlined as a data URL — Blob-hosted GIFs and edited images —
+// has to load with CORS, or the first canvas.toDataURL() (thumbnail, export)
+// throws on a tainted canvas.
+// downscaleImageFile rejects an over-sized GIF with a message meant for the
+// user (every other failure falls back to the original image), so show it.
+const reportImageFailure = (err: unknown) => {
+  console.error('[CanvasEditor] image upload failed', err);
+  showPackageToast(
+    err instanceof Error && err.message ? err.message : "That image couldn't be added — please try again.",
+    'error',
+  );
+};
+
+const imageLoadOpts = (src: string) =>
+  typeof src === "string" && src.startsWith("data:")
+    ? undefined
+    : { crossOrigin: "anonymous" as const };
+
 const FABRIC_EXPORT_PROPS = [
   "action",
   "animationType",
@@ -426,6 +445,12 @@ const CanvasEditor = forwardRef<
 const [currentPage, setCurrentPage] = useState(0);
   const currentPageRef = useRef(0);
   const fabricModuleRef = useRef<any>(null);
+  // Plays animated GIFs in a DOM layer over the canvas — Fabric can't, because
+  // drawImage only ever sees a GIF's first frame. See src/lib/gifOverlay.ts.
+  const gifOverlayRef = useRef<GifOverlay | null>(null);
+  /** Capture helper: run `fn` with animated GIFs painted by Fabric again. */
+  const withGifsOnCanvas = <T,>(fn: () => T): T =>
+    gifOverlayRef.current ? gifOverlayRef.current.withFabricPainting(fn) : fn();
   // Flat color drawn behind the background picture (and used when a picture is
   // removed). Tracks the last solid color the user picked.
   const bgFlatColorRef = useRef<string>('#ffffff');
@@ -699,6 +724,9 @@ const [currentPage, setCurrentPage] = useState(0);
       // The active page's object list just changed (page switch, undo/redo,
       // template load) — refresh the Layer tab.
       onLayersChangeRef.current?.();
+      // …and re-scan for animated GIFs, which are played by a DOM layer rather
+      // than by Fabric and so aren't carried along by loadFromJSON.
+      gifOverlayRef.current?.refresh();
       // Same triggers let page-scoped panels (e.g. Background) re-read state.
       onContentReplacedRef.current?.();
       onDone?.();
@@ -1352,7 +1380,7 @@ const [currentPage, setCurrentPage] = useState(0);
 
       const w = (canvas.width as number) ?? CANVAS_REF_WIDTH;
       const h = (canvas.height as number) ?? CANVAS_REF_HEIGHT;
-      const imgOpts = url.startsWith('data:') ? undefined : { crossOrigin: 'anonymous' };
+      const imgOpts = imageLoadOpts(url);
 
       fabric.Image.fromURL(url, imgOpts).then((img: any) => {
         const el = img.getElement?.() as HTMLImageElement | null;
@@ -1523,7 +1551,12 @@ const [currentPage, setCurrentPage] = useState(0);
       if (!canvas) return "";
       try {
         // Lightweight: small multiplier + JPEG keeps the dataURL to a few KB.
-        return canvas.toDataURL({ format: "jpeg", quality: 0.6, multiplier: 0.25 });
+        // withFabricPainting puts animated GIFs back on the canvas for the
+        // capture — they're normally drawn by a DOM layer that toDataURL can't
+        // see, so without it each one would come out as a hole.
+        return withGifsOnCanvas(() =>
+          canvas.toDataURL({ format: "jpeg", quality: 0.6, multiplier: 0.25 }),
+        );
       } catch (e) {
         console.error("[CanvasEditor] thumbnail export failed", e);
         return "";
@@ -1854,6 +1887,8 @@ const [currentPage, setCurrentPage] = useState(0);
           fireRightClick: false,
           stopContextMenu: false,
         });
+
+        gifOverlayRef.current = createGifOverlay(canvas);
 
         canvas.on('mouse:down', (opt: any) => {
           if (opt?.e?.button !== 2) return;
@@ -2667,6 +2702,8 @@ const [currentPage, setCurrentPage] = useState(0);
         previewRafRef.current = null;
       }
       previewRestoreRef.current = null;
+      gifOverlayRef.current?.dispose();
+      gifOverlayRef.current = null;
       const c = fabricRef.current;
       if (c) {
         c.off();
@@ -2875,7 +2912,7 @@ const [currentPage, setCurrentPage] = useState(0);
       const y = e.clientY - rect.top;
       downscaleImageFile(file).then(async (dataUrl) => {
         try {
-          const img = await fabric.Image.fromURL(dataUrl);
+          const img = await fabric.Image.fromURL(dataUrl, imageLoadOpts(dataUrl));
           img.set({ left: x, top: y, scaleX: 0.6, scaleY: 0.6 });
           canvas.add(img);
           canvas.requestRenderAll();
@@ -2883,7 +2920,7 @@ const [currentPage, setCurrentPage] = useState(0);
         } catch (err) {
           console.error('Failed to load dropped file image', err);
         }
-      });
+      }).catch(reportImageFailure);
       return;
     }
 
@@ -2904,7 +2941,7 @@ const [currentPage, setCurrentPage] = useState(0);
         } else if (data.type === 'text' && data.text) {
           addText(data.text, { ...(data.opts || {}), left: x, top: y });
         } else if (data.type === 'image-url' && data.url) {
-          const imgOpts = data.url.startsWith('data:') ? undefined : { crossOrigin: 'anonymous' };
+          const imgOpts = imageLoadOpts(data.url);
           fabric.Image.fromURL(data.url, imgOpts).then((img: any) => {
             img.set({ left: x, top: y, scaleX: 0.6, scaleY: 0.6 });
             canvas.add(img);
@@ -3302,7 +3339,7 @@ const [currentPage, setCurrentPage] = useState(0);
     imageUrlPromise
       .then((imageUrl) => {
         console.log("[replaceObjectImage] using image URL:", imageUrl.substring(0, 50) + "...");
-        return fabric.Image.fromURL(imageUrl).then((img: any) => ({ img, imageUrl }));
+        return fabric.Image.fromURL(imageUrl, imageLoadOpts(imageUrl)).then((img: any) => ({ img, imageUrl }));
       })
       .then(({ img, imageUrl }) => {
         const nW = img.width || 1;
@@ -3382,7 +3419,7 @@ const [currentPage, setCurrentPage] = useState(0);
       const obj = editingImageRef.current ?? fabricRef.current?.getActiveObject();
       replaceObjectImage(obj, dataUrl);
       input.value = '';
-    });
+    }).catch(reportImageFailure);
   }, [replaceObjectImage]);
 
   useEffect(() => {
@@ -3412,7 +3449,7 @@ const [currentPage, setCurrentPage] = useState(0);
 
     downscaleImageFile(file).then(async (dataUrl) => {
       try {
-        const img = await fabric.Image.fromURL(dataUrl);
+        const img = await fabric.Image.fromURL(dataUrl, imageLoadOpts(dataUrl));
         img.set({ left: 100, top: 100, scaleX: 0.6, scaleY: 0.6 });
         canvas.add(img);
         canvas.requestRenderAll();
@@ -3420,7 +3457,7 @@ const [currentPage, setCurrentPage] = useState(0);
       } catch (err) {
         console.error('Failed to load uploaded image', err);
       }
-    });
+    }).catch(reportImageFailure);
     // reset input so same file can be reselected
     e.currentTarget.value = "";
   }, []);
@@ -3501,7 +3538,7 @@ const [currentPage, setCurrentPage] = useState(0);
     const fabric = fabricModuleRef.current;
     if (!canvas || !fabric || !url) return;
 
-    const imgOpts = url.startsWith('data:') ? undefined : { crossOrigin: 'anonymous' };
+    const imgOpts = imageLoadOpts(url);
     fabric.Image.fromURL(url, imgOpts).then((img: any) => {
       img.set({ left: 100, top: 100, scaleX: 0.6, scaleY: 0.6 });
       canvas.add(img);
@@ -3536,7 +3573,7 @@ const [currentPage, setCurrentPage] = useState(0);
 
     const w = (canvas.width as number) ?? 396;
     const h = (canvas.height as number) ?? 704;
-    const imgOpts = url.startsWith('data:') ? undefined : { crossOrigin: 'anonymous' };
+    const imgOpts = imageLoadOpts(url);
     fabric.Image.fromURL(url, imgOpts).then((img: any) => {
       const el = img.getElement?.() as HTMLImageElement | null;
       const natW = (el?.naturalWidth ?? 0) > 0 ? el!.naturalWidth : (img.width || 1);
@@ -3560,7 +3597,11 @@ const [currentPage, setCurrentPage] = useState(0);
     
     const canvas = fabricRef.current;
     if (!canvas) return;
-    const dataUrl = canvas.toDataURL({ multiplier: 1, format: "png", quality: 0.92 });
+    // GIFs animate in a DOM layer the canvas can't see — put them back for the
+    // capture so the PNG carries their first frame instead of a gap.
+    const dataUrl = withGifsOnCanvas(() =>
+      canvas.toDataURL({ multiplier: 1, format: "png", quality: 0.92 }),
+    );
     const a = document.createElement("a");
     a.href = dataUrl;
     a.download = "wedding-design.png";
@@ -4057,7 +4098,7 @@ const applyBgToOtherPages = (patch: { backgroundImage?: any; backgroundColor?: a
 
     if (galleryIndex === currentPageRef.current && canvas && fabric) {
       // Gallery is on screen — add the image to the live canvas.
-      const imgOpts = url.startsWith('data:') ? undefined : { crossOrigin: 'anonymous' };
+      const imgOpts = imageLoadOpts(url);
       fabric.Image.fromURL(url, imgOpts)
         .then((img: any) => {
           const el = img.getElement?.() as HTMLImageElement | null;

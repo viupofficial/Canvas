@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { collectFontFamilies, preloadFonts } from "@/src/lib/fonts";
+import { createGifOverlay } from "@/src/lib/gifOverlay";
 import MusicPlayer from "@/src/components/MusicPlayer";
 import { normalizePresentationMode, type PresentationMode } from "@/src/lib/presentationMode";
 
@@ -956,6 +957,12 @@ export default function RsvpPlayer({
               obj.setCoords();
             });
             toRemove.forEach((o) => rc.remove(o));
+            // Animated GIFs are played by a DOM layer over this page's canvas —
+            // Fabric's drawImage only ever sees a GIF's first frame. The layer
+            // is driven by the browser, not by us, so a page full of stickers
+            // still costs the player nothing per frame.
+            const gifOverlay = createGifOverlay(rc);
+            cancellers.push(() => gifOverlay.dispose());
             // Page mode runs these immediately (unchanged); scroll mode waits
             // until the page section actually scrolls into view.
             armAnimations(wrapper, () => startAnimations(rc));
