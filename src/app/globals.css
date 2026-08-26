@@ -2401,10 +2401,11 @@ img[alt="Mayaxasyraff"],
     max-width: 80px;
   }
 
-  .footer-buttons {
-    padding-bottom: 6vh;
-    /* Creates more space at bottom if buttons overflow */
-  }
+  /* `padding-bottom: 6vh` used to live here to "make more space if the buttons
+     overflow". It resolved against the browser window, not the phone canvas, so
+     in the editor (a ~1080px tall window) it added ~65px to a 40px box and the
+     nav bar ballooned. The bar now has a fixed height instead — see the
+     `--footer-bar-height` block at the end of this file. */
 
 
 
@@ -2662,15 +2663,13 @@ img[alt="Mayaxasyraff"],
   display: flex;
   align-items: flex-start;
   justify-content: space-around;
-  /* Keep the base bar's exact box (height: 40px, margin-top: 1.5rem) so the bar
-     is the same height whether RSVP is on or off. `height: auto` here used to
-     let the row size to its items, which looks the same on a tall window but
-     silently changes what the short-viewport rule above
-     (@media (max-height: 844px) { .footer-buttons { padding-bottom: 6vh } })
-     does: against a fixed border-box height that padding is absorbed, against
-     `auto` it is added, so the bar grew ~40px the moment RSVP was switched off.
-     Items overflow the box here exactly as the absolutely positioned groups do
-     in the RSVP layout — the bar's own height never depended on them. */
+  /* Keep the base bar's exact box (height: 40px, margin-top: 1.5rem) so the row
+     sits where it does in the RSVP layout. `height: auto` here used to let the
+     row size to its items, which changed the bar's height the moment RSVP was
+     switched off. The bar is pinned to --footer-bar-height at the end of this
+     file now, so that can no longer happen either way. Items overflow the box
+     here exactly as the absolutely positioned groups do in the RSVP layout —
+     the bar's own height never depended on them. */
   height: 40px;
   margin-top: 1.5rem;
 }
@@ -2874,4 +2873,67 @@ img[alt="Mayaxasyraff"],
   width: 0;
   height: 0;
   display: none;
+}
+
+/* ──────────────────────────────────────────────────────────────────────────
+   Footer nav bar — one fixed height, in every layout and at every viewport
+   The bar's height used to be whatever its content happened to add up to:
+   8px padding + a 24px offset + the 40px icon row + 8px padding = 80px, plus
+   a short-viewport rule that piled on `6vh` of the *browser window*. So the
+   same invitation got a different bar in the editor, in the phone preview and
+   on a published page, and switching RSVP off changed it again.
+
+   Pin it instead. 67px is the reference height and it is exactly the geometry
+   the icon row already wants: 24px top offset + 40px row + 3px breathing room
+   below. Nothing inside contributes to it any more, so the bar is identical
+   whether RSVP is on or off, whether a nav slot is empty, and no matter how
+   tall or short the window around the canvas is.
+
+   Listed per variant because the layout rules above (.footer-basic,
+   .footer-no-rsvp, .footer-nav-compact, .preview-local) each set `padding`
+   with two-class specificity — a bare `.footer-container` here would lose to
+   them. Only the vertical padding is restated; each variant keeps its own
+   horizontal padding.
+   ────────────────────────────────────────────────────────────────────────── */
+:root {
+  --footer-bar-height: 67px;
+}
+
+.footer-container,
+.footer-container.footer-basic,
+.footer-container.footer-no-rsvp,
+.footer-container.footer-nav-compact,
+.preview-local .footer-container {
+  box-sizing: border-box;
+  height: var(--footer-bar-height);
+  min-height: var(--footer-bar-height);
+  max-height: var(--footer-bar-height);
+  padding-top: 19px;
+  padding-bottom: 3px;
+}
+
+/* The icon row keeps its exact 40px box in both the RSVP and no-RSVP layouts.
+   Its old `margin-top: 1.5rem` is now the bar's own padding-top instead: the
+   margin only ever held the row down because the bar had a top padding to
+   collapse against, so zeroing that padding would have let the margin escape
+   and dragged the whole row to the top edge. Padding can't collapse, so the
+   row's offset is now independent of everything above it.
+
+   Items still overflow this box (icon + label are taller than 40px) exactly as
+   before — .footer-side is absolutely positioned against it — they just never
+   move the bar. The overflow lands 5-6px clear of the bar's bottom edge, the
+   same gap the old 80px bar had. */
+.footer-container .footer-buttons,
+.footer-container.footer-no-rsvp .footer-buttons {
+  box-sizing: border-box;
+  height: 40px;
+  margin-top: 0;
+  padding-bottom: 0;
+}
+
+/* The Basic row has no fixed height of its own and no RSVP notch to sit clear
+   of, so centre it in the bar rather than letting its items set the height. */
+.footer-container.footer-basic .footer-basic-row {
+  height: 100%;
+  align-items: center;
 }
