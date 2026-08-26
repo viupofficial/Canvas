@@ -2662,10 +2662,17 @@ img[alt="Mayaxasyraff"],
   display: flex;
   align-items: flex-start;
   justify-content: space-around;
-  height: auto;
-  /* Preserve the base group offset (.footer-side top: -5px) now that the items
-     are in normal flow instead of absolutely positioned. */
-  margin-top: calc(1.5rem - 5px);
+  /* Keep the base bar's exact box (height: 40px, margin-top: 1.5rem) so the bar
+     is the same height whether RSVP is on or off. `height: auto` here used to
+     let the row size to its items, which looks the same on a tall window but
+     silently changes what the short-viewport rule above
+     (@media (max-height: 844px) { .footer-buttons { padding-bottom: 6vh } })
+     does: against a fixed border-box height that padding is absorbed, against
+     `auto` it is added, so the bar grew ~40px the moment RSVP was switched off.
+     Items overflow the box here exactly as the absolutely positioned groups do
+     in the RSVP layout — the bar's own height never depended on them. */
+  height: 40px;
+  margin-top: 1.5rem;
 }
 
 /* `display: contents` dissolves the two group boxes so every item becomes a
@@ -2689,6 +2696,11 @@ img[alt="Mayaxasyraff"],
   flex: 1 1 0;
   width: auto;
   min-width: 0;
+  /* Preserve the base group offset (.footer-side top: -5px) now that the items
+     are in normal flow instead of absolutely positioned. Applied per item
+     rather than as a smaller margin on .footer-buttons so the bar itself keeps
+     the base geometry above. */
+  margin-top: -5px;
 }
 
 /* The Info star is absolutely positioned and normally resolves its offsets
