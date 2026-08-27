@@ -35,8 +35,14 @@ const EXTENSIONS: Record<string, string> = {
  */
 export async function uploadImageFile(file: File): Promise<string> {
   const contentType = file.type || "image/png";
+  // The extension belongs on the blob *pathname*, not just on the File name:
+  // the pathname is what the public URL is built from, and that URL is all a
+  // later reader has to go on. Stored without one, an uploaded GIF is
+  // indistinguishable by src from any other image, and the animated-GIF
+  // overlay (src/lib/gifOverlay.ts) skips it — so the GIF plays back frozen.
+  const ext = EXTENSIONS[contentType] ?? "png";
   const result = await upload(
-    `edited-images/${Date.now()}-${Math.random().toString(36).slice(2)}`,
+    `edited-images/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`,
     file,
     { access: "public", contentType, handleUploadUrl: "/api/upload-image" },
   );

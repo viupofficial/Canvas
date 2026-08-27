@@ -22,7 +22,7 @@
 // stack. That is right for stickers (which is what these are for) and wrong for
 // a GIF meant to sit under other artwork.
 
-import { isAnimatedGif, looksLikeGif } from "./animatedGif";
+import { isAnimatedGif, mayBeGif } from "./animatedGif";
 
 export type GifOverlay = {
   /** Re-scan the canvas for GIF objects. Call after a page load / bulk change. */
@@ -56,7 +56,7 @@ function isOverlayable(obj: any): boolean {
   if (obj.filters?.length) return false;
   if (obj.clipPath) return false;
   if (obj.cropX || obj.cropY) return false;
-  return looksLikeGif(srcOf(obj));
+  return mayBeGif(srcOf(obj));
 }
 
 function srcOf(obj: any): string {

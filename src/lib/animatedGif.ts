@@ -16,6 +16,11 @@
 // decompresses anything, so it costs a few dozen array reads regardless of how
 // large the GIF is, and it stops at the second frame it finds.
 
+/** "GIF" — the first three bytes of every GIF, and of nothing else we store. */
+function hasGifMagic(bytes: Uint8Array): boolean {
+  return bytes.length >= 3 && bytes[0] === 0x47 && bytes[1] === 0x49 && bytes[2] === 0x46;
+}
+
 /** Sub-blocks are a chain of [length byte][payload], ended by a zero length. */
 function skipSubBlocks(bytes: Uint8Array, start: number): number {
   let p = start;
@@ -43,8 +48,7 @@ export function countGifFrames(bytes: Uint8Array, stopAt = 2): number {
   // "GIF" + version. The logical screen descriptor that follows is 7 bytes,
   // and its packed field (offset 10) says whether a global colour table
   // follows the header's 13 bytes.
-  if (bytes.length < 14) return 0;
-  if (bytes[0] !== 0x47 || bytes[1] !== 0x49 || bytes[2] !== 0x46) return 0;
+  if (bytes.length < 14 || !hasGifMagic(bytes)) return 0;
 
   let p = 13 + colorTableBytes(bytes[10]);
   let frames = 0;
@@ -83,7 +87,7 @@ function base64ToBytes(base64: string): Uint8Array {
   return out;
 }
 
-/** Cheap string test — is this src worth probing at all? */
+/** Cheap string test — does this src say, by name or mime, that it is a GIF? */
 export function looksLikeGif(src: unknown): src is string {
   return (
     typeof src === "string" &&
@@ -91,38 +95,124 @@ export function looksLikeGif(src: unknown): src is string {
   );
 }
 
+/** The extension at the end of a URL's path, lowercased, or "" if it has none. */
+function extensionOf(url: string): string {
+  const path = url.split(/[?#]/)[0];
+  const dot = path.lastIndexOf(".");
+  return dot > path.lastIndexOf("/") ? path.slice(dot + 1).toLowerCase() : "";
+}
+
+/**
+ * Could this src be a GIF? Broader than looksLikeGif, and the test the overlay
+ * actually screens on.
+ *
+ * Blob uploads used to be stored under an extension-less pathname, so a GIF
+ * already sitting in someone's saved design is indistinguishable by name from
+ * the WebP next to it — screening on looksLikeGif alone leaves every one of
+ * those playing frozen forever. Those URLs go to the byte probe instead, which
+ * settles it from the file's own header.
+ *
+ * Anything that does name a format is taken at its word: a data: URL always
+ * declares its mime, and a .webp / .png / .jpg URL is not a GIF.
+ */
+export function mayBeGif(src: unknown): src is string {
+  if (typeof src !== "string") return false;
+  if (looksLikeGif(src)) return true;
+  return /^https?:\/\//i.test(src) && extensionOf(src) === "";
+}
+
 // One probe per distinct src, shared across every canvas on the page: the
 // player mounts one canvas per page and the same sticker often appears on
 // several of them.
 const probes = new Map<string, Promise<boolean>>();
+
+/** Runaway guard — nothing we serve is near this, and MAX_GIF_BYTES is 10MB. */
+const PROBE_BYTE_CAP = 12 * 1024 * 1024;
+
+function join(chunks: Uint8Array[], total: number): Uint8Array {
+  if (chunks.length === 1) return chunks[0];
+  const out = new Uint8Array(total);
+  let at = 0;
+  for (const chunk of chunks) {
+    out.set(chunk, at);
+    at += chunk.length;
+  }
+  return out;
+}
+
+/**
+ * The file's bytes, or null once its leading bytes prove it is not a GIF.
+ *
+ * Read as a stream rather than one arrayBuffer so that second case can drop
+ * the connection after the first chunk: every extension-less URL reaches here,
+ * most of them ordinary photos, and three bytes is enough to dismiss one — no
+ * reason to pull a whole WebP down to learn it isn't animated.
+ *
+ * Throws if the request itself fails, so the caller's name-based fallback
+ * decides rather than a network blip reading as "not a GIF".
+ */
+async function fetchIfGif(src: string): Promise<Uint8Array | null> {
+  const res = await fetch(src);
+  if (!res.ok) throw new Error(`fetch ${src} → ${res.status}`);
+  if (!res.body) {
+    const all = new Uint8Array(await res.arrayBuffer());
+    return hasGifMagic(all) ? all : null;
+  }
+
+  const reader = res.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  let checkedMagic = false;
+  try {
+    while (total < PROBE_BYTE_CAP) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      if (!value?.length) continue;
+      chunks.push(value);
+      total += value.length;
+      if (!checkedMagic && total >= 3) {
+        checkedMagic = true;
+        if (!hasGifMagic(join(chunks, total))) return null;
+      }
+    }
+  } finally {
+    // Nothing downstream cares whether the cancel lands, and an already-closed
+    // stream rejects it.
+    reader.cancel().catch(() => {});
+  }
+  return total ? join(chunks, total) : null;
+}
 
 /**
  * Whether `src` is a multi-frame GIF. Data URLs are decoded in place; remote
  * ones are fetched, which is a cache hit in practice because the <img> that
  * triggered the question has already downloaded the same bytes.
  *
- * Unreadable (CORS, offline, malformed) resolves to `true`: a GIF we can't
- * inspect is more likely animated than not, and guessing "animated" costs one
- * idle DOM node while guessing "static" would silently refuse to play it.
+ * A src we can't read at all (CORS, offline, malformed) falls back to what its
+ * name says. Something called .gif is more likely animated than not, and
+ * guessing "animated" costs one idle DOM node while guessing "static" would
+ * silently refuse to play it. An extension-less URL, on the other hand, gives
+ * no reason to think it is a GIF — assuming one there would hand an ordinary
+ * image to the overlay and quietly lift it above the rest of the design.
  */
 export function isAnimatedGif(src: string): Promise<boolean> {
   const cached = probes.get(src);
   if (cached) return cached;
 
   const probe = (async () => {
+    const unreadable = looksLikeGif(src);
     try {
       const comma = src.indexOf(",");
       if (src.startsWith("data:") && comma !== -1) {
         // Only base64 payloads are worth decoding — a URL-encoded GIF isn't a
         // thing any encoder produces.
-        if (!/;base64/i.test(src.slice(0, comma))) return true;
+        if (!/;base64/i.test(src.slice(0, comma))) return unreadable;
         return countGifFrames(base64ToBytes(src.slice(comma + 1))) > 1;
       }
-      const res = await fetch(src);
-      if (!res.ok) return true;
-      return countGifFrames(new Uint8Array(await res.arrayBuffer())) > 1;
+      const bytes = await fetchIfGif(src);
+      return bytes !== null && countGifFrames(bytes) > 1;
     } catch {
-      return true;
+      return unreadable;
     }
   })();
 
