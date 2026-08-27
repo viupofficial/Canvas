@@ -15,7 +15,7 @@ export const dynamic = "force-dynamic";
 // ownership is the access check, no is_admin role required.
 export default function EditorEventPage() {
   return (
-    <Suspense fallback={<LoadingState label="Loading your canvas…" />}>
+    <Suspense fallback={<LoadingState label="Loading your canvas…" variant="canvas" />}>
       <EventCanvasGuard mode="editor" />
     </Suspense>
   );

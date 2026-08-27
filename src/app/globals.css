@@ -2937,3 +2937,35 @@ img[alt="Mayaxasyraff"],
   height: 100%;
   align-items: center;
 }
+
+/* ── RSVP loading skeleton (see components/RsvpSkeleton.tsx) ────────────────
+   Named uniquely on purpose: this file already redefines `pulse` as a scale
+   animation, so Tailwind's `animate-pulse` does not fade here. */
+.rsvp-skeleton-breathe {
+  animation: rsvpSkeletonBreathe 1.9s ease-in-out infinite;
+}
+
+.rsvp-skeleton-sheen {
+  animation: rsvpSkeletonSheen 2.4s ease-in-out infinite;
+}
+
+@keyframes rsvpSkeletonBreathe {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+
+/* Rect is parked at y=-282; sweep it past the bottom of the 704-tall stage. */
+@keyframes rsvpSkeletonSheen {
+  0% { transform: translateY(0); }
+  100% { transform: translateY(986px); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .rsvp-skeleton-breathe,
+  .rsvp-skeleton-sheen {
+    animation: none;
+  }
+  .rsvp-skeleton-sheen {
+    display: none;
+  }
+}

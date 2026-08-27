@@ -12,7 +12,7 @@ export const dynamic = "force-dynamic";
 // Requires role 3 (designer) and verified event ownership via PHP.
 export default function DesignerEventPage() {
   return (
-    <Suspense fallback={<LoadingState label="Loading your canvas…" />}>
+    <Suspense fallback={<LoadingState label="Loading your canvas…" variant="canvas" />}>
       <EventCanvasGuard mode="designer-event" />
     </Suspense>
   );

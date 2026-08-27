@@ -39,6 +39,7 @@ import { optimizeAudioFile, validateAudioFile, formatBytes } from "@/src/lib/aud
 import { saveLocalPreview } from "@/src/lib/localPreview";
 import { extractEnvelope } from "@/src/lib/extract-envelope";
 import { eventBlobPath, eventSlug } from "@/src/lib/slug";
+import RsvpSkeleton from "@/src/components/RsvpSkeleton";
 import { getPackageRules } from "@/src/lib/packageRules";
 import { normalizePresentationMode, type PresentationMode } from "@/src/lib/presentationMode";
 import { upload } from "@vercel/blob/client";
@@ -456,6 +457,20 @@ const [currentPage, setCurrentPage] = useState(0);
   const bgFlatColorRef = useRef<string>('#ffffff');
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [isLoaded, setIsLoaded] = useState(false);
+  // isLoaded flips when fabric is constructed and listeners are wired, which
+  // happens BEFORE page 0's objects are enlivened (that runs in a setTimeout
+  // below). Waiting on it alone would uncover a blank white artboard, so the
+  // skeleton also waits for the first page to actually be on the canvas.
+  const [firstPagePainted, setFirstPagePainted] = useState(false);
+  // Kept mounted for one transition after the canvas is ready so the skeleton
+  // dissolves into the real artboard instead of popping out.
+  const [skeletonMounted, setSkeletonMounted] = useState(true);
+  const canvasReady = isLoaded && firstPagePainted;
+  useEffect(() => {
+    if (!canvasReady) return;
+    const t = setTimeout(() => setSkeletonMounted(false), 320);
+    return () => clearTimeout(t);
+  }, [canvasReady]);
   const [musicUrl, setMusicUrl] = useState<string | null>(props.initialMusicUrl ?? null);
   // Artboard → Continuous Scroll. Existing designs have nothing saved, so this
   // normalizes to "page" and they keep behaving exactly as before.
@@ -1925,6 +1940,7 @@ const [currentPage, setCurrentPage] = useState(0);
             // Seed baseline history for page 0 so the first undo has something to step back to.
             commitSnapshot();
             hasHydratedRef.current = true;
+            setFirstPagePainted(true);
           });
         }, 0);
 
@@ -4583,13 +4599,6 @@ const applyBgToOtherPages = (patch: { backgroundImage?: any; backgroundColor?: a
       {/* The dashed artboard frame is desktop-only: on a phone it sits well wide
           of the height-limited canvas, reading as a box around empty space. */}
       <div ref={containerRef} className="flex-grow border-0 pc:border pc:border-dashed border-[#282828] rounded overflow-hidden flex flex-col min-h-0 min-w-0">
-        {/* Only while loading — an always-mounted padded strip would steal height
-            from the canvas, which is scarce on a phone. */}
-        {!isLoaded && (
-          <div className="flex justify-center items-center p-4 bg-[#FBF7F6]">
-            <span className="text-neutral-200">Initializing canvas...</span>
-          </div>
-        )}
 
       {/* ── Workspace ────────────────────────────────────────────────────────
           Three nested boxes, each with one job:
@@ -4610,6 +4619,29 @@ const applyBgToOtherPages = (patch: { backgroundImage?: any; backgroundColor?: a
   onDragLeave={onDragLeave}
   onContextMenu={handleCanvasContextMenu}
 >
+        {/* Loading skeleton. Overlaid rather than a strip above the canvas: a
+            padded strip steals height from the artboard, which is scarce on a
+            phone. The skeleton's viewBox is CANVAS_REF_WIDTH x CANVAS_REF_HEIGHT,
+            so "meet" lands it exactly on the artboard footprint at zoom 1 and it
+            dissolves into the real invitation. z-40 clears the footer (z-30) and
+            stays under the context menu (z-50). */}
+        {skeletonMounted && (
+          <div
+            className={`absolute inset-0 z-40 bg-[#FBF7F6] transition-opacity duration-300 ${
+              canvasReady ? 'opacity-0' : 'opacity-100'
+            }`}
+            style={{
+              position: 'absolute',
+              inset: 0,
+              zIndex: 40,
+              background: '#FBF7F6',
+              pointerEvents: 'none',
+            }}
+            aria-hidden={canvasReady}
+          >
+            <RsvpSkeleton className="h-full w-full" />
+          </div>
+        )}
         <div
           ref={zoomViewportRef}
           className={`absolute inset-0 overscroll-contain ${

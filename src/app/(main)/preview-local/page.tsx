@@ -2,6 +2,8 @@
 
 import { useEffect, useState } from "react";
 import PreviewShell from "@/src/components/PreviewShell";
+import PhonePreviewFrame from "@/src/components/PhonePreviewFrame";
+import PreviewSkeleton from "@/src/components/PreviewSkeleton";
 import { extractEnvelope } from "@/src/lib/extract-envelope";
 import { loadLocalPreview } from "@/src/lib/localPreview";
 import "../../globals.css";
@@ -96,7 +98,17 @@ export default function PreviewLocalPage() {
     );
   }
 
-  if (!data) return null;
+  // Blank until the payload lands meant up to 3s of white page (20 polls x
+  // 150ms), which reads as a broken tab. Wrapped in the same PhonePreviewFrame
+  // PreviewShell uses, so the desktop phone frame is there from the first paint
+  // and nothing jumps when the real preview swaps in.
+  if (!data) {
+    return (
+      <PhonePreviewFrame>
+        <PreviewSkeleton />
+      </PhonePreviewFrame>
+    );
+  }
 
   return <PreviewShell data={data} />;
 }

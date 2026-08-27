@@ -205,7 +205,7 @@ export default function EventCanvasGuard({ mode }: { mode: EditorMode }) {
   }, [actorUserId, eventId, designIdParam, isEditor]);
 
   if (status === "loading") {
-    return <LoadingState label="Loading your canvas…" />;
+    return <LoadingState label="Loading your canvas…" variant="canvas" />;
   }
 
   if (status === "error" || !user || !event || !design || !access) {
