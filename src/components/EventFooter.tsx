@@ -8,7 +8,15 @@ import { buildGoogleCalendarLink } from "@/src/lib/calendar/googleCalendarLink"
 import EventMiniCalendar from "@/src/components/EventMiniCalendar"
 import type { CalendarExportInput } from "@/src/lib/calendar/normalizeEvent"
 import { submitCanvasRSVP, submitCanvasGuestbook, getCanvasGuestbook } from "@/src/lib/viupApi"
-import { packTypeOptions, rsvpTexts, type PackType } from "@/src/store/EventDataContext"
+import {
+  packTypeOptions,
+  guestSideOptions,
+  resolveMaxPax,
+  rsvpTexts,
+  type PackType,
+  type GuestSide,
+  type MaxPaxComboKey,
+} from "@/src/store/EventDataContext"
 import { cssBackground, type GradientDescriptor } from "@/src/lib/gradient"
 import { computeFooterNav } from "@/src/lib/footerNav"
 
@@ -61,6 +69,14 @@ export default function EventFooter({
     // Host-chosen category names. Blank/absent ⇒ Family / Friends.
     packTypeOption1?: string;
     packTypeOption2?: string;
+    // "Guest Side" (RSVP sidebar) — the step above Guest Category. Undefined ⇒
+    // OFF, so invitations published before it existed skip the step entirely.
+    guestSideEnabled?: boolean;
+    // Host-chosen side names. Blank/absent ⇒ Bride / Groom.
+    guestSideOption1?: string;
+    guestSideOption2?: string;
+    // Optional pax ceiling per side x category slot; absent ⇒ maxGuest applies.
+    maxPaxByCombo?: Partial<Record<MaxPaxComboKey, number>> | null;
     // Host-written wording for the RSVP card. Blank/absent ⇒ default wording.
     title?: string;
     question?: string;
@@ -117,6 +133,9 @@ export default function EventFooter({
   // Which category an accepting guest picked. Only ever set while accepting —
   // declining resets it to null so no pack_type is sent with a "Not Attending".
   const [packType, setPackType] = useState<PackType | null>(null);
+  // Which side an accepting guest picked, kept SEPARATE from packType — the two
+  // are never merged into one string. Declining resets it to null.
+  const [guestSide, setGuestSide] = useState<GuestSide | null>(null);
   // Which account's number was just copied (one copy button per slide).
   const [copiedIndex, setCopiedIndex] = useState<number | null>(null);
   // While a panel is fading out it stays mounted with the `is-closing` class so
@@ -162,6 +181,7 @@ export default function EventFooter({
       setActiveCard(null);
       setRsvpStatus(null);
       setPackType(null);
+      setGuestSide(null);
       // Forget which Info section was open so the next open starts fresh on
       // the Calendar/Location chooser instead of a stale section.
       setInfoTab(null);
@@ -228,30 +248,51 @@ export default function EventFooter({
   // Only the Info slot runs the choreography — a direct Calendar/Location
   // button has no star to fly up to, so the RSVP circle stays put for it.
   const infoActive = activeCard === "info" && nav.showInfoButton;
-  const maxPax = rsvpConfig?.maxGuest ?? 3;
   // RSVP toggle (from the RSVP sidebar). Undefined ⇒ ON for backward compat;
   // only an explicit `false` hides RSVP. Gated together with the package check.
   const rsvpEnabled = showRsvpAndMoneyGift && rsvpConfig?.enabled !== false;
   // "Guest Category" — opt-in, so only an explicit `true` asks the question.
   // Anything else (undefined on older invitations, or false) keeps the form as-is.
   const packTypeEnabled = rsvpConfig?.packTypeEnabled === true;
+  // "Guest Side" — opt-in on exactly the same terms, and read the same way, so
+  // an invitation published before Guest Side existed simply never sees it.
+  const guestSideEnabled = rsvpConfig?.guestSideEnabled === true;
   // The host's two category names (or Family / Friends when unset). The label
   // shown IS the value submitted as pack_type — no slugging or mapping.
   const packTypeChoices = packTypeOptions(rsvpConfig);
-  // Heading / question / pax note — the host's wording when they typed one, the
-  // original sentences otherwise. `{pax}` in the note is already substituted.
-  const rsvpText = rsvpTexts(rsvpConfig, maxPax);
+  // Likewise for the sides (Bride / Groom when unset) — submitted as guest_side.
+  const guestSideChoices = guestSideOptions(rsvpConfig);
   // A selection only counts while it still matches one of the configured
   // options. If the host renames a category mid-session the stale answer stops
   // being valid, which sends the guest back to the category card rather than
   // submitting a label that no longer exists.
   const selectedPackType = packTypeChoices.includes(packType as string) ? packType : null;
-  // The Guest Category card sits between "Accept" and the details form: an
-  // accepting guest sees it until they pick one, and the form only mounts once
-  // they have. Decliners skip it entirely. Derived rather than a separate step
-  // variable so there is one source of truth for where the flow is.
+  const selectedGuestSide = guestSideChoices.includes(guestSide as string) ? guestSide : null;
+  // The answers as grid positions, so the pax ceiling is looked up by slot and
+  // never by label (renaming a side keeps its configured limit).
+  const guestSideIndex =
+    guestSideEnabled && selectedGuestSide !== null ? guestSideChoices.indexOf(selectedGuestSide) : null;
+  const packTypeIndex =
+    packTypeEnabled && selectedPackType !== null ? packTypeChoices.indexOf(selectedPackType) : null;
+  // Per-combination ceiling when one is configured for the chosen slot; Max
+  // Guest Capacity otherwise — which is every case on older invitations.
+  const maxPax = resolveMaxPax(rsvpConfig, guestSideIndex, packTypeIndex);
+  // Heading / question / pax note — the host's wording when they typed one, the
+  // original sentences otherwise. `{pax}` in the note is already substituted.
+  const rsvpText = rsvpTexts(rsvpConfig, maxPax);
+  // The two selection cards sit between "Accept" and the details form, in flow
+  // order: Side first, then Category. An accepting guest sees each until they
+  // answer it, and the form only mounts once both are settled. Decliners skip
+  // both. Derived rather than separate step state so there is one source of
+  // truth for where the flow is.
+  const showGuestSideStep =
+    rsvpStatus === "accept" && guestSideEnabled && selectedGuestSide === null && !rsvpMessage;
   const showPackTypeStep =
-    rsvpStatus === "accept" && packTypeEnabled && selectedPackType === null && !rsvpMessage;
+    rsvpStatus === "accept" &&
+    packTypeEnabled &&
+    !showGuestSideStep &&
+    selectedPackType === null &&
+    !rsvpMessage;
     const formatDate = (dateStr: string) => {
   const date = new Date(dateStr);
 
@@ -482,7 +523,11 @@ const generateICS = (event: any, loc?: any) => {
                             paddingBottom: "10px",
                         }}
                     >
-                        {showPackTypeStep ? "Are you coming as?" : rsvpText.question}
+                        {showGuestSideStep
+                            ? "Are you a guest of?"
+                            : showPackTypeStep
+                            ? "Are you coming as?"
+                            : rsvpText.question}
                     </p>
 
                     {/* Step 1: Accept / Decline choice */}
@@ -501,8 +546,9 @@ const generateICS = (event: any, loc?: any) => {
                                 className="decline"
                                 style={{ fontFamily: "Montserrat", textAlign: "center", fontWeight: 700, fontSize: "16px" }}
                                 onClick={() => {
-                                    // Declining never carries a category.
+                                    // Declining never carries a side or a category.
                                     setPackType(null);
+                                    setGuestSide(null);
                                     setRsvpStatus("decline");
                                 }}
                             >
@@ -511,15 +557,37 @@ const generateICS = (event: any, loc?: any) => {
                         </div>
                     )}
 
-                    {/* Step 2: Guest Category — its own card between Accept and the
-                        details form. Picking one advances straight to the form, so
-                        an attendee can never reach the form without a category. */}
+                    {/* Step 2: Guest Side — the first card after Accept when the
+                        host turned it on. Answering it reveals the Guest Category
+                        card (or the form, when categories are off), so an attendee
+                        can never reach the form without a side. */}
+                    {showGuestSideStep && (
+                        <div className="rsvp-options">
+                            {guestSideChoices.map((label: GuestSide, i: number) => (
+                                <button
+                                    key={`${i}-${label}`}
+                                    type="button"
+                                    className={selectedGuestSide === label ? "selected" : undefined}
+                                    style={{ fontFamily: "Montserrat", textAlign: "center", fontWeight: 700, fontSize: "16px" }}
+                                    onClick={() => setGuestSide(label)}
+                                >
+                                    {label}
+                                </button>
+                            ))}
+                        </div>
+                    )}
+
+                    {/* Step 3: Guest Category — its own card between the side (or
+                        Accept, when sides are off) and the details form. Picking one
+                        advances straight to the form, so an attendee can never reach
+                        the form without a category. */}
                     {showPackTypeStep && (
                         <div className="rsvp-options">
                             {packTypeChoices.map((label: PackType, i: number) => (
                                 <button
                                     key={`${i}-${label}`}
                                     type="button"
+                                    className={selectedPackType === label ? "selected" : undefined}
                                     style={{ fontFamily: "Montserrat", textAlign: "center", fontWeight: 700, fontSize: "16px" }}
                                     onClick={() => setPackType(label)}
                                 >
@@ -554,9 +622,9 @@ const generateICS = (event: any, loc?: any) => {
                         </p>
                     )}
 
-                    {/* Step 3: the details form — after Decline, or after an
-                        attendee has answered the Guest Category card. */}
-                    {rsvpStatus !== null && !showPackTypeStep && !rsvpMessage && (
+                    {/* Step 4: the details form — after Decline, or once an
+                        attendee has answered every card the host turned on. */}
+                    {rsvpStatus !== null && !showGuestSideStep && !showPackTypeStep && !rsvpMessage && (
                         <form className="rsvp-form" style={{ display: "flex", marginTop: "0.5rem" }}
                             onSubmit={async (e) => {
                                 e.preventDefault();
@@ -573,6 +641,7 @@ const generateICS = (event: any, loc?: any) => {
                                 // form, so an attendee cannot reach Submit without a
                                 // category. Never post an empty one if that changes.
                                 if (rsvpStatus === "accept" && packTypeEnabled && !selectedPackType) return;
+                                if (rsvpStatus === "accept" && guestSideEnabled && !selectedGuestSide) return;
 
                                 setRsvpSubmitting(true);
                                 setRsvpMessage(null);
@@ -589,6 +658,11 @@ const generateICS = (event: any, loc?: any) => {
                                         // or the host left the question off, so those
                                         // RSVPs post exactly as they did before.
                                         packType: rsvpStatus === "accept" ? (selectedPackType ?? "") : "",
+                                        // Sent alongside pack_type, never merged into
+                                        // it: "Bride" + "Family", not "Bride Family".
+                                        // null when the guest declined or the host
+                                        // left Guest Side off.
+                                        guestSide: rsvpStatus === "accept" ? selectedGuestSide : null,
                                     });
                                     setRsvpMessage({ type: "success", text: "Thank you for your RSVP!" });
                                     setTimeout(() => {
@@ -609,6 +683,12 @@ const generateICS = (event: any, loc?: any) => {
                                 the published form carries pack_type the way status does. */}
                             {rsvpStatus === "accept" && packTypeEnabled && (
                                 <input type="hidden" name="pack_type" id="pack-type" value={selectedPackType ?? ""} />
+                            )}
+
+                            {/* Same mirroring for the side answer — a separate field,
+                                so guest_side and pack_type stay distinct values. */}
+                            {rsvpStatus === "accept" && guestSideEnabled && (
+                                <input type="hidden" name="guest_side" id="guest-side" value={selectedGuestSide ?? ""} />
                             )}
 
                             <div className="form-group">
@@ -648,9 +728,10 @@ const generateICS = (event: any, loc?: any) => {
                                     type="button"
                                     onClick={() => {
                                         // Back to Accept/Decline — start the next
-                                        // attempt with no category pre-selected.
+                                        // attempt with no side or category selected.
                                         setRsvpStatus(null);
                                         setPackType(null);
+                                        setGuestSide(null);
                                     }}
                                     disabled={rsvpSubmitting}
                                 >

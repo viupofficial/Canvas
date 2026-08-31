@@ -29,7 +29,7 @@ const GALLERY_STARTER_COUNT = Array.isArray((galleryPage as any)?.objects)
   : 0;
 import { countdownPage } from "@/src/components/template-list/timeBoxTemplate";
 import { guestbookPage } from "@/src/components/template-list/guestbookTemplate";
-import { useEventDataOptional } from "@/src/store/EventDataContext";
+import { useEventDataOptional, type MaxPaxComboKey } from "@/src/store/EventDataContext";
 import { useFabricEventSync } from "@/src/hooks/useFabricEventSync";
 import { FONT_GROUPS, loadGoogleFont, collectFontFamilies, preloadFonts } from "@/src/lib/fonts";
 import { downscaleImageFile } from "@/src/lib/imageDownscale";
@@ -754,6 +754,12 @@ const CanvasEditor = forwardRef<
       packTypeEnabled?: boolean;
       packTypeOption1?: string;
       packTypeOption2?: string;
+      // Guest Side — the step above Guest Category (undefined ⇒ off).
+      guestSideEnabled?: boolean;
+      guestSideOption1?: string;
+      guestSideOption2?: string;
+      // Optional per-combination pax ceilings (absent ⇒ maxGuest applies).
+      maxPaxByCombo?: Partial<Record<MaxPaxComboKey, number>> | null;
       // Host-written wording for the RSVP card (blank/absent ⇒ default wording).
       title?: string;
       question?: string;

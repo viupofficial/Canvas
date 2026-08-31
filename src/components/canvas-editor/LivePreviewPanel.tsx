@@ -1,6 +1,6 @@
 "use client";
 
-import { useEventDataOptional, giftAccounts, packTypeOptions, rsvpTexts, type CalendarData, type GiftData, type LocationData } from "@/src/store/EventDataContext";
+import { useEventDataOptional, giftAccounts, packTypeOptions, guestSideOptions, rsvpTexts, type CalendarData, type GiftData, type LocationData } from "@/src/store/EventDataContext";
 import { cssBackground, firstColorHex, type GradientDescriptor } from "@/src/lib/gradient";
 import GiftCarousel from "@/src/components/GiftCarousel";
 
@@ -196,6 +196,9 @@ function RSVPCard({
     packTypeEnabled?: boolean;
     packTypeOption1?: string;
     packTypeOption2?: string;
+    guestSideEnabled?: boolean;
+    guestSideOption1?: string;
+    guestSideOption2?: string;
     // Host-written wording for the RSVP card (blank/absent ⇒ default wording).
     title?: string;
     question?: string;
@@ -240,6 +243,31 @@ function RSVPCard({
           Decline
         </button>
       </div>
+      {/* Guest Side, previewed in flow order — it is the card an accepting guest
+          sees before the category one. Opt-in, so an unset/false flag leaves
+          this card exactly as it was. */}
+      {rsvpConfig?.guestSideEnabled === true && (
+        <>
+          <p
+            className="text-[11px] text-center italic mb-2"
+            style={{ color: textColor, opacity: textOpacity }}
+          >
+            Are you a guest of?
+          </p>
+          <div className="flex gap-2 mb-2">
+            {guestSideOptions(rsvpConfig).map((label) => (
+              <button
+                key={label}
+                className="flex-1 py-1 rounded text-[10px] font-bold border"
+                style={{ color: navColor, borderColor: navColor, opacity: navOpacity }}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+        </>
+      )}
+
       {/* Guest Category, previewed exactly as an accepting guest sees it. Opt-in,
           so an unset/false flag leaves this card as it was. */}
       {rsvpConfig?.packTypeEnabled === true && (

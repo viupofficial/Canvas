@@ -269,6 +269,7 @@ export async function submitCanvasRSVP({
   status,
   pax,
   packType = "",
+  guestSide = null,
 }: {
   userId: string | number;
   eventId: string | number;
@@ -277,6 +278,10 @@ export async function submitCanvasRSVP({
   status: string;
   pax: number;
   packType?: string;
+  /** Which side the guest belongs to ("Bride"), a level above the category
+   *  ("Family"). Its own field — the two are never merged into one string.
+   *  null when the guest declined or the invitation has Guest Side off. */
+  guestSide?: string | null;
 }): Promise<any> {
   return fetchJson(`${API_BASE}/submit_canvas_rsvp.php`, {
     method: "POST",
@@ -288,6 +293,9 @@ export async function submitCanvasRSVP({
       status,
       pax: Number(pax || 0),
       pack_type: packType || "",
+      // Kept separate from pack_type. null (not "") when there is no side to
+      // report, so a decline posts guest_side: null exactly as specified.
+      guest_side: String(guestSide ?? "").trim() || null,
       website: "",
     }),
   });

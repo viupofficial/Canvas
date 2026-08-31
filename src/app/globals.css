@@ -1339,11 +1339,17 @@ star-fly-in {
   display: flex;
   justify-content: center;
   gap: 2rem;
+  /* Custom Guest Side / Guest Category labels can be much longer than
+     Accept/Decline — let the pair wrap and shrink instead of pushing the card
+     wider than the invitation on a phone. */
+  flex-wrap: wrap;
 }
 
 
 .rsvp-options button {
   padding: 0.8rem 1.5rem;
+  max-width: 100%;
+  overflow-wrap: anywhere;
   border: 2px solid black;
   background: transparent;
   border-radius: 30px;

@@ -16,6 +16,7 @@ import { getPackageRules, readFeatureUsage, normalizeUsageCounter, type FeatureU
 import { PackageToastHost, showPackageToast } from "@/src/components/PackageLimitToast";
 import PaymentUpgradeModal from "@/src/components/PaymentUpgradeModal";
 import { publishAndSyncCanvas } from "@/src/lib/publishEvent";
+import { compactDesignJson } from "@/src/lib/compactDesignJson";
 
 const API_BASE = "https://vi-up.com/api";
 
@@ -43,12 +44,18 @@ type SaveStatus = "idle" | "unsaved" | "saving" | "saved";
 // localStorage via projectStorage.
 const draftStorageKey = (designId: number) => `viup_canvas_draft_${designId}`;
 
-// The whole design (every gallery photo lives inside it as a base64 data URL) is
-// POSTed to update_design.php as one JSON body. Shared PHP hosting typically caps
-// post_max_size at ~8MB and silently drops a body that exceeds it — the classic
-// "some photos didn't save". Warn well before that so the user can trim images
-// while the save can still succeed. Measured on the JSON string length (≈ bytes).
-const SAVE_SIZE_WARN_BYTES = 6 * 1024 * 1024;
+// The whole design is POSTed to update_design.php as one JSON body. Shared PHP
+// hosting caps post_max_size (~8MB is typical, and a WAF may cut in lower) and
+// drops an oversized body before any code runs — the error page carries no CORS
+// headers, so the browser reports the save as a bare "Failed to fetch" and the
+// design can never be saved again until it shrinks.
+//
+// compactDesignJson() below now keeps images out of the payload, so a design
+// should never approach that ceiling. This warning is the backstop for whatever
+// it could not hoist (an upload that failed, a wall of text objects), which is
+// why it sits well under the server limit. Measured on the JSON string length
+// (≈ bytes) AFTER compaction.
+const SAVE_SIZE_WARN_BYTES = 3 * 1024 * 1024;
 
 // MySQL timestamps ("YYYY-MM-DD HH:MM:SS") carry no timezone; this best-effort
 // parse treats them as local time. It only guards against stale drafts from old
@@ -414,6 +421,10 @@ function ProjectEditorInner({
   // Latches the oversized-payload warning so autosave (every ~2s) doesn't spam
   // the toast; re-arms once the design shrinks back under the threshold.
   const largeSaveWarnedRef = useRef(false);
+  // Whether the last local-draft write actually landed. A big design can blow the
+  // ~5MB localStorage quota — exactly the design that also fails to save — so the
+  // failure message must not promise a local copy that does not exist.
+  const localDraftOkRef = useRef(false);
 
   // `syncTitle` is only true for a manual Save: that's when we push the canvas
   // title back to events.event_name (the MyEvent card). Autosave never touches
@@ -448,21 +459,6 @@ function ProjectEditorInner({
         featureUsage,
       };
 
-      // Warn once when the design gets large enough that PHP may reject the save
-      // (dropping recently added photos). Re-arms if the user trims it back down.
-      const approxBytes = JSON.stringify(json_data).length;
-      if (approxBytes > SAVE_SIZE_WARN_BYTES) {
-        if (!largeSaveWarnedRef.current) {
-          largeSaveWarnedRef.current = true;
-          showPackageToast(
-            "This design is very large — some photos may not save. Try removing a few gallery images.",
-            "warn",
-          );
-        }
-      } else {
-        largeSaveWarnedRef.current = false;
-      }
-
       // Flush the title to PHP first (manual save only) so events.event_name +
       // designs.name are guaranteed in sync even if the debounced autosync hasn't
       // fired yet. Only when the title actually changed — and only with the full
@@ -488,13 +484,32 @@ function ProjectEditorInner({
           : Promise.resolve();
 
       return titleStep
-        .then(() =>
-          updateDesign({
+        // Move any oversized inline image out to Blob storage first. Without
+        // this a single page background can push the body past what the PHP
+        // host accepts, and the save fails as an uncatchable "Failed to fetch"
+        // on every retry, forever.
+        .then(() => compactDesignJson(json_data))
+        .then((payload) => {
+          // Warn once when the design is STILL large enough that PHP may reject
+          // the save. Re-arms if it comes back under the threshold.
+          const approxBytes = JSON.stringify(payload).length;
+          if (approxBytes > SAVE_SIZE_WARN_BYTES) {
+            if (!largeSaveWarnedRef.current) {
+              largeSaveWarnedRef.current = true;
+              showPackageToast(
+                "This design is very large — some photos may not save. Try removing a few gallery images.",
+                "warn",
+              );
+            }
+          } else {
+            largeSaveWarnedRef.current = false;
+          }
+          return updateDesign({
             user_id: num(userId),
             event_id: num(eventId),
             design_id: num(designId),
             name: cleanTitle || getCanvasName(event),
-            json_data,
+            json_data: payload,
             preview_url: thumbnail || null,
             status: "draft",
           }).catch((e) => {
@@ -505,8 +520,8 @@ function ProjectEditorInner({
                 ? "Title updated, but design save failed. Please save again."
                 : (e as Error)?.message || "Failed to save.",
             );
-          }),
-        )
+          });
+        })
         .then(() => {
           if (syncTitle) setEventName(cleanTitle);
           setSaveStatus("saved");
@@ -525,7 +540,11 @@ function ProjectEditorInner({
           // until the retry succeeds.
           setSaveStatus("unsaved");
           setSaveError(
-            `${(e as Error)?.message || "Failed to save."} Your changes are saved locally — retrying…`,
+            `${(e as Error)?.message || "Failed to save."} ${
+              localDraftOkRef.current
+                ? "Your changes are saved locally — retrying…"
+                : "Keep this tab open — retrying…"
+            }`,
           );
           return false;
         });
@@ -555,11 +574,19 @@ function ProjectEditorInner({
     }
 
     const json_data = { version: 1, eventData, canvas: { ...data, eventName } };
-    return fetch(`${API_BASE}/update_design.php`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ design_id: Number(projectId), user_id: user.id, json_data }),
-    })
+    // Same size ceiling as the event path — this hits the identical PHP endpoint.
+    return compactDesignJson(json_data)
+      .then((payload) =>
+        fetch(`${API_BASE}/update_design.php`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            design_id: Number(projectId),
+            user_id: user.id,
+            json_data: payload,
+          }),
+        }),
+      )
       .then((res) => res.json())
       .then(() => {
         setSaveStatus("saved");
@@ -606,8 +633,10 @@ function ProjectEditorInner({
           },
         }),
       );
+      localDraftOkRef.current = true;
     } catch {
       /* quota exceeded / private mode — the draft is best-effort */
+      localDraftOkRef.current = false;
     }
   }, [localDraftKey, eventData, eventName, featureUsage]);
   const saveLocalDraftRef = useRef(saveLocalDraft);

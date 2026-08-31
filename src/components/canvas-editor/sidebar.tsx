@@ -12,6 +12,14 @@ import {
   PACK_TYPE_MAX_LENGTH,
   PACK_TYPE_DEFAULT_OPTION_1,
   PACK_TYPE_DEFAULT_OPTION_2,
+  GUEST_SIDE_MAX_LENGTH,
+  GUEST_SIDE_DEFAULT_OPTION_1,
+  GUEST_SIDE_DEFAULT_OPTION_2,
+  guestSideOptions,
+  packTypeOptions,
+  maxPaxComboKey,
+  MIN_MAX_PAX,
+  type MaxPaxComboKey,
   RSVP_TEXT_MAX_LENGTH,
   RSVP_DEFAULT_TITLE,
   RSVP_DEFAULT_QUESTION,
@@ -1013,6 +1021,20 @@ function RSVPTab() {
   // placeholders show the fallback the invitation will actually use.
   const [packTypeOption1, setPackTypeOption1] = useState(current?.packTypeOption1 ?? '');
   const [packTypeOption2, setPackTypeOption2] = useState(current?.packTypeOption2 ?? '');
+  // Guest Side ("Are you a guest of? Bride / Groom") — the step ABOVE Guest
+  // Category. Opt-in like the category question, so it starts OFF unless the
+  // design explicitly saved it ON. See RSVPConfig.guestSideEnabled.
+  const [guestSideOn, setGuestSideOn] = useState(current?.guestSideEnabled === true);
+  // The two side names, same contract as the category names: blank means "use
+  // the default wording", and whatever is stored is what guests see AND what is
+  // submitted as guest_side.
+  const [guestSideOption1, setGuestSideOption1] = useState(current?.guestSideOption1 ?? '');
+  const [guestSideOption2, setGuestSideOption2] = useState(current?.guestSideOption2 ?? '');
+  // Optional pax ceiling per side x category slot. A slot left blank inherits
+  // Max Guest Capacity, so this stays entirely opt-in.
+  const [maxPaxByCombo, setMaxPaxByCombo] = useState<Partial<Record<MaxPaxComboKey, number>>>(
+    current?.maxPaxByCombo ?? {},
+  );
   // Card wording. Blank means "use the default sentence" — the placeholders show
   // exactly what guests read when the field is left empty, so clearing a box is
   // a safe way back to the original text. See rsvpTexts().
@@ -1041,6 +1063,39 @@ function RSVPTab() {
     const next = !packTypeOn;
     setPackTypeOn(next);
     pushField('packTypeEnabled', next);
+  };
+
+  const toggleGuestSide = () => {
+    const next = !guestSideOn;
+    setGuestSideOn(next);
+    pushField('guestSideEnabled', next);
+  };
+
+  // Same contract as changePackTypeOption — the stored value IS the submitted
+  // guest_side, so it is trimmed and capped here.
+  const changeGuestSideOption = (
+    field: 'guestSideOption1' | 'guestSideOption2',
+    value: string,
+    set: (v: string) => void,
+  ) => {
+    const next = value.slice(0, GUEST_SIDE_MAX_LENGTH);
+    set(next);
+    pushField(field, next.trim());
+  };
+
+  // One combination's pax ceiling. An empty box REMOVES the override rather
+  // than storing 0, so the slot falls back to Max Guest Capacity — the same
+  // path older designs (which have no overrides at all) take.
+  const changeMaxPaxCombo = (key: MaxPaxComboKey, raw: string) => {
+    const next: Partial<Record<MaxPaxComboKey, number>> = { ...maxPaxByCombo };
+    const n = Math.floor(Number(raw));
+    if (raw.trim() === '' || !Number.isFinite(n)) {
+      delete next[key];
+    } else {
+      next[key] = Math.max(MIN_MAX_PAX, n);
+    }
+    setMaxPaxByCombo(next);
+    pushField('maxPaxByCombo', next);
   };
 
   // Keep the raw text locally (so a trailing space can be typed mid-word) but
@@ -1129,6 +1184,12 @@ function RSVPTab() {
     pushField('circleColor', inv);
   };
 
+  // The labels as guests will actually read them — the host's wording, or the
+  // defaults when a box is blank. Read through the same helpers the invitation
+  // uses so the per-combination rows can never show wording the guest won't see.
+  const sideLabels = guestSideOptions({ guestSideOption1, guestSideOption2 });
+  const categoryLabels = packTypeOptions({ packTypeOption1, packTypeOption2 });
+
   const handleSave = () => {
     if (!maxGuest) {
       alert("Please enter max guest");
@@ -1144,6 +1205,10 @@ function RSVPTab() {
       packTypeEnabled: packTypeOn,
       packTypeOption1: packTypeOption1.trim(),
       packTypeOption2: packTypeOption2.trim(),
+      guestSideEnabled: guestSideOn,
+      guestSideOption1: guestSideOption1.trim(),
+      guestSideOption2: guestSideOption2.trim(),
+      maxPaxByCombo,
       title: rsvpTitle.trim(),
       question: rsvpQuestion.trim(),
       paxNote: rsvpPaxNote.trim(),
@@ -1193,6 +1258,63 @@ function RSVPTab() {
             className="mt-1 w-full px-3 py-2 border rounded-md text-sm"
           />
         </div>
+
+        {/* Guest Side — the step ABOVE Guest Category: which side of the
+            celebration the guest belongs to. Stored on the RSVP record's
+            guest_side, kept separate from pack_type. */}
+        <div className="flex items-center justify-between">
+          <label className="text-xs text-gray-500">Guest Side</label>
+          <button
+            type="button"
+            role="switch"
+            aria-checked={guestSideOn}
+            aria-label="Toggle Guest Side"
+            title={guestSideOn ? 'Disable Guest Side' : 'Enable Guest Side'}
+            onClick={toggleGuestSide}
+            className={`relative inline-flex h-5 w-9 shrink-0 items-center rounded-full transition-colors ${
+              guestSideOn ? 'bg-[#8C6B6B]' : 'bg-gray-300'
+            }`}
+          >
+            <span
+              className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${
+                guestSideOn ? 'translate-x-[18px]' : 'translate-x-[2px]'
+              }`}
+            />
+          </button>
+        </div>
+
+        {/* The two side names guests choose between. Whatever is typed here is
+            what the guest sees AND what is stored as the RSVP's guest_side. */}
+        {guestSideOn && (
+          <div className="flex flex-col gap-3 -mt-1">
+            <div>
+              <label className="text-xs text-gray-500">Side 1</label>
+              <input
+                type="text"
+                value={guestSideOption1}
+                maxLength={GUEST_SIDE_MAX_LENGTH}
+                onChange={(e) => changeGuestSideOption('guestSideOption1', e.target.value, setGuestSideOption1)}
+                placeholder={GUEST_SIDE_DEFAULT_OPTION_1}
+                className="mt-1 w-full px-3 py-2 border rounded-md text-sm"
+              />
+            </div>
+            <div>
+              <label className="text-xs text-gray-500">Side 2</label>
+              <input
+                type="text"
+                value={guestSideOption2}
+                maxLength={GUEST_SIDE_MAX_LENGTH}
+                onChange={(e) => changeGuestSideOption('guestSideOption2', e.target.value, setGuestSideOption2)}
+                placeholder={GUEST_SIDE_DEFAULT_OPTION_2}
+                className="mt-1 w-full px-3 py-2 border rounded-md text-sm"
+              />
+            </div>
+            <p className="text-[11px] text-gray-400 leading-snug">
+              Leave blank to use {GUEST_SIDE_DEFAULT_OPTION_1} and {GUEST_SIDE_DEFAULT_OPTION_2}. Max{' '}
+              {GUEST_SIDE_MAX_LENGTH} characters each.
+            </p>
+          </div>
+        )}
 
         {/* Guest Category — asks accepting guests whether they are Family or
             Friends. Stored on the RSVP record's pack_type, separately from pax. */}
@@ -1246,6 +1368,43 @@ function RSVPTab() {
             <p className="text-[11px] text-gray-400 leading-snug">
               Leave blank to use {PACK_TYPE_DEFAULT_OPTION_1} and {PACK_TYPE_DEFAULT_OPTION_2}. Max{' '}
               {PACK_TYPE_MAX_LENGTH} characters each.
+            </p>
+          </div>
+        )}
+
+        {/* Per-combination pax ceilings. Only meaningful once BOTH questions are
+            on — with one of them off there is no grid, and Max Guest Capacity
+            governs. Each box is optional: blank inherits Max Guest Capacity, so
+            turning the grid on changes nothing until a number is typed. */}
+        {guestSideOn && packTypeOn && (
+          <div className="flex flex-col gap-3">
+            <label className="text-xs text-gray-500">Max Pax per Combination</label>
+            <div className="grid grid-cols-2 gap-2">
+              {sideLabels.map((side, si) =>
+                categoryLabels.map((category, ci) => {
+                  const key = maxPaxComboKey(si, ci);
+                  if (!key) return null;
+                  return (
+                    <div key={key}>
+                      <span className="block text-[11px] text-gray-500 truncate" title={`${side} / ${category}`}>
+                        {side} / {category}
+                      </span>
+                      <input
+                        type="number"
+                        min={MIN_MAX_PAX}
+                        value={maxPaxByCombo[key] ?? ''}
+                        onChange={(e) => changeMaxPaxCombo(key, e.target.value)}
+                        placeholder={maxGuest === '' ? 'Max guests' : String(maxGuest)}
+                        className="mt-1 w-full px-3 py-2 border rounded-md text-sm"
+                      />
+                    </div>
+                  );
+                }),
+              )}
+            </div>
+            <p className="text-[11px] text-gray-400 leading-snug">
+              Leave a box blank to use Max Guest Capacity for that combination. Minimum{' '}
+              {MIN_MAX_PAX}.
             </p>
           </div>
         )}

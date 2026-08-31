@@ -1,9 +1,15 @@
 // Downscale + recompress uploaded images before they enter the Fabric canvas.
 //
-// Every uploaded image lives as a base64 data URL inside the canvas JSON, which
-// is kept in localStorage, snapshotted into undo history, and re-sent to
+// A small image lives as a base64 data URL inside the canvas JSON, which is kept
+// in localStorage, snapshotted into undo history, and re-sent to
 // update_design.php on every autosave — so raw phone photos must be shrunk at
 // the door. A 5MB JPEG typically comes out at ~150-300KB after this.
+//
+// Whatever is still too big afterwards (a full-bleed page background is the
+// usual one) does not go into the JSON at all: it is uploaded to Blob storage
+// and referenced by URL, because an oversized save body is dropped by the PHP
+// host without a CORS-visible response and the save can then never land. See
+// inlineImageBudget.ts for the budget and the failure it prevents.
 //
 // Uploads are standardised to WebP: one format for everything we store, and
 // 25-35% smaller than the equivalent JPEG (far more against a transparent PNG,
@@ -21,6 +27,7 @@
 // every autosave.
 
 import { uploadImageFile } from "./uploadEditedImage";
+import { hoistIfOversized } from "./inlineImageBudget";
 
 const MAX_DIMENSION = 1920; // longest edge in px — ample for on-screen invites
 // Matches the ceiling /api/upload-image issues tokens for, so an oversized GIF
@@ -113,9 +120,9 @@ function mayCarryAlpha(type: string): boolean {
 export async function downscaleImageFile(file: File): Promise<string> {
   const original = await fileToDataUrl(file);
 
-  // Rasterizing a vector loses the vector, and there is nothing to upload it
-  // for — an SVG is small enough to live in the JSON.
-  if (file.type === "image/svg+xml") return original;
+  // Rasterizing a vector loses the vector, so an SVG goes through untouched —
+  // but it still has to fit the inline budget like everything else.
+  if (file.type === "image/svg+xml") return hoistIfOversized(original);
 
   // Rasterizing a GIF would flatten it to one frame, so the file goes up whole.
   // A failed upload falls back to the data URL rather than losing the user's
@@ -144,7 +151,9 @@ export async function downscaleImageFile(file: File): Promise<string> {
     // Already in the target format and already small: re-encoding would only
     // cost a generation of quality. Without a WebP encoder there is no format
     // to convert to either, so the original pass-through rule still applies.
-    if (withinBudget && (webp ? file.type === "image/webp" : true)) return original;
+    if (withinBudget && (webp ? file.type === "image/webp" : true)) {
+      return hoistIfOversized(original);
+    }
 
     const canvas = document.createElement("canvas");
     canvas.width = Math.max(1, Math.round(img.width * scale));
@@ -161,7 +170,9 @@ export async function downscaleImageFile(file: File): Promise<string> {
       // No size comparison against the original here, unlike the fallback path:
       // a uniform format is the point, and WebP only loses that race on inputs
       // small enough for the difference not to matter.
-      return canvas.toDataURL("image/webp", alpha ? WEBP_ALPHA_QUALITY : WEBP_QUALITY);
+      return hoistIfOversized(
+        canvas.toDataURL("image/webp", alpha ? WEBP_ALPHA_QUALITY : WEBP_QUALITY),
+      );
     }
 
     const out =
@@ -170,9 +181,9 @@ export async function downscaleImageFile(file: File): Promise<string> {
         : canvas.toDataURL("image/jpeg", JPEG_QUALITY);
 
     // Recompression can backfire (e.g. an already-optimized small PNG).
-    return out.length < original.length ? out : original;
+    return hoistIfOversized(out.length < original.length ? out : original);
   } catch (e) {
     console.error("[imageDownscale] failed, using original", e);
-    return original;
+    return hoistIfOversized(original);
   }
 }

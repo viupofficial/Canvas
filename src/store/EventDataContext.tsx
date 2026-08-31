@@ -173,6 +173,80 @@ export function packTypeOptions(
   ];
 }
 
+/** Which side of the celebration a guest belongs to, stored on the RSVP
+ *  record's `guest_side` column. One level ABOVE the guest category: a guest
+ *  answers this first ("Bride"), then the category ("Family"). Free text, like
+ *  PackType — the host names the two sides and the chosen label is submitted
+ *  verbatim, never lowercased, slugged or mapped. */
+export type GuestSide = string;
+
+/** Longest guest-side label the PHP `guest_side` column accepts. */
+export const GUEST_SIDE_MAX_LENGTH = 100;
+
+/** Labels used when a design has Guest Side on but no custom names. */
+export const GUEST_SIDE_DEFAULT_OPTION_1 = "Bride";
+export const GUEST_SIDE_DEFAULT_OPTION_2 = "Groom";
+
+/** The two side labels to show, in order — the packTypeOptions() of Guest Side.
+ *  One reader for every surface (public footer, live preview panel, sidebar
+ *  placeholders), so a blank or missing custom name always falls back to the
+ *  default wording instead of rendering an empty button. Trimmed, since that is
+ *  exactly what gets submitted as guest_side. */
+export function guestSideOptions(
+  rsvp?: { guestSideOption1?: string; guestSideOption2?: string } | null,
+): [string, string] {
+  return [
+    rsvp?.guestSideOption1?.trim() || GUEST_SIDE_DEFAULT_OPTION_1,
+    rsvp?.guestSideOption2?.trim() || GUEST_SIDE_DEFAULT_OPTION_2,
+  ];
+}
+
+/** A slot in the Guest Side x Guest Category grid: `s{side}c{category}`, both
+ *  1-based. Keyed by POSITION, never by label, so renaming "Bride" to "Her
+ *  Side" keeps the limit that was configured for it. */
+export type MaxPaxComboKey = "s1c1" | "s1c2" | "s2c1" | "s2c2";
+
+/** The four combinations, in the order the sidebar lists them. */
+export const MAX_PAX_COMBO_KEYS: MaxPaxComboKey[] = ["s1c1", "s1c2", "s2c1", "s2c2"];
+
+/** The slot id for a (side, category) pair, both 0-based as rendered. */
+export function maxPaxComboKey(sideIndex: number, categoryIndex: number): MaxPaxComboKey | null {
+  if (sideIndex !== 0 && sideIndex !== 1) return null;
+  if (categoryIndex !== 0 && categoryIndex !== 1) return null;
+  return `s${sideIndex + 1}c${categoryIndex + 1}` as MaxPaxComboKey;
+}
+
+/** Smallest max-pax a host can configure — a combination that allows nobody is
+ *  not a limit, it is a disabled combination, which this feature does not have. */
+export const MIN_MAX_PAX = 1;
+
+/** The pax ceiling when nothing else is configured — the number every surface
+ *  already fell back to before per-combination limits existed. */
+export const DEFAULT_MAX_PAX = 3;
+
+/** How many pax the guest may pick, for the combination they chose.
+ *
+ *  Falls back to Max Guest Capacity whenever a per-combination limit does not
+ *  apply: either dimension turned off, an answer not yet given, or no override
+ *  saved for that slot. That fallback is what keeps every invitation saved
+ *  before this existed behaving exactly as it did — `maxPaxByCombo` is absent
+ *  there, so every combination resolves to maxGuest. */
+export function resolveMaxPax(
+  rsvp?:
+    | { maxGuest?: number; maxPaxByCombo?: Partial<Record<MaxPaxComboKey, number>> | null }
+    | null,
+  sideIndex?: number | null,
+  categoryIndex?: number | null,
+): number {
+  const base = Math.floor(Number(rsvp?.maxGuest));
+  const fallback = Number.isFinite(base) && base >= MIN_MAX_PAX ? base : DEFAULT_MAX_PAX;
+  if (sideIndex == null || categoryIndex == null) return fallback;
+  const key = maxPaxComboKey(sideIndex, categoryIndex);
+  if (!key) return fallback;
+  const override = Math.floor(Number(rsvp?.maxPaxByCombo?.[key]));
+  return Number.isFinite(override) && override >= MIN_MAX_PAX ? override : fallback;
+}
+
 /** Longest custom RSVP wording the sidebar accepts. Generous enough for a
  *  sentence in any language, short enough to keep the card from overflowing. */
 export const RSVP_TEXT_MAX_LENGTH = 160;
@@ -219,6 +293,20 @@ export type RSVPConfig = {
   // so those keep showing Family / Friends.
   packTypeOption1?: string;
   packTypeOption2?: string;
+  // Whether accepting guests are asked which side they belong to BEFORE the
+  // guest category ("Bride" then "Family"). Opt-in exactly like packTypeEnabled:
+  // OFF when undefined, so invitations saved before Guest Side existed keep the
+  // form they were published with. Read it as `=== true`, never `!== false`.
+  guestSideEnabled?: boolean;
+  // The two side names the host chose, submitted verbatim as guest_side and
+  // kept SEPARATE from pack_type ("Bride" + "Family", never "Bride Family").
+  // Absent on older designs — read through guestSideOptions() for the fallback.
+  guestSideOption1?: string;
+  guestSideOption2?: string;
+  // Optional per-combination pax ceilings, keyed by grid position (see
+  // MaxPaxComboKey). Absent or blank for a slot ⇒ that combination uses
+  // maxGuest, which is what every invitation saved before this existed does.
+  maxPaxByCombo?: Partial<Record<MaxPaxComboKey, number>> | null;
   // Host-written RSVP wording: the card heading, the question under it, and the
   // note beside the pax dropdown (where `{pax}` stands in for maxGuest). Blank
   // or absent ⇒ the default wording, so nothing changes for older designs —
