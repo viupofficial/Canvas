@@ -116,16 +116,26 @@ export type EditorHandle = {
   sendBack: () => void;
   getActiveObject: () => any | null;
   addShape: (shape: string) => void;
-  // Insert a prebuilt interactive element onto the current page.
+  // Add a prebuilt interactive element as its own new page, and switch to it.
+  // (Dragging one from the panel still drops it onto the current page.)
   addCountdown: () => void;
   addGuestbook: () => void;
   addText: (text?: string, opts?: Record<string, any>) => void;
   enterTextTool: () => void;
   exitTextTool: () => void;
-  // Vector-style line tool: press on the canvas to anchor the first point, drag
-  // to stretch the line, release to place it. Escape cancels.
-  enterLineTool: () => void;
-  exitLineTool: () => void;
+  // Vector pen tool: each click on the canvas drops an anchor and extends the
+  // path; a press-drag-release draws a single segment. Enter (or a double-click)
+  // finishes an open path, clicking the first anchor closes it, Escape cancels.
+  enterPenTool: () => void;
+  exitPenTool: () => void;
+  // True while the canvas has its own meaning for Escape — a draw tool is armed
+  // (cancel what I'm drawing) or a path is in point editing (leave that mode).
+  // Panels check this so they don't also close themselves on the same keypress.
+  ownsEscapeKey: () => boolean;
+  // Ellipse tool: press and drag on the canvas to draw an ellipse at the size
+  // the drag describes. Escape cancels.
+  enterEllipseTool: () => void;
+  exitEllipseTool: () => void;
   uploadImage: () => void;
   addImageFromUrl: (url: string) => void;
   addMusicFromUrl: (url: string) => void;
@@ -137,7 +147,11 @@ export type EditorHandle = {
   // read this to avoid publishing before the upload finishes (which would drop
   // the track from the published page and the saved design).
   isMusicUploading: () => boolean;
-  loadTemplate: (pages: any[]) => void;
+  // `templateId` is remembered so undo/redo can report which template (if any)
+  // the restored document belongs to. Pass null when switching one off.
+  loadTemplate: (pages: any[], templateId?: string | null) => void;
+  // Which template is currently applied, or null. Changes on undo/redo too.
+  getAppliedTemplateId: () => string | null;
   addGalleryPage: () => void;
   removeGalleryPage: () => void;
   hasGalleryPage: () => boolean;
@@ -214,6 +228,9 @@ export type EditorHandle = {
   ) => void;
 }
 const MAX_HISTORY = 50;
+// Document-level undo entries (template swaps). Each one holds every page's JSON,
+// so this stack is kept short on purpose.
+const MAX_DOC_HISTORY = 5;
 const HISTORY_DEBOUNCE_MS = 120;
 // Backstore dimensions of the canvas. The footer is designed against this width,
 // so we scale it by the same factor the canvas is CSS-scaled to fit its wrap.
@@ -226,13 +243,41 @@ const CANVAS_REF_HEIGHT = 704;
 // own setZoom() is deliberately never used for it — that scales objects inside
 // a fixed-size canvas and would leak into snapshots/exports. The backstore
 // stays CANVAS_REF_WIDTH × CANVAS_REF_HEIGHT and object data is untouched.
-const EDITOR_ZOOM_MIN = 0.5;   //  50%
-const EDITOR_ZOOM_MAX = 1.5;   // 150%
-const EDITOR_ZOOM_STEP = 0.1;  //  10% per click / wheel notch
-// 0.1 steps accumulate float dust (1.0999999…) — snap back onto the grid.
+const EDITOR_ZOOM_MIN = 0.1;   //  10% — 0% would be a zero-pixel artboard
+const EDITOR_ZOOM_MAX = 5;     // 500%
+// Steps are multiplicative, not a fixed 10 points: a flat step is far too
+// coarse down at 10% and far too slow climbing to 500%. Each click / wheel
+// notch multiplies or divides the current zoom by this factor instead, so a
+// step always feels the same size (~8 notches from 100% to either end).
+const EDITOR_ZOOM_FACTOR = 1.25;
+const stepEditorZoom = (v: number, dir: 1 | -1) =>
+  dir > 0 ? v * EDITOR_ZOOM_FACTOR : v / EDITOR_ZOOM_FACTOR;
+// Steps accumulate float dust (1.0999999…) — snap back onto a 1% grid.
 const clampEditorZoom = (v: number) =>
   Math.min(EDITOR_ZOOM_MAX, Math.max(EDITOR_ZOOM_MIN, Math.round(v * 100) / 100));
-type PageHistory = { undo: string[]; redo: string[] };
+// Slider position (0…1) <-> zoom, log-scaled: on a linear track spanning
+// 10%…500%, 100% would sit at a fifth of the way along and everything below it
+// would be crushed into a few pixels. Log spacing puts 100% mid-track and gives
+// the zoom-out half as much travel as the zoom-in half.
+const ZOOM_SLIDER_SPAN = Math.log(EDITOR_ZOOM_MAX / EDITOR_ZOOM_MIN);
+const zoomToSlider = (z: number) => Math.log(z / EDITOR_ZOOM_MIN) / ZOOM_SLIDER_SPAN;
+const sliderToZoom = (p: number) => EDITOR_ZOOM_MIN * Math.exp(p * ZOOM_SLIDER_SPAN);
+type PageHistory = {
+  undo: string[];
+  redo: string[];
+  // Monotonic stamp of this page's last edit — lets Undo find the most recently
+  // edited page when the active one has nothing left to step back over.
+  seq: number;
+};
+// A whole-document state. Applying a template (or switching one off) replaces
+// EVERY page at once, which no per-page stack can describe, so those swaps are
+// recorded as document snapshots instead.
+type DocSnapshot = {
+  pages: any[];
+  currentPage: number;
+  histories: Map<number, PageHistory>;
+  templateId: string | null;
+};
 // Anything not inlined as a data URL — Blob-hosted GIFs and edited images —
 // has to load with CORS, or the first canvas.toDataURL() (thumbnail, export)
 // throws on a tainted canvas.
@@ -270,6 +315,12 @@ const FABRIC_EXPORT_PROPS = [
   // Marks a "Counting Days" value box (day/hour/minute/second) so the ticker —
   // in both the editor and the published player — can find and update it.
   "countdownUnit",
+  // Parametric polygon/star geometry. A fabric Polygon only stores raw `points`,
+  // so these remember what those points MEAN — which lets the Inspector rebuild
+  // them when the user changes the point count or the star's inner ratio.
+  "shapeKind",
+  "pointCount",
+  "innerRatio",
   // Background-picture adjustment metadata, stashed on canvas.backgroundImage so
   // the Background panel can read back exactly what's applied to each page.
   "bgMeta",
@@ -301,6 +352,8 @@ export type LayerInfo = {
   locked: boolean;
   isImage: boolean;
   isEnvelope?: boolean;
+  // "polygon" | "star" for parametric shapes — `type` is "polygon" for both.
+  shapeKind?: string;
 };
 
 // A gradient arriving from the Inspector as plain JSON — either the compact
@@ -367,7 +420,7 @@ const friendlyType = (type?: string): string => {
     case "polyline":
       return "Polyline";
     case "path":
-      return "Shape";
+      return "Path";
     case "group":
       return "Group";
     default:
@@ -375,9 +428,296 @@ const friendlyType = (type?: string): string => {
   }
 };
 
+// ── Bezier path building ──────────────────────────────────────────────────
+// An anchor the pen has committed. `hx`/`hy` is the outgoing direction handle,
+// present only on a smooth anchor (one the user dragged out). The incoming
+// handle is its mirror through the anchor, which is what makes a dragged point
+// curve symmetrically the way Illustrator's pen does.
+type PenAnchor = { x: number; y: number; hx?: number; hy?: number };
+
+const penOutHandle = (a: PenAnchor) =>
+  a.hx === undefined || a.hy === undefined ? null : { x: a.hx, y: a.hy };
+const penInHandle = (a: PenAnchor) =>
+  a.hx === undefined || a.hy === undefined
+    ? null
+    : { x: 2 * a.x - a.hx, y: 2 * a.y - a.hy };
+
+/**
+ * Turn committed anchors into SVG path commands.
+ *
+ * A segment is a straight `L` when neither end carries a handle, and a cubic
+ * `C` as soon as either does — so one path can mix straight and curved
+ * segments, exactly like one drawn with the pen in Illustrator.
+ */
+const buildPenPathData = (anchors: PenAnchor[], closed: boolean): any[] => {
+  if (!anchors.length) return [];
+  const commands: any[] = [['M', anchors[0].x, anchors[0].y]];
+  const segment = (from: PenAnchor, to: PenAnchor) => {
+    const c1 = penOutHandle(from);
+    const c2 = penInHandle(to);
+    if (!c1 && !c2) return ['L', to.x, to.y];
+    const a = c1 ?? { x: from.x, y: from.y };
+    const b = c2 ?? { x: to.x, y: to.y };
+    return ['C', a.x, a.y, b.x, b.y, to.x, to.y];
+  };
+  for (let i = 1; i < anchors.length; i++) {
+    commands.push(segment(anchors[i - 1], anchors[i]));
+  }
+  if (closed && anchors.length > 2) {
+    commands.push(segment(anchors[anchors.length - 1], anchors[0]));
+    // Uppercase: fabric's path-control builder skips 'Z' by exact match, and a
+    // lowercase one would get an editing handle it cannot position.
+    commands.push(['Z']);
+  }
+  return commands;
+};
+
+// ── Direct-selection (anchor point) editing ───────────────────────────────
+// Illustrator/Photoshop keep two ways to touch a path: the selection tool gives
+// you a bounding box to move/scale/rotate the whole thing, and direct selection
+// gives you the anchor points themselves. Fabric only ships the first, so the
+// second is built here out of custom controls — one per point, replacing the
+// scale handles while the path is in point-edit mode.
+const isEditablePath = (o: any): boolean => {
+  if (!o) return false;
+  // Pen-drawn paths carry SVG commands and can hold curves; the shape palette's
+  // polygon/star and anything drawn before are point lists. Both are editable,
+  // through different fabric control builders.
+  if (o.type === "path") return Array.isArray(o.path) && o.path.length >= 2;
+  return (
+    (o.type === "polyline" || o.type === "polygon") &&
+    Array.isArray(o.points) &&
+    o.points.length >= 2
+  );
+};
+
+// A hollow square, the anchor marker both Adobe apps use.
+const renderPathAnchor = (
+  ctx: CanvasRenderingContext2D,
+  left: number,
+  top: number,
+) => {
+  const half = 4;
+  ctx.save();
+  ctx.lineWidth = 1.5;
+  ctx.fillStyle = "#ffffff";
+  ctx.strokeStyle = "#2563eb";
+  ctx.beginPath();
+  ctx.rect(left - half, top - half, half * 2, half * 2);
+  ctx.fill();
+  ctx.stroke();
+  ctx.restore();
+};
+
+/**
+ * One draggable control per point of a polyline/polygon.
+ *
+ * The point maths (scene → object space, and holding the path still while its
+ * bounding box is recomputed around the moved point) is fabric's own
+ * `createPolyControls`; layered on top are the Adobe-style anchor marker, the
+ * alt-click delete, and dropping the parametric metadata once a shape has been
+ * reshaped by hand.
+ *
+ * @param rebuild Called after a point is deleted, so the caller can regenerate
+ *                the control set — every index after the removed one shifts.
+ */
+const createPathAnchorControls = (
+  fabric: any,
+  obj: any,
+  rebuild: () => void,
+): Record<string, any> => {
+  const isPath = obj.type === "path";
+  // For a Path, fabric builds anchor controls AND the bezier handle controls,
+  // each drawing a dashed leader back to the anchor it belongs to — the
+  // direction lines Illustrator shows. Styling goes through its options rather
+  // than a custom `render`, which would paint over those leaders.
+  const controls: Record<string, any> = isPath
+    ? fabric.controlsUtils.createPathControls(obj, {
+        cursorStyle: "pointer",
+        pointStyle: { controlFill: "#ffffff", controlStroke: "#2563eb" },
+        controlPointStyle: {
+          controlFill: "#2563eb",
+          controlStroke: "#2563eb",
+          connectionDashArray: [3, 3],
+        },
+      })
+    : fabric.controlsUtils.createPolyControls(obj, {
+        cursorStyle: "pointer",
+        render: renderPathAnchor,
+      });
+
+  // Editing a point by hand makes the shape no longer describable by a point
+  // count — so the parametric metadata goes, and with it the Inspector's Count
+  // and Ratio controls, which would otherwise regenerate over the manual edit.
+  const dropParametricMeta = (target: any) => {
+    if (!target?.shapeKind) return;
+    target.shapeKind = undefined;
+    target.pointCount = undefined;
+    target.innerRatio = undefined;
+  };
+
+  // Alt-click removes an anchor, the Adobe "delete anchor point" gesture. What's
+  // left has to still be a shape: 2 points for an open path, 3 for a closed one.
+  const deleteAnchor = (target: any, control: any) => {
+    if (target.type === "path") {
+      const path = target.path;
+      const idx = control.commandIndex;
+      const drawn = path.filter((c: any) => c[0] !== "Z");
+      const closed = path.length !== drawn.length;
+      if (drawn.length <= (closed ? 3 : 2)) return false;
+      path.splice(idx, 1);
+      // Every command carries its own absolute endpoint, so dropping one just
+      // removes that vertex — except the opening 'M', whose successor has to be
+      // promoted to keep the path startable.
+      if (idx === 0 && path.length) {
+        const next = path[0];
+        path[0] = ["M", next[next.length - 2], next[next.length - 1]];
+      }
+      target._setPath(path, true);
+      return true;
+    }
+    if (!Array.isArray(target.points)) return false;
+    const min = target.type === "polygon" ? 3 : 2;
+    if (target.points.length <= min) return false;
+    target.points.splice(control.pointIndex, 1);
+    target.setDimensions();
+    return true;
+  };
+
+  Object.values(controls).forEach((control: any) => {
+    const move = control.actionHandler;
+    // A plain function, and `.call(this)`: fabric's path handlers read the
+    // command/point index off `this` (the control), so an arrow wrapper here
+    // would strip the binding and leave every handle drag throwing.
+    control.actionHandler = function (this: any, eventData: any, transform: any, x: number, y: number) {
+      const changed = move.call(this, eventData, transform, x, y);
+      if (changed) dropParametricMeta(transform?.target);
+      return changed;
+    };
+    // A bezier handle is not an anchor — alt-clicking one must not delete a point.
+    if (control.connectToCommandIndex !== undefined) return;
+    control.mouseUpHandler = (eventData: any, transform: any) => {
+      const target = transform?.target;
+      if (!eventData?.altKey || !target) return false;
+      if (!deleteAnchor(target, control)) return false;
+      dropParametricMeta(target);
+      // Rebuild the controls BEFORE setCoords: oCoords is derived from the
+      // control set and is what fabric walks on the next hover, so leaving a
+      // coordinate for the deleted anchor would send it looking up a control
+      // that no longer exists.
+      rebuild();
+      target.setCoords();
+      target.dirty = true;
+      target.canvas?.requestRenderAll();
+      return true;
+    };
+  });
+
+  return controls;
+};
+
+// ── Parametric polygon / star geometry ────────────────────────────────────
+// Fabric has no "polygon with N sides" primitive — a Polygon is just a bag of
+// points. These build that bag from a point count (and, for a star, the ratio
+// of the inner radius to the outer one), then normalise it to fill the target
+// box exactly, so changing the count reshapes the object without resizing it.
+const POLYGON_MIN_POINTS = 3;
+const POLYGON_MAX_POINTS = 30;
+const STAR_MIN_POINTS = 3;
+const STAR_MAX_POINTS = 30;
+// Percent of the outer radius. 38.2% is the golden-ratio star Figma defaults to.
+const STAR_DEFAULT_RATIO = 38.2;
+
+const clampPointCount = (n: any, kind: "polygon" | "star"): number => {
+  const min = kind === "star" ? STAR_MIN_POINTS : POLYGON_MIN_POINTS;
+  const max = kind === "star" ? STAR_MAX_POINTS : POLYGON_MAX_POINTS;
+  const v = Math.round(Number(n));
+  if (!Number.isFinite(v)) return min;
+  return Math.min(max, Math.max(min, v));
+};
+
+const clampInnerRatio = (r: any): number => {
+  const v = Number(r);
+  if (!Number.isFinite(v)) return STAR_DEFAULT_RATIO;
+  return Math.min(100, Math.max(1, v));
+};
+
+/**
+ * Vertices for a regular polygon (or star), scaled to fill a `width` × `height`
+ * box with its top-left at (0, 0). The first vertex points straight up, which
+ * is what makes a 3-point polygon read as an upright triangle.
+ *
+ * @param kind    "polygon" → one vertex per point; "star" → alternating
+ *                outer/inner vertices (2 × count in total).
+ * @param count   Number of points/corners.
+ * @param ratio   Star only: inner radius as a PERCENT of the outer radius.
+ */
+const buildShapePoints = (
+  kind: "polygon" | "star",
+  count: number,
+  width: number,
+  height: number,
+  ratio = STAR_DEFAULT_RATIO,
+): { x: number; y: number }[] => {
+  const n = clampPointCount(count, kind);
+  const inner = clampInnerRatio(ratio) / 100;
+  const step = Math.PI / n; // half-turn between an outer and an inner vertex
+  const raw: { x: number; y: number }[] = [];
+  const vertices = kind === "star" ? n * 2 : n;
+  for (let i = 0; i < vertices; i++) {
+    const angle = -Math.PI / 2 + i * (kind === "star" ? step : step * 2);
+    const r = kind === "star" && i % 2 === 1 ? inner : 1;
+    raw.push({ x: Math.cos(angle) * r, y: Math.sin(angle) * r });
+  }
+  // Normalise: a 3-point polygon is wider than it is tall, so stretching the raw
+  // unit-circle points onto the box keeps the shape's footprint stable.
+  const xs = raw.map((p) => p.x);
+  const ys = raw.map((p) => p.y);
+  const minX = Math.min(...xs), maxX = Math.max(...xs);
+  const minY = Math.min(...ys), maxY = Math.max(...ys);
+  const spanX = maxX - minX || 1;
+  const spanY = maxY - minY || 1;
+  return raw.map((p) => ({
+    x: ((p.x - minX) / spanX) * width,
+    y: ((p.y - minY) / spanY) * height,
+  }));
+};
+
+/**
+ * Rewrite a live polygon/star's points in place for a new count/ratio, keeping
+ * both its on-screen size and its centre put. Fabric only recomputes a
+ * Polyline's bounding box from its points when `exactBoundingBox` is on (it
+ * isn't, by default), so we drive `setBoundingBox` ourselves.
+ */
+const reshapeParametricPolygon = (
+  obj: any,
+  patch: { pointCount?: number; innerRatio?: number },
+): boolean => {
+  const kind = obj?.shapeKind;
+  if (kind !== "polygon" && kind !== "star") return false;
+  const count = clampPointCount(patch.pointCount ?? obj.pointCount, kind);
+  const ratio = clampInnerRatio(patch.innerRatio ?? obj.innerRatio);
+  // Target box = the CURRENT unscaled box, so scaleX/scaleY carry over untouched.
+  const width = Math.max(1, obj.width ?? 1);
+  const height = Math.max(1, obj.height ?? 1);
+  const center = obj.getCenterPoint?.();
+  obj.set({
+    points: buildShapePoints(kind, count, width, height, ratio),
+    pointCount: count,
+    ...(kind === "star" ? { innerRatio: ratio } : {}),
+  });
+  obj.setBoundingBox?.(false);
+  if (center) obj.setPositionByOrigin?.(center, "center", "center");
+  obj.setCoords?.();
+  obj.dirty = true;
+  return true;
+};
+
 // Base (un-numbered) label for a layer: explicit name → text snippet → type.
 const baseLayerLabel = (o: any): string => {
   if (o?.name && o.name !== "__border__") return String(o.name);
+  // A star is a Polygon under the hood — only `shapeKind` tells them apart.
+  if (o?.shapeKind === "star") return "Star";
   const t = (o?.type ?? "").toLowerCase();
   if ((t === "textbox" || t === "text" || t === "i-text") && o?.text) {
     const s = String(o.text).replace(/\s+/g, " ").trim();
@@ -443,6 +783,10 @@ const CanvasEditor = forwardRef<
   const [pages, setPages] = useState<any[]>(
     props.initialPages && props.initialPages.length ? props.initialPages : [envelopePage]
   );
+  // Mirror of `pages` readable synchronously (history code runs from callbacks
+  // and imperative-handle methods, where the state may not have committed yet).
+  const pagesRef = useRef<any[]>(pages);
+  pagesRef.current = pages;
 const [currentPage, setCurrentPage] = useState(0);
   const currentPageRef = useRef(0);
   const fabricModuleRef = useRef<any>(null);
@@ -496,6 +840,14 @@ const [currentPage, setCurrentPage] = useState(0);
   const [musicPlaying, setMusicPlaying] = useState(true);
   // Per-page history. Map<pageIndex, {undo, redo}>. Top of `undo` is always the CURRENT state.
   const historiesRef = useRef<Map<number, PageHistory>>(new Map());
+  // Document-level history, stepped over by Undo only once every page is back at
+  // its baseline — so undoing a template never discards edits made on top of it.
+  const docHistoryRef = useRef<{ undo: DocSnapshot[]; redo: DocSnapshot[] }>({ undo: [], redo: [] });
+  // Ticks on every committed snapshot; stamped onto the page that was edited.
+  const editSeqRef = useRef(0);
+  // Which template is currently applied (null ⇒ none). Owned here rather than by
+  // the Templates panel so undo/redo can put it back in step.
+  const appliedTemplateIdRef = useRef<string | null>(null);
   // True while we're programmatically loading canvas content — blocks event-driven snapshots.
   const isRestoringRef = useRef(false);
   // Pending debounce timer for coalesced snapshots during rapid edits (drag, resize, etc.).
@@ -577,12 +929,35 @@ const [currentPage, setCurrentPage] = useState(0);
   const textToolRef = useRef(false);
   const textToolStartRef = useRef<{ x: number; y: number } | null>(null);
   const textToolDraggedRef = useRef(false);
-  // Line tool (vector-style): press to anchor the first point, drag to stretch
-  // the line, release to place it. `lineDraftRef` holds the live fabric.Line
-  // being stretched during the drag.
-  const lineToolRef = useRef(false);
-  const lineToolStartRef = useRef<{ x: number; y: number } | null>(null);
-  const lineDraftRef = useRef<any>(null);
+  // Pen tool (vector): each click drops an anchor and extends the path, with the
+  // segment to the cursor previewing live. Click for a corner, click-and-drag to
+  // pull out a direction handle and curve the segment. Enter / Escape /
+  // double-click finish an open path; clicking back on the first anchor closes
+  // it. `penPointsRef` holds the committed anchors, `penDraftRef` the live Path.
+  const penToolRef = useRef(false);
+  const penPointsRef = useRef<PenAnchor[]>([]);
+  const penDraftRef = useRef<any>(null);
+  // Index of the anchor whose direction handle the current press is pulling, or
+  // null when the button is up. Dragging straight after placing an anchor is
+  // what turns it from a corner into a smooth (curved) one.
+  const penHandleDragRef = useRef<number | null>(null);
+  // Cursor position while a path is in progress — the anchor overlay paints the
+  // "close the path" ring from it, and it re-renders on every move anyway.
+  const penCursorRef = useRef<{ x: number; y: number } | null>(null);
+  // Set during canvas init. Lets the keydown handler (registered once, back when
+  // the canvas was built) finish the path Enter is meant to commit.
+  const penFinishRef = useRef<(closed: boolean) => void>(() => {});
+  // The path currently in point-edit (direct selection) mode, if any.
+  const pathEditRef = useRef<any>(null);
+  // Drives the contextual tip under the canvas: whether a path is merely
+  // selected (so point editing is available) or actually being point-edited.
+  const [pathEditState, setPathEditState] = useState<'none' | 'selectable' | 'editing' | 'drawing'>('none');
+  // Ellipse tool: press on the canvas to anchor one corner of the bounding box,
+  // drag to size the ellipse live, release to place it. `ellipseDraftRef` holds
+  // the fabric.Ellipse being sized during the drag.
+  const ellipseToolRef = useRef(false);
+  const ellipseToolStartRef = useRef<{ x: number; y: number } | null>(null);
+  const ellipseDraftRef = useRef<any>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
   const hasHydratedRef = useRef(false);
   // In-flight animation preview on the editor canvas. previewRestoreRef snaps the
@@ -673,7 +1048,7 @@ const [currentPage, setCurrentPage] = useState(0);
   // Lazily create history for a page so per-page undo/redo is fully independent.
   const getPageHistory = useCallback((index: number): PageHistory => {
     let h = historiesRef.current.get(index);
-    if (!h) { h = { undo: [], redo: [] }; historiesRef.current.set(index, h); }
+    if (!h) { h = { undo: [], redo: [], seq: 0 }; historiesRef.current.set(index, h); }
     return h;
   }, []);
 
@@ -688,6 +1063,7 @@ const [currentPage, setCurrentPage] = useState(0);
     if (h.undo[h.undo.length - 1] === snap) return;
     h.undo.push(snap);
     if (h.undo.length > MAX_HISTORY) h.undo.shift();
+    h.seq = ++editSeqRef.current;
     h.redo.length = 0; // any new action invalidates the redo branch
   }, [serializeCanvas, getPageHistory]);
 
@@ -804,23 +1180,36 @@ const [currentPage, setCurrentPage] = useState(0);
 
     try {
       switch (s) {
+        // "circle" is retired from the palette — the ellipse covers it — but old
+        // drag payloads / saved shortcuts may still ask for one.
         case 'circle':
-          obj = new fabric.Circle({ radius: 40, left: 100, top: 100, fill: '#F3F4F6' });
-          break;
         case 'ellipse':
           obj = new fabric.Ellipse({ rx: 50, ry: 30, left: 100, top: 100, fill: '#F3F4F6' });
           break;
         case 'line':
           obj = new fabric.Line([50, 50, 150, 150], { stroke: '#111827', strokeWidth: 3, left: 80, top: 80 });
           break;
+        // Polygon and star are parametric: the point count (and the star's inner
+        // ratio) live on the object so the Inspector can rebuild the points.
+        // A triangle is simply a 3-point polygon.
+        case 'triangle':
         case 'polygon':
-          obj = new fabric.Polygon([
-            { x: 0, y: 50 },
-            { x: 50, y: 0 },
-            { x: 100, y: 50 },
-            { x: 50, y: 100 },
-          ], { left: 80, top: 80, fill: '#E6E6FA' });
+        case 'star': {
+          const kind = s === 'star' ? 'star' : 'polygon';
+          const count = kind === 'star' ? 5 : 3;
+          obj = new fabric.Polygon(
+            buildShapePoints(kind, count, 100, 100, STAR_DEFAULT_RATIO),
+            {
+              left: 80,
+              top: 80,
+              fill: kind === 'star' ? '#E6E6FA' : '#F3F4F6',
+              shapeKind: kind,
+              pointCount: count,
+              ...(kind === 'star' ? { innerRatio: STAR_DEFAULT_RATIO } : {}),
+            },
+          );
           break;
+        }
         case 'polyline':
           obj = new fabric.Polyline([
             { x: 0, y: 40 },
@@ -831,9 +1220,6 @@ const [currentPage, setCurrentPage] = useState(0);
           break;
         case 'rect':
           obj = new fabric.Rect({ width: 120, height: 80, left: 80, top: 80, fill: '#F9FAFB' });
-          break;
-        case 'triangle':
-          obj = new fabric.Triangle({ width: 100, height: 80, left: 80, top: 80, fill: '#F3F4F6' });
           break;
         default:
           console.warn('Unknown shape:', shape);
@@ -1165,7 +1551,8 @@ const [currentPage, setCurrentPage] = useState(0);
     zoomOut,
     resetZoom,
     toggleFullscreen,
-    loadTemplate, // ✅ ADD THIS
+    loadTemplate,
+    getAppliedTemplateId: () => appliedTemplateIdRef.current,
     addGalleryPage,
     removeGalleryPage,
     hasGalleryPage,
@@ -1177,6 +1564,20 @@ const [currentPage, setCurrentPage] = useState(0);
       if (!canvas) return;
       const active = canvas.getActiveObject() as any;
       if (!active) return;
+
+      // Polygon/star point count and inner ratio aren't plain props — they have
+      // to be baked back into the object's `points`. Peel them off here so the
+      // generic set() below never writes a stale count without new geometry.
+      if ('pointCount' in props || 'innerRatio' in props) {
+        const { pointCount, innerRatio, ...rest } = props;
+        const reshaped = reshapeParametricPolygon(active, { pointCount, innerRatio });
+        props = rest;
+        if (reshaped) {
+          canvas.requestRenderAll();
+          pushSnapshot();
+        }
+        if (!Object.keys(props).length) return;
+      }
 
       // Revive plain gradient descriptors (from the Inspector's gradient picker
       // or a raw fill↔stroke swap) into live fabric Gradient instances.
@@ -1298,10 +1699,10 @@ const [currentPage, setCurrentPage] = useState(0);
       addShape(shape);
     },
     addCountdown: () => {
-      addElement('countdown');
+      addElementPage('countdown');
     },
     addGuestbook: () => {
-      addElement('guestbook');
+      addElementPage('guestbook');
     },
     addText: (text?: string, opts?: Record<string, any>) => {
       addText(text, opts);
@@ -1312,11 +1713,22 @@ const [currentPage, setCurrentPage] = useState(0);
     exitTextTool: () => {
       exitTextTool();
     },
-    enterLineTool: () => {
-      enterLineTool();
+    enterPenTool: () => {
+      enterPenTool();
     },
-    exitLineTool: () => {
-      exitLineTool();
+    exitPenTool: () => {
+      exitPenTool();
+    },
+    ownsEscapeKey: () =>
+      penToolRef.current ||
+      ellipseToolRef.current ||
+      textToolRef.current ||
+      !!pathEditRef.current,
+    enterEllipseTool: () => {
+      enterEllipseTool();
+    },
+    exitEllipseTool: () => {
+      exitEllipseTool();
     },
     uploadImage: () => {
       triggerImageUpload();
@@ -1602,6 +2014,7 @@ const [currentPage, setCurrentPage] = useState(0);
           locked: !!o.locked,
           isImage: o.type === "image",
           isEnvelope: isCurrentEnvelope && isEnvelopeObj(o),
+          shapeKind: o.shapeKind,
         };
       });
     },
@@ -1788,7 +2201,7 @@ const [currentPage, setCurrentPage] = useState(0);
       } else if (from > cur && to <= cur) {
         newCurrent = cur + 1;
       }
-      historiesRef.current.clear();
+      historiesRef.current = new Map();
       currentPageRef.current = newCurrent;
       setPages(updated);
       setCurrentPage(newCurrent);
@@ -2025,6 +2438,22 @@ const [currentPage, setCurrentPage] = useState(0);
         canvas.on("object:modified", onChange);
         canvas.on("object:removed", onChange);
 
+        // Point editing belongs to one object: it ends as soon as the selection
+        // moves elsewhere or is dropped (including when the path is deleted).
+        const syncPathEditToSelection = () => {
+          const active = canvas.getActiveObject();
+          if (pathEditRef.current && active !== pathEditRef.current.obj) exitPathEdit();
+          else if (!pathEditRef.current) {
+            setPathEditState(isEditablePath(active) && !active.locked ? 'selectable' : 'none');
+          }
+        };
+        canvas.on('selection:created', syncPathEditToSelection);
+        canvas.on('selection:updated', syncPathEditToSelection);
+        canvas.on('selection:cleared', syncPathEditToSelection);
+        canvas.on('object:removed', (e: any) => {
+          if (e?.target && e.target === pathEditRef.current?.obj) exitPathEdit();
+        });
+
         // selection change -> notify parent (if provided)
         const onSelectionChange = () => {
           const active = canvas.getActiveObject();
@@ -2065,6 +2494,16 @@ const [currentPage, setCurrentPage] = useState(0);
         canvas.on('object:scaling', () => { onSelectionChange(); updateOverlayFromActive(); });
         canvas.on('object:rotating', () => { onSelectionChange(); updateOverlayFromActive(); });
         canvas.on('object:modified', () => { onSelectionChange(); updateOverlayFromActive(); });
+
+        // Double-click a path: enter point editing, the way double-clicking a
+        // vector object in Figma (or reaching for Direct Selection in Adobe)
+        // swaps the transform box for the anchors themselves.
+        canvas.on('mouse:dblclick', (opt: any) => {
+          if (penToolRef.current) return; // the pen's own dblclick finishes a path
+          const obj = opt?.target;
+          if (!isEditablePath(obj) || obj === pathEditRef.current?.obj) return;
+          enterPathEdit(obj);
+        });
 
         // Double-click on a textbox: auto-fit the box width to the text content.
         canvas.on('mouse:dblclick', (opt: any) => {
@@ -2386,74 +2825,287 @@ const [currentPage, setCurrentPage] = useState(0);
           schedulePush();
         });
 
-        // Line tool — supports BOTH gestures:
-        //   • press, drag, release
-        //   • click, move (the line follows the cursor), click again to finish
-        // The first press anchors x1/y1 and adds a live draft; mouse:move
-        // stretches its x2/y2 whether or not the button is held, which is what
-        // makes the click-move-click flow work with the same handler.
-        const placeLineDraft = () => {
-          const draft = lineDraftRef.current;
+        // Pen tool (vector paths) — click to drop an anchor, and each further
+        // click extends the path with another segment; the segment to the cursor
+        // previews live in between. Enter, Escape or a double-click finishes an
+        // open path, and clicking back on the first anchor closes the shape.
+        // A press-drag-release still draws a plain two-point segment, so the
+        // quick "just give me a line" gesture survives.
+        const PEN_CLOSE_HIT = 10;  // scene px around the first anchor that closes
+        const PEN_DRAG_MIN = 4;    // travel that turns a press into a handle pull
+
+        const penDist = (a: { x: number; y: number }, b: { x: number; y: number }) =>
+          Math.hypot(a.x - b.x, a.y - b.y);
+
+        // True when the cursor is close enough to the first anchor to close the
+        // path — needs 3 anchors, since closing 2 just retraces the same segment.
+        const penCanClose = (p: { x: number; y: number }) => {
+          const pts = penPointsRef.current;
+          return pts.length >= 3 && penDist(p, pts[0]) <= PEN_CLOSE_HIT;
+        };
+
+        // Repaint the draft from the committed anchors plus (optionally) a
+        // provisional one under the cursor, so the segment being aimed shows its
+        // real shape — curved already if the anchor it leaves carries a handle.
+        const refreshPenDraft = (cursor?: { x: number; y: number } | null) => {
+          const draft = penDraftRef.current;
           if (!draft) return;
-          lineToolStartRef.current = null;
-          lineDraftRef.current = null;
-          draft.set({ selectable: true, evented: true, excludeFromExport: false });
+          const anchors = [...penPointsRef.current];
+          if (cursor) anchors.push({ x: cursor.x, y: cursor.y });
+          if (anchors.length === 1) anchors.push({ ...anchors[0] });
+          // adjustPosition keeps the drawn commands at the scene coordinates the
+          // user clicked instead of drifting as the path's box grows.
+          draft._setPath(buildPenPathData(anchors, false), true);
           draft.setCoords();
-          canvas.setActiveObject(draft);
-          exitLineTool();
+          draft.dirty = true;
+          canvas.requestRenderAll();
+        };
+
+        // Turn the committed anchors into a real Path. Straight runs stay `L`
+        // commands and curved ones become `C`, so the object is the same kind of
+        // thing either way and gets the same anchor+handle editing.
+        const placePenPath = (closed: boolean) => {
+          const fabric = fabricModuleRef.current;
+          const anchors = penPointsRef.current;
+          const draft = penDraftRef.current;
+          // Fewer than two anchors is a stray click, not a path — drop it.
+          if (!fabric || anchors.length < 2) { exitPenTool(); return; }
+          if (draft) canvas.remove(draft);
+          penDraftRef.current = null;
+          penPointsRef.current = [];
+          penCursorRef.current = null;
+          penHandleDragRef.current = null;
+          const path = new fabric.Path(buildPenPathData(anchors, closed), {
+            stroke: '#111827',
+            strokeWidth: 3,
+            strokeLineCap: 'round',
+            strokeLineJoin: 'round',
+            // Outline only. A closed path reads as a shape the moment the user
+            // gives it a fill in the Inspector; until then it's a drawn outline.
+            fill: '',
+          });
+          canvas.add(path);
+          canvas.setActiveObject(path);
+          exitPenTool();
           canvas.requestRenderAll();
           schedulePush();
           saveCurrentPage(currentPageRef.current);
         };
+        // Enter / Escape live on the keydown handler further down, which reaches
+        // the finisher through this ref (that handler is registered once, at init).
+        penFinishRef.current = placePenPath;
+
         canvas.on('mouse:down', (opt: any) => {
-          if (!lineToolRef.current) return;
+          if (!penToolRef.current) return;
           const fabric = fabricModuleRef.current;
           if (!fabric) return;
           const p = opt.scenePoint ?? getScenePoint(opt.e);
-          const start = lineToolStartRef.current;
 
-          // Second click of click-move-click → finish here (ignore a click
-          // that hasn't left the anchor yet, e.g. an accidental double-click).
-          if (lineDraftRef.current && start) {
-            if (Math.hypot(p.x - start.x, p.y - start.y) < 4) return;
-            lineDraftRef.current.set({ x2: p.x, y2: p.y });
-            placeLineDraft();
+          // Back on the first anchor → close the shape and finish.
+          if (penCanClose(p)) { placePenPath(true); return; }
+
+          const anchors = penPointsRef.current;
+          // Ignore a click that hasn't left the previous anchor, so the first
+          // half of a finishing double-click doesn't stack two anchors in a spot.
+          if (anchors.length && penDist(p, anchors[anchors.length - 1]) < PEN_DRAG_MIN) return;
+
+          anchors.push({ x: p.x, y: p.y });
+          // The press stays live: dragging from here pulls this anchor's
+          // direction handle out and curves the segments meeting at it.
+          penHandleDragRef.current = anchors.length - 1;
+          if (!penDraftRef.current) {
+            penDraftRef.current = new fabric.Path([['M', p.x, p.y], ['L', p.x, p.y]], {
+              stroke: '#111827',
+              strokeWidth: 3,
+              strokeLineCap: 'round',
+              strokeLineJoin: 'round',
+              fill: '',
+              selectable: false,
+              evented: false,
+              // Keep the in-progress draft out of history snapshots / page saves
+              // (object:added schedules both); the placed path replaces it.
+              excludeFromExport: true,
+            });
+            canvas.add(penDraftRef.current);
+          }
+          refreshPenDraft(p);
+        });
+
+        canvas.on('mouse:move', (opt: any) => {
+          if (!penToolRef.current || !penDraftRef.current) return;
+          const p = opt.scenePoint ?? getScenePoint(opt.e);
+          const dragging = penHandleDragRef.current;
+          const anchors = penPointsRef.current;
+
+          // Still holding the button on a just-placed anchor: the pointer is
+          // pulling its handle, not aiming the next point.
+          if (dragging !== null && anchors[dragging]) {
+            const a = anchors[dragging];
+            if (penDist(p, { x: a.x, y: a.y }) >= PEN_DRAG_MIN) {
+              a.hx = p.x;
+              a.hy = p.y;
+            } else {
+              // Pulled back onto the anchor — it's a corner again.
+              a.hx = undefined;
+              a.hy = undefined;
+            }
+            penCursorRef.current = { x: p.x, y: p.y };
+            refreshPenDraft(null);
             return;
           }
 
-          lineToolStartRef.current = { x: p.x, y: p.y };
-          const draft = new fabric.Line([p.x, p.y, p.x, p.y], {
-            stroke: '#111827',
-            strokeWidth: 3,
-            strokeLineCap: 'round',
+          // Snap the preview onto the first anchor when a click there would close
+          // the path, so the join is visible before committing to it.
+          const cursor = penCanClose(p) ? penPointsRef.current[0] : p;
+          penCursorRef.current = { x: p.x, y: p.y };
+          refreshPenDraft(cursor);
+        });
+
+        canvas.on('mouse:up', () => {
+          if (!penToolRef.current) return;
+          // Releasing ends a handle pull; the path keeps going until it's
+          // finished explicitly (Enter, double-click, or closing it).
+          penHandleDragRef.current = null;
+        });
+
+        // Double-click finishes an open path. The click that opened the pair
+        // already dropped its anchor, which is the endpoint the user is aiming at.
+        canvas.on('mouse:dblclick', () => {
+          if (!penToolRef.current || !penDraftRef.current) return;
+          placePenPath(false);
+        });
+
+        // Anchor overlay: squares on the committed points, the direction handles
+        // of any smooth anchor, and a ring on the first point once clicking it
+        // would close the path. Painted straight onto the canvas (like the smart
+        // guides) so no extra fabric objects enter the scene and none can be left
+        // behind if the tool is cancelled.
+        canvas.on('after:render', (opt: any) => {
+          if (!penToolRef.current) return;
+          const pts = penPointsRef.current;
+          if (!pts.length) return;
+          const ctx = (opt?.ctx ?? (canvas as any).contextContainer) as CanvasRenderingContext2D | undefined;
+          if (!ctx) return;
+          const vt = (canvas.viewportTransform as number[]) ?? [1, 0, 0, 1, 0, 0];
+          const sx = (x: number) => x * (vt[0] ?? 1) + (vt[4] ?? 0);
+          const sy = (y: number) => y * (vt[3] ?? 1) + (vt[5] ?? 0);
+          const closing = !!penCursorRef.current && penCanClose(penCursorRef.current);
+          ctx.save();
+
+          // Direction handles first, so the anchor squares sit on top of their lines.
+          ctx.strokeStyle = '#2563eb';
+          ctx.fillStyle = '#2563eb';
+          ctx.lineWidth = 1;
+          for (const a of pts) {
+            const out = penOutHandle(a);
+            const inn = penInHandle(a);
+            if (!out || !inn) continue;
+            const ax = Math.round(sx(a.x)) + 0.5;
+            const ay = Math.round(sy(a.y)) + 0.5;
+            for (const h of [out, inn]) {
+              const hx = Math.round(sx(h.x)) + 0.5;
+              const hy = Math.round(sy(h.y)) + 0.5;
+              ctx.beginPath();
+              ctx.moveTo(ax, ay);
+              ctx.lineTo(hx, hy);
+              ctx.stroke();
+              ctx.beginPath();
+              ctx.arc(hx, hy, 3, 0, Math.PI * 2);
+              ctx.fill();
+            }
+          }
+
+          for (let i = 0; i < pts.length; i++) {
+            const x = Math.round(sx(pts[i].x)) + 0.5;
+            const y = Math.round(sy(pts[i].y)) + 0.5;
+            ctx.fillStyle = '#ffffff';
+            ctx.strokeStyle = '#111827';
+            ctx.lineWidth = 1;
+            ctx.beginPath();
+            ctx.rect(x - 3, y - 3, 6, 6);
+            ctx.fill();
+            ctx.stroke();
+            if (i === 0 && closing) {
+              ctx.strokeStyle = '#2563eb';
+              ctx.lineWidth = 2;
+              ctx.beginPath();
+              ctx.arc(x, y, 6, 0, Math.PI * 2);
+              ctx.stroke();
+            }
+          }
+          ctx.restore();
+        });
+
+        // Ellipse tool — press anchors one corner of the bounding box, moving
+        // resizes the ellipse to fit the box the drag describes, releasing
+        // places it. A press with no drag falls back to a default-sized ellipse
+        // so a plain click still puts something on the page.
+        const ELLIPSE_MIN_DRAG = 4;
+        // Fit the draft into the box the drag describes. Objects here default to
+        // a CENTRE origin, so `left`/`top` are the centre — writing the box's
+        // corner into them would offset the ellipse by half its size. Position it
+        // through setPositionByOrigin instead, which is origin-agnostic.
+        const sizeEllipseDraft = (start: { x: number; y: number }, p: { x: number; y: number }, square: boolean) => {
+          const draft = ellipseDraftRef.current;
+          const fabric = fabricModuleRef.current;
+          if (!draft || !fabric) return;
+          let w = Math.abs(p.x - start.x);
+          let h = Math.abs(p.y - start.y);
+          // Shift constrains the drag to a circle, the usual vector-tool shortcut.
+          if (square) { w = h = Math.max(w, h); }
+          const cx = (p.x < start.x ? start.x - w : start.x) + w / 2;
+          const cy = (p.y < start.y ? start.y - h : start.y) + h / 2;
+          draft.set({ rx: w / 2, ry: h / 2 });
+          draft.setPositionByOrigin(new fabric.Point(cx, cy), 'center', 'center');
+          draft.setCoords();
+        };
+        canvas.on('mouse:down', (opt: any) => {
+          if (!ellipseToolRef.current) return;
+          const fabric = fabricModuleRef.current;
+          if (!fabric) return;
+          const p = opt.scenePoint ?? getScenePoint(opt.e);
+          ellipseToolStartRef.current = { x: p.x, y: p.y };
+          const draft = new fabric.Ellipse({
+            rx: 0,
+            ry: 0,
+            fill: '#F3F4F6',
             selectable: false,
             evented: false,
             // Keep the in-progress draft out of history snapshots / page saves
-            // (object:added schedules both); cleared when the line is placed.
+            // (object:added schedules both); cleared when the ellipse is placed.
             excludeFromExport: true,
           });
-          lineDraftRef.current = draft;
+          ellipseDraftRef.current = draft;
+          draft.setPositionByOrigin(new fabric.Point(p.x, p.y), 'center', 'center');
           canvas.add(draft);
           canvas.requestRenderAll();
         });
         canvas.on('mouse:move', (opt: any) => {
-          if (!lineToolRef.current || !lineDraftRef.current) return;
+          if (!ellipseToolRef.current || !ellipseDraftRef.current) return;
+          const start = ellipseToolStartRef.current;
+          if (!start) return;
           const p = opt.scenePoint ?? getScenePoint(opt.e);
-          // Setting x2/y2 re-derives the line's bounding box (fabric v7 Line._set),
-          // which is safe here because the draft carries no extra transforms yet.
-          lineDraftRef.current.set({ x2: p.x, y2: p.y });
-          lineDraftRef.current.setCoords();
+          sizeEllipseDraft(start, p, !!opt.e?.shiftKey);
           canvas.requestRenderAll();
         });
-        canvas.on('mouse:up', (opt: any) => {
-          if (!lineToolRef.current || !lineDraftRef.current || !lineToolStartRef.current) return;
-          const start = lineToolStartRef.current;
-          const p = opt.scenePoint ?? getScenePoint(opt.e);
-          // Released without dragging → the user is doing click-move-click:
-          // keep the draft following the cursor until the second click.
-          if (Math.hypot(p.x - start.x, p.y - start.y) < 4) return;
-          // Press-drag-release → the drag already stretched the draft; place it.
-          placeLineDraft();
+        canvas.on('mouse:up', () => {
+          if (!ellipseToolRef.current || !ellipseDraftRef.current) return;
+          const draft = ellipseDraftRef.current;
+          const start = ellipseToolStartRef.current;
+          // Click without a drag → place a sensible default rather than a
+          // zero-sized ellipse the user can't see or grab.
+          if (start && draft.rx < ELLIPSE_MIN_DRAG / 2 && draft.ry < ELLIPSE_MIN_DRAG / 2) {
+            sizeEllipseDraft(start, { x: start.x + 100, y: start.y + 60 }, false);
+          }
+          ellipseToolStartRef.current = null;
+          ellipseDraftRef.current = null;
+          draft.set({ selectable: true, evented: true, excludeFromExport: false });
+          draft.setCoords();
+          canvas.setActiveObject(draft);
+          exitEllipseTool();
+          canvas.requestRenderAll();
+          schedulePush();
+          saveCurrentPage(currentPageRef.current);
         });
 
         // Delete / Backspace key to remove the selected object; Ctrl+/- to zoom
@@ -2474,21 +3126,46 @@ const [currentPage, setCurrentPage] = useState(0);
             return;
           }
 
-          if (e.key === 'Escape' && lineToolRef.current) {
+          // Escape steps out of point editing, back to the normal transform box.
+          if (e.key === 'Escape' && pathEditRef.current) {
             e.preventDefault();
-            exitLineTool();
+            exitPathEdit();
+            return;
+          }
+
+          // Escape means "stop drawing", not "throw away what I've drawn" — the
+          // same as Illustrator and Figma, and the key people reach for first.
+          // Anything with two or more anchors is a real path and gets placed; a
+          // lone stray anchor has nothing worth keeping, so it's dropped. Undo
+          // removes a path that was finished by accident.
+          if (e.key === 'Escape' && penToolRef.current) {
+            e.preventDefault();
+            if (penPointsRef.current.length >= 2) penFinishRef.current(false);
+            else exitPenTool();
+            return;
+          }
+
+          if (e.key === 'Enter' && penToolRef.current) {
+            e.preventDefault();
+            penFinishRef.current(false);
+            return;
+          }
+
+          if (e.key === 'Escape' && ellipseToolRef.current) {
+            e.preventDefault();
+            exitEllipseTool();
             return;
           }
 
           if (e.ctrlKey && (e.key === '+' || e.key === '=')) {
             e.preventDefault();
-            applyZoomRef.current(zoomRef.current + EDITOR_ZOOM_STEP);
+            applyZoomRef.current(stepEditorZoom(zoomRef.current, 1));
             return;
           }
 
           if (e.ctrlKey && e.key === '-') {
             e.preventDefault();
-            applyZoomRef.current(zoomRef.current - EDITOR_ZOOM_STEP);
+            applyZoomRef.current(stepEditorZoom(zoomRef.current, -1));
             return;
           }
 
@@ -2689,8 +3366,7 @@ const [currentPage, setCurrentPage] = useState(0);
         const handleWheel = (e: WheelEvent) => {
           if (!e.ctrlKey) return;
           e.preventDefault();
-          const delta = e.deltaY > 0 ? -EDITOR_ZOOM_STEP : EDITOR_ZOOM_STEP;
-          applyZoomRef.current(zoomRef.current + delta);
+          applyZoomRef.current(stepEditorZoom(zoomRef.current, e.deltaY > 0 ? -1 : 1));
         };
         window.addEventListener('wheel', handleWheel, { passive: false });
         cleanupWheel = () => window.removeEventListener('wheel', handleWheel);
@@ -2748,27 +3424,122 @@ const [currentPage, setCurrentPage] = useState(0);
   // identically to event-driven ones and never duplicate history entries.
   function pushSnapshot() { schedulePush(); }
 
+  // ---------- Document-level history (template swaps) ----------
+  // Freeze the whole document: every page's JSON (the active one re-serialized
+  // from the live canvas), which page is showing, the per-page stacks, and the
+  // template that is on. Callers must flush/commit first so the active page's
+  // history top matches the JSON captured here.
+  function captureDocSnapshot(): DocSnapshot | null {
+    const canvas = fabricRef.current;
+    if (!canvas) return null;
+    const index = currentPageRef.current;
+    const live = serializeCanvas(canvas);
+    const snapshotPages = pagesRef.current.map((page, i) => (i === index ? live : page ?? null));
+    if (!snapshotPages.length) snapshotPages.push(live);
+    return {
+      pages: snapshotPages,
+      currentPage: index,
+      // Handed over wholesale - every caller that moves on from this document
+      // installs a NEW map rather than mutating this one (see loadTemplate).
+      histories: historiesRef.current,
+      templateId: appliedTemplateIdRef.current,
+    };
+  }
+
+  function restoreDocSnapshot(snap: DocSnapshot) {
+    const canvas = fabricRef.current;
+    if (!canvas) return;
+    const restored = snap.pages.length ? snap.pages : [null];
+    const index = Math.min(Math.max(snap.currentPage, 0), restored.length - 1);
+    pagesRef.current = restored;
+    currentPageRef.current = index;
+    historiesRef.current = snap.histories;
+    appliedTemplateIdRef.current = snap.templateId;
+    setPages(restored);
+    setCurrentPage(index);
+    // Defer the canvas load until React commits the page swap - same reasoning
+    // as goToPage, which would otherwise flash a blank artboard.
+    setTimeout(() => {
+      replaceCanvasContent(restored[index] ?? null, () => {
+        const h = getPageHistory(index);
+        if (h.undo.length === 0) commitSnapshot();
+        startCountdown(canvas);
+        fabricRef.current?.requestRenderAll();
+      });
+    }, 0);
+  }
+
+  // The most recently edited page OTHER than the active one that still has a
+  // step to undo. Undo jumps there rather than reaching past it into a document
+  // change, so a template is only removed once nothing is left riding on it.
+  function latestDirtyPage(): number | null {
+    let best: number | null = null;
+    let bestSeq = -1;
+    historiesRef.current.forEach((h, idx) => {
+      if (idx === currentPageRef.current) return;
+      if (idx >= pagesRef.current.length) return;
+      if (h.undo.length < 2) return; // baseline only - nothing to step back over
+      if (h.seq > bestSeq) { bestSeq = h.seq; best = idx; }
+    });
+    return best;
+  }
+
   function undo() {
     // Commit any in-flight edit first so undo always steps back from the latest state.
     flushPending();
     const h = getPageHistory(currentPageRef.current);
-    if (h.undo.length < 2) return; // need previous + current
-    const current = h.undo.pop()!;
-    h.redo.push(current);
-    const previous = h.undo[h.undo.length - 1];
-    replaceCanvasContent(previous);
+    if (h.undo.length >= 2) { // need previous + current
+      const current = h.undo.pop()!;
+      h.redo.push(current);
+      h.seq = ++editSeqRef.current;
+      const previous = h.undo[h.undo.length - 1];
+      replaceCanvasContent(previous);
+      return;
+    }
+    // Active page is back at its baseline. Anything still un-undone on another
+    // page goes first - switch to it so the user sees what is being reverted.
+    const dirty = latestDirtyPage();
+    if (dirty != null) { goToPage(dirty, () => undo()); return; }
+    // Whole document is at its baseline: step back over the last template swap.
+    const stack = docHistoryRef.current;
+    if (!stack.undo.length) return;
+    const before = stack.undo.pop()!;
+    commitSnapshot();
+    const current = captureDocSnapshot();
+    if (current) stack.redo.push(current);
+    restoreDocSnapshot(before);
   }
 
   function redo() {
     const h = getPageHistory(currentPageRef.current);
-    if (h.redo.length === 0) return;
-    const next = h.redo.pop()!;
-    h.undo.push(next);
-    replaceCanvasContent(next);
+    if (h.redo.length > 0) {
+      const next = h.redo.pop()!;
+      h.undo.push(next);
+      h.seq = ++editSeqRef.current;
+      replaceCanvasContent(next);
+      return;
+    }
+    // Nothing left on this page - re-apply the template swap undo stepped over.
+    // Its snapshot restores the page that was active then, so any per-page redo
+    // entries it carries become reachable again on the next press.
+    const stack = docHistoryRef.current;
+    if (!stack.redo.length) return;
+    const next = stack.redo.pop()!;
+    commitSnapshot();
+    const current = captureDocSnapshot();
+    if (current) stack.undo.push(current);
+    restoreDocSnapshot(next);
   }
 
-  function canUndo() { return getPageHistory(currentPageRef.current).undo.length >= 2; }
-  function canRedo() { return getPageHistory(currentPageRef.current).redo.length > 0; }
+  function canUndo() {
+    if (getPageHistory(currentPageRef.current).undo.length >= 2) return true;
+    if (latestDirtyPage() != null) return true;
+    return docHistoryRef.current.undo.length > 0;
+  }
+  function canRedo() {
+    if (getPageHistory(currentPageRef.current).redo.length > 0) return true;
+    return docHistoryRef.current.redo.length > 0;
+  }
 
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
@@ -2838,16 +3609,32 @@ const [currentPage, setCurrentPage] = useState(0);
   saveCurrentPage();
   }, []);
 
+  // The draw tools are mutually exclusive: picking one cancels whatever another
+  // had in flight, dropping any half-drawn draft still sitting on the canvas.
+  const cancelDrawTools = useCallback(() => {
+    const canvas = fabricRef.current;
+    setPathEditState('none');
+    textToolRef.current = false;
+    textToolStartRef.current = null;
+    textToolDraggedRef.current = false;
+    penToolRef.current = false;
+    penPointsRef.current = [];
+    penHandleDragRef.current = null;
+    penCursorRef.current = null;
+    ellipseToolRef.current = false;
+    ellipseToolStartRef.current = null;
+    for (const draftRef of [penDraftRef, ellipseDraftRef]) {
+      if (draftRef.current) {
+        canvas?.remove(draftRef.current);
+        draftRef.current = null;
+      }
+    }
+  }, []);
+
   const enterTextTool = useCallback(() => {
     const canvas = fabricRef.current;
     if (!canvas) return;
-    // The two draw tools are mutually exclusive — cancel any in-progress line.
-    lineToolRef.current = false;
-    lineToolStartRef.current = null;
-    if (lineDraftRef.current) {
-      canvas.remove(lineDraftRef.current);
-      lineDraftRef.current = null;
-    }
+    cancelDrawTools();
     textToolRef.current = true;
     textToolStartRef.current = null;
     textToolDraggedRef.current = false;
@@ -2870,15 +3657,92 @@ const [currentPage, setCurrentPage] = useState(0);
     canvas.requestRenderAll();
   }, []);
 
-  // Line tool — same enter/exit pattern as the text tool (crosshair cursor,
-  // marquee selection off so the press-drag draws instead of rubber-banding).
-  const exitLineTool = useCallback(() => {
+  // Pen tool — same enter/exit pattern as the text tool (crosshair cursor,
+  // marquee selection off so a press-drag draws instead of rubber-banding).
+  const exitPenTool = useCallback(() => {
     const canvas = fabricRef.current;
-    lineToolRef.current = false;
-    lineToolStartRef.current = null;
+    penToolRef.current = false;
+    penPointsRef.current = [];
+    penHandleDragRef.current = null;
+    penCursorRef.current = null;
+    // A draft still on the canvas means the tool was cancelled part-drawn.
+    if (canvas && penDraftRef.current) canvas.remove(penDraftRef.current);
+    penDraftRef.current = null;
+    if (!canvas) return;
+    // Placing a path selects it, so read the hint back off the selection
+    // instead of blanking it — otherwise finishing a path clears its own tip.
+    const placed = canvas.getActiveObject() as any;
+    setPathEditState(isEditablePath(placed) && !placed?.locked ? 'selectable' : 'none');
+    canvas.defaultCursor = 'default';
+    canvas.hoverCursor = 'move';
+    canvas.selection = true;
+    canvas.requestRenderAll();
+  }, []);
+
+  // ── Point-edit (direct selection) mode ────────────────────────────────────
+  // Swap the path's scale/rotate handles for one draggable anchor per point and
+  // drop the bounding box, so the object reads as a vector path being edited
+  // rather than a picture in a frame. Exiting restores the prototype's controls
+  // (the app's custom rotate handles included), since the instance-level
+  // `controls` we set here simply shadows them.
+  const exitPathEdit = useCallback(() => {
+    const entry = pathEditRef.current;
+    pathEditRef.current = null;
+    setPathEditState(entry ? 'selectable' : 'none');
+    if (!entry) return;
+    const { obj, controls } = entry;
+    // Hand back the exact control set the object had — fabric builds those per
+    // instance, so deleting ours would leave the path with no handles at all
+    // rather than falling back to the prototype's.
+    obj.controls = controls;
+    obj.hasBorders = true;
+    obj.setCoords?.();
+    fabricRef.current?.requestRenderAll();
+  }, []);
+
+  const enterPathEdit = useCallback((obj: any) => {
+    const canvas = fabricRef.current;
+    const fabric = fabricModuleRef.current;
+    if (!canvas || !fabric || !isEditablePath(obj) || obj.locked) return;
+    if (pathEditRef.current && pathEditRef.current.obj !== obj) exitPathEdit();
+    const previousControls = obj.controls;
+    // The control set is rebuilt from scratch after a delete, because removing a
+    // point renumbers every anchor that followed it.
+    const build = () => {
+      obj.controls = createPathAnchorControls(fabric, obj, build);
+      canvas.requestRenderAll();
+    };
+    build();
+    obj.hasBorders = false;
+    obj.setCoords();
+    pathEditRef.current = { obj, controls: previousControls };
+    setPathEditState('editing');
+    canvas.setActiveObject(obj);
+    canvas.requestRenderAll();
+  }, [exitPathEdit]);
+
+  const enterPenTool = useCallback(() => {
+    const canvas = fabricRef.current;
+    if (!canvas) return;
+    cancelDrawTools();
+    penToolRef.current = true;
+    setPathEditState('drawing');
+    canvas.defaultCursor = 'crosshair';
+    canvas.hoverCursor = 'crosshair';
+    canvas.selection = false;
+    canvas.discardActiveObject();
+    canvas.requestRenderAll();
+  }, []);
+
+  // Ellipse tool — press-drag-release draws an ellipse inside the dragged box,
+  // so the shape lands at the size the user asked for instead of a fixed default.
+  const exitEllipseTool = useCallback(() => {
+    const canvas = fabricRef.current;
+    ellipseToolRef.current = false;
+    ellipseToolStartRef.current = null;
     // A draft still on the canvas means the tool was cancelled mid-drag.
-    if (canvas && lineDraftRef.current) canvas.remove(lineDraftRef.current);
-    lineDraftRef.current = null;
+    if (canvas && ellipseDraftRef.current) canvas.remove(ellipseDraftRef.current);
+    ellipseDraftRef.current = null;
     if (!canvas) return;
     canvas.defaultCursor = 'default';
     canvas.hoverCursor = 'move';
@@ -2886,16 +3750,11 @@ const [currentPage, setCurrentPage] = useState(0);
     canvas.requestRenderAll();
   }, []);
 
-  const enterLineTool = useCallback(() => {
+  const enterEllipseTool = useCallback(() => {
     const canvas = fabricRef.current;
     if (!canvas) return;
-    // The two draw tools are mutually exclusive.
-    textToolRef.current = false;
-    textToolStartRef.current = null;
-    textToolDraggedRef.current = false;
-    lineToolRef.current = true;
-    lineToolStartRef.current = null;
-    lineDraftRef.current = null;
+    cancelDrawTools();
+    ellipseToolRef.current = true;
     canvas.defaultCursor = 'crosshair';
     canvas.hoverCursor = 'crosshair';
     canvas.selection = false;
@@ -3801,8 +4660,10 @@ const [currentPage, setCurrentPage] = useState(0);
       currentPageRef.current = index;
       setCurrentPage(index);
       const pageData = data.pages?.[index] ?? null;
-      // A load is a hard reset — previous per-page history no longer matches the new pages.
-      historiesRef.current.clear();
+      // A load is a hard reset - previous history no longer matches the new pages.
+      historiesRef.current = new Map();
+      docHistoryRef.current = { undo: [], redo: [] };
+      appliedTemplateIdRef.current = null;
       replaceCanvasContent(pageData, () => { commitSnapshot(); });
       if (data.musicUrl) setMusicUrl(data.musicUrl);
     } catch (e) {
@@ -3847,16 +4708,18 @@ const applyBgToOtherPages = (patch: { backgroundImage?: any; backgroundColor?: a
       if (h.undo.length === 0) commitSnapshot();
     });
   };
-  const goToPage = (index: number) => {
+  // `onLoaded` fires once the target page is actually on the canvas - undo uses
+  // it to continue on a page it had to switch to first.
+  const goToPage = (index: number, onLoaded?: () => void) => {
     const canvas = fabricRef.current;
     if (!canvas) return;
-    if (index < 0 || index >= pages.length) return;
-    if (index === currentPage) return;
+    if (index < 0 || index >= pagesRef.current.length) return;
+    if (index === currentPageRef.current) { onLoaded?.(); return; }
     // Capture any in-flight edit on the outgoing page so its history reflects the latest state.
     flushPending();
-    const prevIndex = currentPage;
+    const prevIndex = currentPageRef.current;
     const currentJSON = serializeCanvas(canvas);
-    const nextPageData = pages[index] ?? null;
+    const nextPageData = pagesRef.current[index] ?? null;
     // Flip the current-page ref before loading so event listeners attribute the seed
     // snapshot to the target page, not the outgoing one.
     currentPageRef.current = index;
@@ -3874,6 +4737,7 @@ const applyBgToOtherPages = (patch: { backgroundImage?: any; backgroundColor?: a
         const h = getPageHistory(index);
         if (h.undo.length === 0) commitSnapshot();
         fabricRef.current?.requestRenderAll();
+        onLoaded?.();
       });
     }, 0);
   };
@@ -3896,6 +4760,37 @@ const applyBgToOtherPages = (patch: { backgroundImage?: any; backgroundColor?: a
     replaceCanvasContent(seed, () => {
       const h = getPageHistory(newIndex);
       if (h.undo.length === 0) commitSnapshot();
+    });
+    setCurrentPage(newIndex);
+  };
+
+  // Append a prebuilt interactive element (Counting Days / Guestbook) as its OWN
+  // page and switch to it — same shape as addGalleryPage. Both are full-page
+  // designs, so clicking one in the Elements panel gives it a page rather than
+  // stacking it on top of whatever is already there; dragging one onto the canvas
+  // still drops it where it lands on the current page (see addElement).
+  const addElementPage = (kind: 'countdown' | 'guestbook') => {
+    const canvas = fabricRef.current;
+    if (!canvas) return;
+    flushPending();
+    // Deep-clone so the shared module export is never mutated by the editor.
+    const pageJSON = JSON.parse(JSON.stringify(kind === 'countdown' ? countdownPage : guestbookPage));
+    const prevIndex = currentPageRef.current;
+    const currentJSON = serializeCanvas(canvas);
+    const newIndex = pagesRef.current.length; // append semantics, as in addPage
+    currentPageRef.current = newIndex;
+    setPages(prev => {
+      const updated = [...prev];
+      updated[prevIndex] = currentJSON;
+      updated.push(pageJSON);
+      return updated;
+    });
+    replaceCanvasContent(pageJSON, () => {
+      const h = getPageHistory(newIndex);
+      if (h.undo.length === 0) commitSnapshot();
+      // The countdown boxes only start ticking once they're on the canvas.
+      if (kind === 'countdown') startCountdown(canvas);
+      fabricRef.current?.requestRenderAll();
     });
     setCurrentPage(newIndex);
   };
@@ -4197,7 +5092,7 @@ const applyBgToOtherPages = (patch: { backgroundImage?: any; backgroundColor?: a
   }, [pages.length, currentPage]);
 
   //template function start
-  const loadTemplate = (templatePages: any[]) => {
+  const loadTemplate = (templatePages: any[], templateId?: string | null) => {
     const canvas = fabricRef.current;
     if (!canvas) return;
 
@@ -4224,11 +5119,27 @@ const applyBgToOtherPages = (patch: { backgroundImage?: any; backgroundColor?: a
       return;
     }
 
+    // Record the document as it stands so Undo can step back out of the template.
+    // Commit first so the snapshot carries the edit currently on the canvas.
+    flushPending();
+    commitSnapshot();
+    const before = captureDocSnapshot();
+    if (before) {
+      const stack = docHistoryRef.current;
+      stack.undo.push(before);
+      if (stack.undo.length > MAX_DOC_HISTORY) stack.undo.shift();
+      stack.redo.length = 0; // applying a template invalidates the redo branch
+    }
+
     setPages(normalizedPages);
+    pagesRef.current = normalizedPages;
     currentPageRef.current = 0;
     setCurrentPage(0);
-    // Loading a template replaces all pages — drop previous per-page histories.
-    historiesRef.current.clear();
+    // Loading a template replaces all pages - the previous per-page histories
+    // now belong to the snapshot above, so install a fresh map (never .clear(),
+    // which would empty the one the snapshot is holding).
+    historiesRef.current = new Map();
+    appliedTemplateIdRef.current = templateId ?? null;
 
     replaceCanvasContent(normalizedPages[0], () => {
       startCountdown(canvas);
@@ -4335,8 +5246,8 @@ const applyBgToOtherPages = (patch: { backgroundImage?: any; backgroundColor?: a
   }, []);
   applyZoomRef.current = applyEditorZoom;
 
-  const zoomIn = () => applyEditorZoom(zoomRef.current + EDITOR_ZOOM_STEP);
-  const zoomOut = () => applyEditorZoom(zoomRef.current - EDITOR_ZOOM_STEP);
+  const zoomIn = () => applyEditorZoom(stepEditorZoom(zoomRef.current, 1));
+  const zoomOut = () => applyEditorZoom(stepEditorZoom(zoomRef.current, -1));
 
   const resetZoom = () => {
     applyEditorZoom(1);
@@ -4929,21 +5840,30 @@ const applyBgToOtherPages = (patch: { backgroundImage?: any; backgroundColor?: a
       <div className="hidden pc:flex items-center justify-between text-sm text-neutral-500 border-t pt-3">
 
   <div>
-    Tip: Select objects to move/resize/rotate
+    {pathEditState === 'drawing'
+      ? 'Pen — click to add a point, drag to curve it · Enter or Esc to finish · click the first point to close'
+      : pathEditState === 'editing'
+        ? 'Editing points — drag an anchor or its handle to reshape, Alt-click an anchor to delete it, Esc to finish'
+        : pathEditState === 'selectable'
+          ? 'Tip: Double-click the path to edit its anchor points'
+          : 'Tip: Select objects to move/resize/rotate'}
   </div>
 
   {/* Zoom slider + icon controls. The slider is the whole zoom-in/zoom-out
       control: dragging it (or arrowing it, which range inputs do natively)
-      steps through EDITOR_ZOOM_MIN…MAX in EDITOR_ZOOM_STEP increments. */}
+      sweeps EDITOR_ZOOM_MIN…MAX. The track carries a 0…1 POSITION rather than
+      the zoom itself — sliderToZoom maps it log-scaled onto 10%…500% — so the
+      real percentage has to be spelled out in aria-valuetext. */}
   <div className="flex items-center gap-3">
   <input
     type="range"
-    min={EDITOR_ZOOM_MIN}
-    max={EDITOR_ZOOM_MAX}
-    step={EDITOR_ZOOM_STEP}
-    value={zoom}
-    onChange={(e) => applyEditorZoom(parseFloat(e.target.value))}
+    min={0}
+    max={1}
+    step={0.001}
+    value={zoomToSlider(zoom)}
+    onChange={(e) => applyEditorZoom(sliderToZoom(parseFloat(e.target.value)))}
     aria-label="Zoom"
+    aria-valuetext={`${Math.round(zoom * 100)}%`}
     title={`Zoom ${Math.round(zoom * 100)}% — editor preview only, the invitation itself is unchanged`}
     className="w-32 h-1 accent-[#7D5B59] cursor-pointer"
   />

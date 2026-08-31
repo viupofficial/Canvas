@@ -18,19 +18,24 @@ import {
   Square,
   Circle as CircleIcon,
   Triangle as TriangleIcon,
+  Star as StarIcon,
+  PenTool,
   Shapes,
   GripVertical,
 } from "lucide-react";
 
 // Pick a small leading icon for a layer based on its Fabric type.
-function LayerTypeIcon({ type, isImage }: { type: string; isImage: boolean }) {
+function LayerTypeIcon({ type, isImage, shapeKind }: { type: string; isImage: boolean; shapeKind?: string }) {
   const cls = "shrink-0 text-[#7D5B59]";
   const t = (type ?? "").toLowerCase();
   if (isImage) return <ImageIcon size={15} className={cls} />;
   if (t === "textbox" || t === "text" || t === "i-text") return <Type size={15} className={cls} />;
   if (t === "rect") return <Square size={15} className={cls} />;
   if (t === "circle" || t === "ellipse") return <CircleIcon size={15} className={cls} />;
-  if (t === "triangle") return <TriangleIcon size={15} className={cls} />;
+  // Stars and polygons are both fabric Polygons — only shapeKind separates them.
+  if (shapeKind === "star") return <StarIcon size={15} className={cls} />;
+  if (t === "path") return <PenTool size={15} className={cls} />;
+  if (t === "triangle" || shapeKind === "polygon") return <TriangleIcon size={15} className={cls} />;
   return <Shapes size={15} className={cls} />;
 }
 
@@ -182,7 +187,7 @@ export default function LayersPanel(props: {
               {/* Select / rename */}
               {editingId === layer.id ? (
                 <div className="flex items-center gap-2 min-w-0 flex-1">
-                  <LayerTypeIcon type={layer.type} isImage={layer.isImage} />
+                  <LayerTypeIcon type={layer.type} isImage={layer.isImage} shapeKind={layer.shapeKind} />
                   <input
                     autoFocus
                     value={draft}
@@ -209,7 +214,7 @@ export default function LayersPanel(props: {
                   onClick={() => handle()?.selectLayer(layer.id)}
                   onDoubleClick={() => startRename(layer.id, layer.label)}
                 >
-                  <LayerTypeIcon type={layer.type} isImage={layer.isImage} />
+                  <LayerTypeIcon type={layer.type} isImage={layer.isImage} shapeKind={layer.shapeKind} />
                   <span
                     className={`truncate text-[13px] font-semibold ${
                       layer.visible ? "text-[#7D5B59]" : "text-[#7D5B59]/40 line-through"

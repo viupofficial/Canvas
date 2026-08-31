@@ -213,6 +213,9 @@ function ProjectEditorInner({
   // Bumped whenever the active page's content is (re)loaded — the Background panel
   // watches this to re-read and display the current page's background.
   const [bgReadNonce, setBgReadNonce] = useState(0);
+  // Which template the editor currently has applied. Read back from the editor
+  // rather than set only on click, because Undo can step back out of a template.
+  const [appliedTemplateId, setAppliedTemplateId] = useState<string | null>(null);
   // Which sidebar tool is open. Owned here (rather than inside Sidebar) so the
   // phone inspector can close the tool sheet when an element is selected.
   const [activeTool, setActiveTool] = useState<any>(null);
@@ -1030,6 +1033,8 @@ function ProjectEditorInner({
             isPhonePreview={previewMode === "phone"}
             onEditImage={handleSidebarEditImage}
             bgReadNonce={bgReadNonce}
+            appliedTemplateId={appliedTemplateId}
+            onAppliedTemplateIdChange={setAppliedTemplateId}
             showRsvpAndMoneyGift={showRsvpAndMoneyGift}
             teaser={teaser}
             rules={rules}
@@ -1050,7 +1055,12 @@ function ProjectEditorInner({
               eventName={eventName}
               onEditImage={handleCanvasEditImage}
               onCanvasChange={handleCanvasChange}
-              onContentReplaced={() => setBgReadNonce((n) => n + 1)}
+              onContentReplaced={() => {
+                setBgReadNonce((n) => n + 1);
+                // Undo/redo can apply or drop a template, so re-read which one
+                // is on instead of trusting the last click on the panel.
+                setAppliedTemplateId(editorRef.current?.getAppliedTemplateId?.() ?? null);
+              }}
               onMusicChange={handleMusicChanged}
               initialPages={initialPages}
               initialMusicUrl={initialMusicUrl}

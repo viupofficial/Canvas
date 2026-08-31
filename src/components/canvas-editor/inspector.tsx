@@ -1347,6 +1347,57 @@ export default function Inspector(props: {
               />
             </div>
 
+            {/* Polygon / star geometry. Both are fabric Polygons — `shapeKind`
+                is what says how their points should be rebuilt — so these only
+                appear for shapes the editor knows how to reshape. Ratio (the
+                inner radius as a % of the outer) is meaningless for a polygon,
+                whose corners all sit on one circle, so it's star-only. */}
+            {(selected.shapeKind === "polygon" || selected.shapeKind === "star") && (
+              <div className="w-[220px] pc:w-auto">
+                <div className="flex items-center justify-between mb-1">
+                  <label className={labelCls + " mb-0"}>Count</label>
+                  <input
+                    className="w-[52px] rounded-[100px] px-[8px] py-[2px] text-[12px] text-[#7D5B59] font-[600] bg-[#F2E8E6B2] outline-none text-right"
+                    type="number"
+                    min={3}
+                    max={30}
+                    step={1}
+                    value={selected.pointCount ?? 3}
+                    onChange={(e) => updateSelected({ pointCount: Number(e.target.value) })}
+                  />
+                </div>
+                <input
+                  className="w-full accent-[#7D5B59]"
+                  type="range"
+                  min={3}
+                  max={30}
+                  step={1}
+                  value={selected.pointCount ?? 3}
+                  onChange={(e) => updateSelected({ pointCount: Number(e.target.value) })}
+                />
+              </div>
+            )}
+
+            {selected.shapeKind === "star" && (
+              <div className="w-[220px] pc:w-auto">
+                <div className="flex items-center justify-between mb-1">
+                  <label className={labelCls + " mb-0"}>Ratio</label>
+                  <span className="text-[12px] text-[#7D5B59] font-[600]">
+                    {Math.round((selected.innerRatio ?? 38.2) * 10) / 10}%
+                  </span>
+                </div>
+                <input
+                  className="w-full accent-[#7D5B59]"
+                  type="range"
+                  min={1}
+                  max={100}
+                  step={0.1}
+                  value={selected.innerRatio ?? 38.2}
+                  onChange={(e) => updateSelected({ innerRatio: Number(e.target.value) })}
+                />
+              </div>
+            )}
+
           </div>
 
           {/* ── Animation ──────────────────────────────────────── */}

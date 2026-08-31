@@ -170,6 +170,15 @@ const TEMPLATE_LIST = [
 
 // Default photos shown in the gallery on first open. These point to files in
 // /public — drop new files there and add the path here to expand the seed set.
+// Tooltip per shape button. The two draw tools need the extra word, because
+// clicking them arms a tool instead of dropping a shape on the page.
+const SHAPE_HINTS: Record<string, string> = {
+  Ellipse: 'Ellipse — drag on the canvas to size it (hold Shift for a circle)',
+  Line: 'Pen — click for a corner point, click-and-drag to curve; Enter or Esc to finish',
+  Polygon: 'Polygon — set the number of points in Appearance',
+  Star: 'Star — set the number of points and the ratio in Appearance',
+};
+
 const DEFAULT_PHOTOS: string[] = [
   '/aiCouple-1.png',
   '/aiCouple-2.png',
@@ -2664,9 +2673,10 @@ function TemplatesTab({
   previousPagesRef: React.MutableRefObject<any[] | null>;
 }) {
   // Click a template to switch it on, click the same one again to switch it off
-  // and get the previous design back. loadTemplate() REPLACES every page and
-  // clears the undo histories, so the pages are snapshotted before it runs —
-  // that snapshot is the only way back.
+  // and get the previous design back. loadTemplate() REPLACES every page, so the
+  // pages are snapshotted before it runs. (Undo can also step back out of a
+  // template — the editor records the swap itself — which is why the applied id
+  // lives there and is mirrored into this panel.)
   const toggleTemplate = (tpl: (typeof TEMPLATE_LIST)[number]) => {
     const editor = editorRef?.current;
     if (!editor?.loadTemplate) return;
@@ -2684,7 +2694,7 @@ function TemplatesTab({
       // A blank page is stored as null, which loadTemplate() drops — send an
       // empty Fabric page instead so an all-blank design restores as one page.
       const pages = (restore?.length ? restore : [null]).map((page) => page ?? { objects: [] });
-      editor.loadTemplate(pages);
+      editor.loadTemplate(pages, null);
       return;
     }
 
@@ -2693,7 +2703,7 @@ function TemplatesTab({
     if (!appliedTemplateId) {
       previousPagesRef.current = editor.getProjectData?.().pages ?? null;
     }
-    editor.loadTemplate(tpl.pages);
+    editor.loadTemplate(tpl.pages, tpl.id);
     onAppliedTemplateChange(tpl.id);
   };
 
@@ -2741,6 +2751,8 @@ export default function Sidebar({
   onLocationChanged,
   activeTool,
   onActiveToolChange,
+  appliedTemplateId: appliedTemplateIdProp,
+  onAppliedTemplateIdChange,
 }: {
   editorRef?: React.RefObject<EditorHandle | null>;
   // Optional controlled tool selection. Passed by ProjectEditor so the phone
@@ -2748,6 +2760,12 @@ export default function Sidebar({
   // and the sidebar keeps the selection in its own state.
   activeTool?: Tab | null;
   onActiveToolChange?: (tab: Tab | null) => void;
+  // Optional controlled applied-template id. The EDITOR owns this value — its
+  // Undo can step back out of a template — so ProjectEditor re-reads it after
+  // every content replacement and passes it down. Omit both and the sidebar
+  // keeps the id in its own state (it then only changes when clicked here).
+  appliedTemplateId?: string | null;
+  onAppliedTemplateIdChange?: (id: string | null) => void;
   isPhonePreview?: boolean;
   onEditImage?: (src: string, onReplace: (dataUrl: string) => void) => void;
   // Bumped by the parent whenever the active page reloads, so the Background
@@ -2785,7 +2803,16 @@ export default function Sidebar({
   // Templates tab: which template is switched on, plus the design that was on
   // the canvas before it was applied (restored when it is switched off). Kept
   // here rather than in TemplatesTab because that panel unmounts on tab switch.
-  const [appliedTemplateId, setAppliedTemplateId] = useState<string | null>(null);
+  // Same controlled/uncontrolled shape as activeTool above: when the parent
+  // supplies the id it wins, because it is refreshed from the editor after every
+  // content replacement (undo can turn a template off).
+  const [internalTemplateId, setInternalTemplateId] = useState<string | null>(null);
+  const templateControlled = appliedTemplateIdProp !== undefined;
+  const appliedTemplateId = templateControlled ? appliedTemplateIdProp ?? null : internalTemplateId;
+  const setAppliedTemplateId = (id: string | null) => {
+    if (templateControlled) onAppliedTemplateIdChange?.(id);
+    else setInternalTemplateId(id);
+  };
   const preTemplatePagesRef = React.useRef<any[] | null>(null);
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
   const [phoneOpen, setPhoneOpen] = useState(false);
@@ -2839,7 +2866,9 @@ export default function Sidebar({
   };
 
   const getItemsForCategory = (cat: string) => {
-    if (cat === 'Shapes') return ['Circle', 'Ellipse', 'Line', 'Polygon', 'Polyline', 'Rect', 'Triangle'];
+    // Ellipse first: it's the drag-to-size tool and the most-reached-for shape.
+    // No Circle (the ellipse covers it) and no Triangle (a 3-point Polygon).
+    if (cat === 'Shapes') return ['Ellipse', 'Rect', 'Line', 'Polygon', 'Star', 'Polyline'];
     return Array.from({ length: 6 }).map((_, i) => `${cat} ${i + 1}`);
   };
 
@@ -2847,12 +2876,6 @@ export default function Sidebar({
     const s = shape.toLowerCase();
     const base = { width: 48, height: 48, viewBox: '0 0 48 48' };
     switch (s) {
-      case 'circle':
-        return (
-          <svg {...base} className="w-10 h-10" aria-hidden>
-            <circle cx="24" cy="24" r="12" fill="black" stroke="#111827" strokeWidth="1" />
-          </svg>
-        );
       case 'ellipse':
         return (
           <svg {...base} className="w-10 h-10" aria-hidden>
@@ -2868,7 +2891,18 @@ export default function Sidebar({
       case 'polygon':
         return (
           <svg {...base} className="w-10 h-10" aria-hidden>
-            <polygon points="24,6 40,24 24,42 8,24" fill="#E6E6FA" stroke="#111827" strokeWidth="1" />
+            <polygon points="24,8 40,36 8,36" fill="#F3F4F6" stroke="#111827" strokeWidth="1" />
+          </svg>
+        );
+      case 'star':
+        return (
+          <svg {...base} className="w-10 h-10" aria-hidden>
+            <polygon
+              points="24,7 28.9,19.4 41.2,19.4 31.6,27.3 35.4,40 24,32.6 12.6,40 16.4,27.3 6.8,19.4 19.1,19.4"
+              fill="#E6E6FA"
+              stroke="#111827"
+              strokeWidth="1"
+            />
           </svg>
         );
       case 'polyline':
@@ -2883,12 +2917,6 @@ export default function Sidebar({
             <rect x="9" y="12" width="30" height="24" rx="2" fill="#F9FAFB" stroke="#111827" strokeWidth="1" />
           </svg>
         );
-      case 'triangle':
-        return (
-          <svg {...base} className="w-10 h-10" aria-hidden>
-            <polygon points="24,8 40,36 8,36" fill="#F3F4F6" stroke="#111827" strokeWidth="1" />
-          </svg>
-        );
       default:
         return <div className="w-10 h-10 bg-gray-100" />;
     }
@@ -2896,10 +2924,18 @@ export default function Sidebar({
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setActive(null);
+      if (e.key !== 'Escape') return;
+      // The canvas claims Escape while a draw tool is armed ("cancel the shape
+      // I'm drawing") or a path is being point-edited ("leave that mode").
+      // Closing the panel on the same keypress would send the user back to
+      // reopen it every time, so the canvas gets the key to itself. Capture
+      // phase, because the editor's own handler is a bubble listener on this
+      // same window and would otherwise have already cleared the state we check.
+      if (editorRef?.current?.ownsEscapeKey?.()) return;
+      setActive(null);
     };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
+    window.addEventListener('keydown', onKey, true);
+    return () => window.removeEventListener('keydown', onKey, true);
   }, []);
 
   // Teaser + Basic grey out RSVP + Money Gift. In teaser they are inert —
@@ -2977,8 +3013,9 @@ export default function Sidebar({
             onChange={(e) => handleElementUpload(e.target.files)}
           />
           <div className="flex flex-col gap-4">
-            {/* Interactive elements — drop a fully-functional countdown or
-                guestbook onto the current page (click or drag). */}
+            {/* Interactive elements — a fully-functional countdown or guestbook.
+                Both are full-page designs, so clicking one gives it its own page;
+                dragging still drops it wherever it lands on the current page. */}
             <div className="mb-3">
               <div className="text-[#191212] text-[17px] font-bold mb-2">Interactive</div>
               <div className="grid grid-cols-2 gap-2">
@@ -2994,8 +3031,8 @@ export default function Sidebar({
                       if (el.id === 'countdown') editorRef?.current?.addCountdown?.();
                       else editorRef?.current?.addGuestbook?.();
                     }}
-                    title={`Add ${el.label} to canvas`}
-                    aria-label={`Add ${el.label} to canvas`}
+                    title={`Add ${el.label} as a new page`}
+                    aria-label={`Add ${el.label} as a new page`}
                     className="h-24 bg-gray-100 rounded flex flex-col items-center justify-center gap-2 text-[12px] font-semibold text-[#7D5B59] hover:bg-gray-200 transition"
                   >
                     {el.icon}
@@ -3004,7 +3041,7 @@ export default function Sidebar({
                 ))}
               </div>
               <div className="text-[11px] text-gray-400 text-center mt-2">
-                Click to add · drag onto the page to place.
+                Click to add as a new page · drag onto this page to place.
               </div>
             </div>
 
@@ -3077,15 +3114,20 @@ export default function Sidebar({
                         }}
                         onClick={() => {
                           const shape = String(item).toLowerCase();
-                          // Line is a draw tool, not a drop-in shape: click the
-                          // canvas to anchor, drag to stretch, release to place.
-                          if (shape === 'line' && editorRef?.current?.enterLineTool) {
-                            editorRef.current.enterLineTool();
+                          // Line and Ellipse are draw tools, not drop-in shapes:
+                          // clicking arms the tool, then the gesture on the canvas
+                          // decides where the shape goes and how big it is.
+                          if (shape === 'line' && editorRef?.current?.enterPenTool) {
+                            editorRef.current.enterPenTool();
+                            return;
+                          }
+                          if (shape === 'ellipse' && editorRef?.current?.enterEllipseTool) {
+                            editorRef.current.enterEllipseTool();
                             return;
                           }
                           if (editorRef?.current?.addShape) editorRef.current.addShape(shape);
                         }}
-                        title={String(item) === 'Line' ? 'Line — click the canvas, move, click again (or drag)' : String(item)}
+                        title={SHAPE_HINTS[String(item)] ?? String(item)}
                         aria-label={String(item)}
                         className="h-20 bg-gray-100 rounded flex items-center justify-center text-xs text-gray-600 hover:bg-gray-200"
                       >
