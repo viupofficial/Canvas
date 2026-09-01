@@ -17,6 +17,7 @@ import { PackageToastHost, showPackageToast } from "@/src/components/PackageLimi
 import PaymentUpgradeModal from "@/src/components/PaymentUpgradeModal";
 import { publishAndSyncCanvas } from "@/src/lib/publishEvent";
 import { compactDesignJson } from "@/src/lib/compactDesignJson";
+import { parseDbTime } from "@/src/lib/dbTime";
 
 const API_BASE = "https://vi-up.com/api";
 
@@ -57,15 +58,6 @@ const draftStorageKey = (designId: number) => `viup_canvas_draft_${designId}`;
 // (≈ bytes) AFTER compaction.
 const SAVE_SIZE_WARN_BYTES = 3 * 1024 * 1024;
 
-// MySQL timestamps ("YYYY-MM-DD HH:MM:SS") carry no timezone; this best-effort
-// parse treats them as local time. It only guards against stale drafts from old
-// sessions — the primary signal is that drafts are cleared on successful save.
-function parseDbTime(s?: string | null): number | null {
-  if (!s) return null;
-  const str = String(s);
-  const t = Date.parse(str.includes("T") ? str : str.replace(" ", "T"));
-  return Number.isFinite(t) ? t : null;
-}
 
 export type ProjectEditorProps = {
   // Legacy project-id flow (localStorage + best-effort DB mirror).

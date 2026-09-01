@@ -161,6 +161,10 @@ export type EditorHandle = {
   // limit before adding another photo.
   getGalleryCount: () => number;
   setGallerySlideInterval: (ms: number) => void;
+  // Gallery arrangement. Setting it re-lays-out the photos on the gallery page
+  // (and navigates there, since the layout needs the live canvas).
+  getGalleryLayout: () => GalleryLayout;
+  setGalleryLayout: (layout: GalleryLayout) => void;
   addBorder: (url: string) => void;
   setBackgroundColor: (color: string, scope?: BackgroundScope) => void;
   setBackgroundImage: (url: string | null, opts?: BackgroundOptions, scope?: BackgroundScope) => void;
@@ -315,6 +319,11 @@ const FABRIC_EXPORT_PROPS = [
   // Marks a "Counting Days" value box (day/hour/minute/second) so the ticker —
   // in both the editor and the published player — can find and update it.
   "countdownUnit",
+  // "slideshow" | "grid" on every galleryImage*, written by the Photos panel.
+  // The gallery's layout has to survive save/load AND reach the published
+  // player, and gallery photos are the only thing that cares, so it rides on
+  // the objects themselves rather than becoming a second source of truth.
+  "galleryLayout",
   // Parametric polygon/star geometry. A fabric Polygon only stores raw `points`,
   // so these remember what those points MEAN — which lets the Inspector rebuild
   // them when the user changes the point count or the star's inner ratio.
@@ -341,6 +350,11 @@ const SELECTION_PROPS = [
   "height",
   ...FABRIC_EXPORT_PROPS,
 ] as const;
+
+// How the gallery page arranges its photos. "slideshow" stacks them all in one
+// slot and cycles which is visible; "grid" spreads them out so every photo the
+// user uploaded is on screen at once and nothing moves.
+export type GalleryLayout = 'slideshow' | 'grid';
 
 // One layer row as consumed by the Inspector's Layer tab. Derived from a Fabric
 // object on the *active page only* (the canvas never holds other pages' objects).
@@ -1565,6 +1579,8 @@ const [currentPage, setCurrentPage] = useState(0);
     addPhotoToGallery,
     getGalleryCount,
     setGallerySlideInterval,
+    getGalleryLayout,
+    setGalleryLayout,
     updateActiveObject: (props: Record<string, any>) => {
       const canvas = fabricRef.current;
       if (!canvas) return;
@@ -4887,6 +4903,25 @@ const applyBgToOtherPages = (patch: { backgroundImage?: any; backgroundColor?: a
   // overlap into one slot — the slideshow shows one at a time.
   const GALLERY_SLOT = { centerX: 190, width: 292, height: 443, firstTop: 310 };
 
+  // "grid" spreads every photo out so they are ALL on screen at once, instead of
+  // taking turns in the single slot above. Bounds sit under the "Gallery" title
+  // (top 60, ~28 tall) and clear the floating footer nav (~68 tall at the foot of
+  // the 396×704 artboard); horizontally it centres on 198 like the title does.
+  const GALLERY_GRID = { left: 44, top: 100, width: 308, height: 520, gap: 8 };
+
+  // Cell geometry for n photos. Column counts are picked by hand rather than by
+  // ceil(sqrt(n)) so the common cases read well: a pair sits side by side, four
+  // make a square, and the cells only shrink to thirds once there are five.
+  const galleryGridCells = (n: number) => {
+    const cols = n <= 1 ? 1 : n <= 4 ? 2 : n <= 9 ? 3 : 4;
+    const rows = Math.ceil(n / cols);
+    return {
+      cols,
+      cellW: (GALLERY_GRID.width - GALLERY_GRID.gap * (cols - 1)) / cols,
+      cellH: (GALLERY_GRID.height - GALLERY_GRID.gap * (rows - 1)) / rows,
+    };
+  };
+
   // How long each gallery photo stays on screen before the slideshow advances.
   const [gallerySlideMs, setGallerySlideMsState] = React.useState(5000);
   const setGallerySlideInterval = (ms: number) => {
@@ -4921,6 +4956,108 @@ const applyBgToOtherPages = (patch: { backgroundImage?: any; backgroundColor?: a
             isGalleryObj,
           ).length;
     return Math.max(0, total - GALLERY_STARTER_COUNT);
+  };
+
+  // Which arrangement the gallery page is currently in. Read off the first
+  // gallery photo — applyGalleryLayout stamps every one of them — so it stays
+  // correct across save/load, undo and template swaps without a mirrored state.
+  const getGalleryLayout = (): GalleryLayout => {
+    const idx = findGalleryPageIndex();
+    if (idx < 0) return 'slideshow';
+    const canvas = fabricRef.current;
+    const objs =
+      idx === currentPageRef.current && canvas
+        ? canvas.getObjects()
+        : Array.isArray(pages[idx]?.objects)
+        ? pages[idx].objects
+        : [];
+    const first: any = objs.filter(isGalleryObj)[0];
+    return first?.galleryLayout === 'grid' ? 'grid' : 'slideshow';
+  };
+
+  // Re-position every gallery photo for the chosen arrangement. This is a real
+  // canvas edit (it writes left/top/scale), so it lands in the undo history and
+  // autosaves — which is exactly what makes the published invitation match.
+  const applyGalleryLayout = (layout: GalleryLayout) => {
+    const canvas = fabricRef.current;
+    if (!canvas) return;
+    const imgs = canvas.getObjects().filter(isGalleryObj);
+    if (!imgs.length) return;
+
+    if (layout === 'grid') {
+      const { cols, cellW, cellH } = galleryGridCells(imgs.length);
+      const rows = Math.ceil(imgs.length / cols);
+
+      // Contain-fit with ONE uniform scale per photo: a portrait and a landscape
+      // photo share a cell without either being stretched. (The slideshow slot
+      // can afford to stretch because only one photo is ever on screen.)
+      const scales = imgs.map((o: any) =>
+        Math.min(cellW / (o.width || 1), cellH / (o.height || 1)),
+      );
+
+      // Contain-fitting usually leaves each row shorter than its cell, so pack
+      // the rows to their real heights and centre the block in the band —
+      // otherwise two photos would float in a 520-tall gap with the footer.
+      const rowHeights = Array.from({ length: rows }, (_, r) =>
+        Math.max(
+          ...imgs
+            .map((o: any, i: number) =>
+              Math.floor(i / cols) === r ? (o.height || 1) * scales[i] : 0,
+            ),
+        ),
+      );
+      const blockH =
+        rowHeights.reduce((a, b) => a + b, 0) + GALLERY_GRID.gap * (rows - 1);
+      const startY = GALLERY_GRID.top + Math.max(0, (GALLERY_GRID.height - blockH) / 2);
+      // Top edge of each row, so a short row doesn't drag the next one down.
+      const rowTops = rowHeights.reduce<number[]>((acc, h, r) => {
+        acc.push(r === 0 ? startY : acc[r - 1] + rowHeights[r - 1] + GALLERY_GRID.gap);
+        return acc;
+      }, []);
+
+      imgs.forEach((o: any, i: number) => {
+        const col = i % cols;
+        const row = Math.floor(i / cols);
+        o.set({
+          galleryLayout: 'grid',
+          left: GALLERY_GRID.left + col * (cellW + GALLERY_GRID.gap) + cellW / 2,
+          top: rowTops[row] + rowHeights[row] / 2,
+          originX: 'center',
+          originY: 'center',
+          scaleX: scales[i],
+          scaleY: scales[i],
+          visible: true,
+        });
+        o.setCoords?.();
+      });
+    } else {
+      imgs.forEach((o: any, i: number) => {
+        o.set({
+          galleryLayout: 'slideshow',
+          left: GALLERY_SLOT.centerX,
+          top: GALLERY_SLOT.firstTop,
+          originX: 'center',
+          originY: 'center',
+          scaleX: GALLERY_SLOT.width / (o.width || 1),
+          scaleY: GALLERY_SLOT.height / (o.height || 1),
+          // Reveal the first and hide the rest; the cycler takes it from here.
+          visible: i === 0,
+        });
+        o.setCoords?.();
+      });
+    }
+
+    canvas.requestRenderAll();
+    pushSnapshot();
+  };
+
+  // Public entry point. The layout can only be computed against the live canvas
+  // (stored page JSON carries no natural image sizes to scale from), so hop to
+  // the gallery page first — which also puts the result in front of the user.
+  const setGalleryLayout = (layout: GalleryLayout) => {
+    const idx = findGalleryPageIndex();
+    if (idx < 0) return;
+    goToPage(idx, () => applyGalleryLayout(layout));
   };
 
   // Append the gallery template as a new page and switch to it. No-op if a
@@ -5025,6 +5162,13 @@ const applyBgToOtherPages = (patch: { backgroundImage?: any; backgroundColor?: a
           const slot = buildSlot(natW, natH, GALLERY_SLOT.firstTop, existing.length + 1);
           img.set(slot);
           canvas.add(img);
+          // In "Show all", a new photo must take its place in the grid rather
+          // than sit hidden in the slideshow slot — reflow the whole page so the
+          // cells resize to accommodate it.
+          if (getGalleryLayout() === 'grid') {
+            applyGalleryLayout('grid');
+            return;
+          }
           canvas.requestRenderAll();
           pushSnapshot();
         })
@@ -5068,6 +5212,14 @@ const applyBgToOtherPages = (patch: { backgroundImage?: any; backgroundColor?: a
     const enforce = (): boolean => {
       const imgs = canvas.getObjects().filter(isGalleryObj);
       if (!imgs.length) return false;
+      // "Show all": every photo stays on screen, so there is nothing to cycle.
+      // Read the mode off the objects each tick rather than closing over it, so
+      // switching layouts takes effect without restarting the effect.
+      if ((imgs[0] as any)?.galleryLayout === 'grid') {
+        imgs.forEach((o: any) => o.set({ visible: true }));
+        canvas.requestRenderAll();
+        return true;
+      }
       const active = ((idx % imgs.length) + imgs.length) % imgs.length;
       imgs.forEach((o: any, n: number) => o.set({ visible: n === active }));
       canvas.requestRenderAll();
@@ -5084,6 +5236,8 @@ const applyBgToOtherPages = (patch: { backgroundImage?: any; backgroundColor?: a
     const id = setInterval(() => {
       // Don't swap out from under the user while they're editing a photo.
       if (canvas.getActiveObject()) return;
+      const imgs = canvas.getObjects().filter(isGalleryObj);
+      if ((imgs[0] as any)?.galleryLayout === 'grid') return; // nothing to advance
       idx += 1;
       enforce();
     }, gallerySlideMs);

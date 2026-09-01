@@ -551,9 +551,10 @@ export default function RsvpPlayer({
       cancellers.push(() => cancelAnimationFrame(rafId));
     };
 
-    // Gallery slideshow: the gallery page's photos all share one slot (named
-    // galleryImage1, galleryImage2, …). Show one at a time, advancing every 5s,
-    // looping through every photo. No-op on pages without a gallery.
+    // Gallery slideshow: in the default "Slideshow" layout the gallery page's
+    // photos all share one slot (named galleryImage1, galleryImage2, …). Show one
+    // at a time, advancing every 5s, looping through every photo. No-op on pages
+    // without a gallery, and on galleries set to the "Show all" grid layout.
     //
     // The guest can also swipe the photo sideways to flip through it by hand —
     // swipe right for the next photo, swipe left for the previous one — and the
@@ -563,6 +564,14 @@ export default function RsvpPlayer({
         .getObjects()
         .filter((o: any) => typeof o?.name === "string" && o.name.startsWith("galleryImage"));
       if (!imgs.length) return;
+      // "Show all" gallery (set in the Photos panel): the photos were laid out
+      // in a grid at design time and are all meant to be on screen at once, so
+      // there is nothing to cycle and nothing to swipe through.
+      if ((imgs[0] as any)?.galleryLayout === "grid") {
+        imgs.forEach((o: any) => o.set({ visible: true }));
+        rc.requestRenderAll();
+        return;
+      }
       let gi = 0;
       const show = () => {
         imgs.forEach((o: any, n: number) => o.set({ visible: n === gi }));

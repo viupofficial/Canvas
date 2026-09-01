@@ -18,21 +18,7 @@ import {
   num,
   type ViupDesign,
 } from "@/src/lib/viupApi";
-
-function formatEdited(iso: string): string {
-  if (!iso) return "";
-  const then = new Date(iso).getTime();
-  if (Number.isNaN(then)) return "";
-  const diff = Date.now() - then;
-  const min = Math.floor(diff / 60000);
-  if (min < 1) return "Edited just now";
-  if (min < 60) return `Edited ${min} min ago`;
-  const hr = Math.floor(min / 60);
-  if (hr < 24) return `Edited ${hr} hr ago`;
-  const day = Math.floor(hr / 24);
-  if (day < 7) return `Edited ${day} day${day > 1 ? "s" : ""} ago`;
-  return `Edited ${new Date(iso).toLocaleDateString()}`;
-}
+import { formatEdited } from "@/src/lib/dbTime";
 
 // Full designer dashboard: gallery of designs + create/rename/duplicate/delete.
 // Reused by the "/" landing (legacy localStorage session) and the guarded

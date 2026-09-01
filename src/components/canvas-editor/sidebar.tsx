@@ -1,6 +1,6 @@
 // updated
 import React, { useEffect, useState } from 'react';
-import type { EditorHandle } from '@/src/components/CanvasEditor';
+import type { EditorHandle, GalleryLayout } from '@/src/components/CanvasEditor';
 import {
   useEventData,
   giftAccounts,
@@ -207,6 +207,9 @@ function PhotoTab({
   const [photos, setPhotos] = useState<string[]>([...DEFAULT_PHOTOS]);
   const [menu, setMenu] = useState<{ x: number; y: number; index: number } | null>(null);
   const [slideIntervalSec, setSlideIntervalSec] = useState(5);
+  // "slideshow" cycles the photos through one slot; "grid" lays every uploaded
+  // photo out at once with no transition. Mirrors the canvas, which owns it.
+  const [galleryLayout, setGalleryLayoutState] = useState<GalleryLayout>('slideshow');
   const fileInputRef = React.useRef<HTMLInputElement>(null);
 
   // Gallery toggle — ON ⇒ a gallery page exists in the canvas, OFF ⇒ none.
@@ -223,8 +226,17 @@ function PhotoTab({
 
   useEffect(() => {
     refreshGalleryCount();
+    // Re-seed from the canvas: a reopened design (or an undo) can arrive with a
+    // layout this panel never set.
+    setGalleryLayoutState(editorRef?.current?.getGalleryLayout?.() ?? 'slideshow');
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [galleryOn]);
+
+  const chooseLayout = (next: GalleryLayout) => {
+    if (next === galleryLayout) return;
+    setGalleryLayoutState(next);
+    editorRef?.current?.setGalleryLayout?.(next);
+  };
 
   const galleryLimit = rules.galleryLimit;
   const galleryLimited = Number.isFinite(galleryLimit);
@@ -351,6 +363,33 @@ function PhotoTab({
       </div>
 
       {galleryOn && (
+        <div className="mb-3 px-1">
+          <div className="text-[12px] text-gray-500 font-medium mb-1.5">Layout</div>
+          <div className="grid grid-cols-2 gap-1.5" role="group" aria-label="Gallery layout">
+            {([
+              ['slideshow', 'Slideshow', 'Photos take turns in one frame'],
+              ['grid', 'Show all', 'Every photo on screen at once, no transition'],
+            ] as const).map(([value, label, hint]) => (
+              <button
+                key={value}
+                type="button"
+                aria-pressed={galleryLayout === value}
+                title={hint}
+                onClick={() => chooseLayout(value)}
+                className={`px-2 py-1.5 rounded text-[12px] font-semibold border transition ${
+                  galleryLayout === value
+                    ? 'bg-[#8C6B6B] border-[#8C6B6B] text-white'
+                    : 'bg-white border-gray-200 text-[#7D5B59] hover:bg-[#F2E8E6B2]'
+                }`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {galleryOn && galleryLayout === 'slideshow' && (
         <div className="flex items-center justify-between mb-3 px-1">
           <label className="text-[12px] text-gray-500 font-medium">Slide every</label>
           <div className="flex items-center gap-1">
