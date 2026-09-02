@@ -41,6 +41,12 @@ import { extractEnvelope } from "@/src/lib/extract-envelope";
 import { eventBlobPath, eventSlug } from "@/src/lib/slug";
 import RsvpSkeleton from "@/src/components/RsvpSkeleton";
 import { getPackageRules } from "@/src/lib/packageRules";
+import {
+  computeLayout,
+  cropImageDataUrl,
+  defaultPdfOptions,
+  type PdfExportOptions,
+} from "@/src/lib/pdfExport";
 import { normalizePresentationMode, type PresentationMode } from "@/src/lib/presentationMode";
 import { upload } from "@vercel/blob/client";
 import { uploadEditedImage } from "@/src/lib/uploadEditedImage";
@@ -96,6 +102,14 @@ export type BackgroundReadback =
   | { kind: 'color'; color: string }
   | { kind: 'image'; src: string; opts: BackgroundOptions };
 
+// One rendered PNG per requested canvas page, plus the source canvas size the
+// PDF layout is computed against.
+export type PageRender = {
+  images: string[];
+  width: number;
+  height: number;
+};
+
 export type EditorHandle = {
   undo: () => void;
   redo: () => void;
@@ -104,7 +118,11 @@ export type EditorHandle = {
   save: () => void;
   exportPNG: () => void;
   exportHTML: (eventName?: string) => Promise<string>;
-  exportPDF: (eventName?: string) => Promise<void>;
+  // Rasterize pages for the export preview (all pages at multiplier 2 by default).
+  renderPages: (opts?: { multiplier?: number; pages?: number[] }) => Promise<PageRender>;
+  // Options come from the PDF export modal; omitted, the artwork exports at
+  // its true physical size with every page included.
+  exportPDF: (eventName?: string, options?: Partial<PdfExportOptions>) => Promise<void>;
   previewLocal: (eventName?: string) => void;
   zoomIn: () => void;
   zoomOut: () => void;
@@ -1533,6 +1551,7 @@ const [currentPage, setCurrentPage] = useState(0);
     
     exportPNG,
     exportHTML,
+    renderPages,
     exportPDF,
     previewLocal: (eventName?: string) => {
       const canvas = fabricRef.current;
@@ -4603,53 +4622,97 @@ const [currentPage, setCurrentPage] = useState(0);
   }
 }, [currentPage, musicUrl, pages, serializeCanvas, props, eventCtx]);
 
-  // Render every page to a PNG on an offscreen StaticCanvas and assemble them
-  // into a single PDF (one page per canvas page), named after the event.
-  const exportPDF = useCallback(async (eventName?: string): Promise<void> => {
-    const canvas = fabricRef.current;
-    const fabric = fabricModuleRef.current;
-    if (!canvas || !fabric) return;
+  // Render canvas pages to PNG data URLs on an offscreen StaticCanvas. Shared
+  // by the PDF export and by the export modal's preview, so the thumbnails the
+  // user approves are rendered exactly like the ones that reach the PDF.
+  const renderPages = useCallback(
+    async (opts?: { multiplier?: number; pages?: number[] }): Promise<PageRender> => {
+      const canvas = fabricRef.current;
+      const fabric = fabricModuleRef.current;
+      const w = CANVAS_REF_WIDTH;
+      const h = CANVAS_REF_HEIGHT;
+      if (!canvas || !fabric) return { images: [], width: w, height: h };
 
-    const currentPageJson = serializeCanvas(canvas);
-    const exportedPages = pages.map((page, index) =>
-      index === currentPage ? currentPageJson : (page ?? null)
-    );
+      const currentPageJson = serializeCanvas(canvas);
+      const allPages = pages.map((page, index) =>
+        index === currentPage ? currentPageJson : (page ?? null)
+      );
+      const wanted = (opts?.pages ?? allPages.map((_, i) => i)).filter(
+        (i) => Number.isInteger(i) && i >= 0 && i < allPages.length
+      );
 
-    // Pages the user hasn't visited this session may reference fonts that were
-    // never loaded; wait for them so offscreen text renders with the real face.
-    const families = collectFontFamilies(exportedPages);
-    if (families.length) await preloadFonts(families);
+      // Pages the user hasn't visited this session may reference fonts that were
+      // never loaded; wait for them so offscreen text renders with the real face.
+      const families = collectFontFamilies(wanted.map((i) => allPages[i]));
+      if (families.length) await preloadFonts(families);
 
-    const { jsPDF } = await import("jspdf");
-    const w = CANVAS_REF_WIDTH;
-    const h = CANVAS_REF_HEIGHT;
-    const orientation = h >= w ? "portrait" : "landscape";
-    const pdf = new jsPDF({ orientation, unit: "px", format: [w, h] });
-
-    const el = document.createElement("canvas");
-    const offscreen = new (fabric as any).StaticCanvas(el, { width: w, height: h });
-    try {
-      for (let i = 0; i < exportedPages.length; i++) {
-        offscreen.clear();
-        offscreen.backgroundColor = "#ffffff";
-        const json = exportedPages[i];
-        if (json) {
-          const result = offscreen.loadFromJSON(json);
-          if (result && typeof result.then === "function") await result;
+      // multiplier 2 keeps text crisp when the PDF page is viewed at full size.
+      const multiplier = opts?.multiplier ?? 2;
+      const el = document.createElement("canvas");
+      const offscreen = new (fabric as any).StaticCanvas(el, { width: w, height: h });
+      const images: string[] = [];
+      try {
+        for (const index of wanted) {
+          offscreen.clear();
+          offscreen.backgroundColor = "#ffffff";
+          const json = allPages[index];
+          if (json) {
+            const result = offscreen.loadFromJSON(json);
+            if (result && typeof result.then === "function") await result;
+          }
+          offscreen.renderAll();
+          images.push(offscreen.toDataURL({ format: "png", multiplier }));
         }
-        offscreen.renderAll();
-        // multiplier 2 keeps text crisp when the PDF page is viewed at full size.
-        const dataUrl = offscreen.toDataURL({ format: "png", multiplier: 2 });
-        if (i > 0) pdf.addPage([w, h], orientation);
-        pdf.addImage(dataUrl, "PNG", 0, 0, w, h);
+      } finally {
+        offscreen.dispose();
       }
-    } finally {
-      offscreen.dispose();
-    }
+      return { images, width: w, height: h };
+    },
+    [currentPage, pages, serializeCanvas]
+  );
 
-    const fileName = (eventName ?? "").trim() || "wedding-invitation";
-    pdf.save(`${fileName}.pdf`);
-  }, [currentPage, pages, serializeCanvas]);
+  // Assemble the rendered pages into a single PDF named after the event. The
+  // sheet size, fit, margin and page selection come from the export modal;
+  // callers that pass nothing get the artwork at its true physical size.
+  const exportPDF = useCallback(
+    async (eventName?: string, options?: Partial<PdfExportOptions>): Promise<void> => {
+      const opts: PdfExportOptions = { ...defaultPdfOptions(pages.length), ...(options ?? {}) };
+      const { images, width, height } = await renderPages({
+        multiplier: opts.quality,
+        pages: opts.pages,
+      });
+      if (!images.length) return;
+
+      const layout = computeLayout(opts, width, height);
+      const orientation = layout.pageW > layout.pageH ? "landscape" : "portrait";
+      const { jsPDF } = await import("jspdf");
+      const pdf = new jsPDF({
+        unit: "mm",
+        format: [layout.pageW, layout.pageH],
+        orientation,
+      });
+
+      const needsCrop =
+        opts.fit === "cover" && (layout.crop.w < width || layout.crop.h < height);
+
+      for (let i = 0; i < images.length; i++) {
+        if (i > 0) pdf.addPage([layout.pageW, layout.pageH], orientation);
+        // Painted first so it backs the letterbox bars and the margin.
+        if (opts.background && opts.background !== "transparent") {
+          pdf.setFillColor(opts.background);
+          pdf.rect(0, 0, layout.pageW, layout.pageH, "F");
+        }
+        const src = needsCrop
+          ? await cropImageDataUrl(images[i], layout.crop, width, height)
+          : images[i];
+        pdf.addImage(src, "PNG", layout.x, layout.y, layout.w, layout.h);
+      }
+
+      const fileName = (eventName ?? "").trim() || "wedding-invitation";
+      pdf.save(`${fileName}.pdf`);
+    },
+    [pages, renderPages]
+  );
 
   const saveLocal = useCallback(() => {
     const canvas = fabricRef.current;

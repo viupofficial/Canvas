@@ -13,6 +13,8 @@ import {
   type CanvasUser,
 } from "@/src/lib/userSession";
 import { publishAndSyncCanvas } from "@/src/lib/publishEvent";
+import { eventSlug } from "@/src/lib/slug";
+import PdfExportModal from "@/src/components/canvas-editor/PdfExportModal";
 
 /**
  * EditorHeader component
@@ -143,10 +145,14 @@ export default function EditorHeader(props: {
   // rendering the PDF, so the user knows the async work is in flight.
   const [shareOpen, setShareOpen] = useState(false);
   const shareRef = useRef<HTMLDivElement>(null);
-  const [shareStatus, setShareStatus] = useState<"idle" | "link" | "copied" | "pdf">("idle");
+  const [shareStatus, setShareStatus] = useState<"idle" | "link" | "copied">("idle");
   // Last Share Link failure, shown inside the dropdown. Cleared on every retry —
   // publishing and syncing are both idempotent, so retrying is always safe.
   const [shareError, setShareError] = useState("");
+
+  // "Share PDF" no longer downloads on click: it opens an export panel that
+  // previews the sheet and lets the user set paper/fit/margin/pages first.
+  const [pdfOpen, setPdfOpen] = useState(false);
 
   // ── PREVIEW DROPDOWN ─────────────────────────────────────────────────────
   // The preview button opens a menu: "Live" publishes/uploads then opens the
@@ -321,20 +327,21 @@ export default function EditorHeader(props: {
     closeMoreMenu();
   };
 
-  // The share dropdown is only available in the designer flow. Everywhere else
-  // (editor mode, teaser, legacy non-/designer paths) the Share button is inert.
-  const canShare = mode
-    ? mode !== "editor"
-    : !!pathname && pathname.startsWith("/designer");
+  // Share Link publishes to events/event-{eventId}.json, so it needs a canvas
+  // that is bound to an event; eventSlug returns null for anything else (see
+  // src/lib/slug.ts). The item disables itself in that case rather than firing
+  // a publish that can only fail. Share PDF has no such requirement.
+  const canPublishLink = !!eventSlug(props.eventId);
 
   /**
    * Handle the click event for the share button.
    * Opens the share dropdown (or defers to the onShare prop if provided).
+   *
+   * The dropdown used to be designer-only; it is now available in every mode
+   * and on every path, so Share PDF is reachable from any canvas.
    */
   const handleShareClick = (): void => {
     if (onShare) return onShare();
-    // Outside the designer flow, clicking Share does nothing (no dropdown).
-    if (!canShare) return;
     setShareOpen((o) => !o);
   };
 
@@ -375,6 +382,9 @@ export default function EditorHeader(props: {
     // status other than "idle" means a share is already in flight or just
     // finished (the button is also disabled for the same window).
     if (!editor || shareStatus !== "idle") return;
+    // Belt-and-braces: the item is disabled without an event, but never start a
+    // publish that has nowhere to write.
+    if (!canPublishLink) return;
     setShareError("");
     setShareStatus("link");
     try {
@@ -403,22 +413,14 @@ export default function EditorHeader(props: {
   };
 
   /**
-   * "Share PDF": render every page of the invitation to an image and download
-   * them as a single PDF named after the event.
+   * "Share PDF": open the export panel. It renders the pages, previews the
+   * sheet the user is about to get and owns the download itself, so nothing is
+   * written to disk until they press Download there.
    */
-  const handleSharePDF = async (): Promise<void> => {
-    const editor = editorRef.current;
-    if (!editor || shareStatus !== "idle") return;
-    setShareStatus("pdf");
-    try {
-      await editor.exportPDF(eventName);
-      setShareOpen(false);
-    } catch (e) {
-      console.error("[share] pdf failed", e);
-      alert("Could not export the PDF: " + (e as Error).message);
-    } finally {
-      setShareStatus("idle");
-    }
+  const handleSharePDF = (): void => {
+    if (!editorRef.current || shareStatus !== "idle") return;
+    setShareOpen(false);
+    setPdfOpen(true);
   };
 
   return (
@@ -638,7 +640,7 @@ export default function EditorHeader(props: {
                 role="menuitem"
                 // Disabled for the whole publish → sync → copy cycle so a second
                 // click cannot start a duplicate publish.
-                disabled={shareStatus !== "idle"}
+                disabled={shareStatus !== "idle" || !canPublishLink}
                 onClick={handleShareLink}
                 className="w-full flex items-center gap-[10px] px-3 py-[10px] text-[#7D5B59] font-semibold font-[Montserrat] rounded-[10px] hover:bg-[#f7f2f1] disabled:opacity-40 disabled:cursor-not-allowed text-left"
               >
@@ -658,7 +660,7 @@ export default function EditorHeader(props: {
                       : "Share Link"}
                   </span>
                   <span className="text-[12px] font-normal text-[#7D5B59]/60 truncate max-w-[190px]">
-                    {eventName}
+                    {canPublishLink ? eventName : "Open from My Event to publish"}
                   </span>
                 </span>
               </button>
@@ -682,15 +684,11 @@ export default function EditorHeader(props: {
                 onClick={handleSharePDF}
                 className="w-full flex items-center gap-[10px] px-3 py-[10px] text-[#7D5B59] font-semibold font-[Montserrat] rounded-[10px] hover:bg-[#f7f2f1] disabled:opacity-40 disabled:cursor-not-allowed text-left"
               >
-                {shareStatus === "pdf" ? (
-                  <Loader2 className="w-[22px] flex-shrink-0 animate-spin" />
-                ) : (
-                  <FileText className="w-[22px] flex-shrink-0" />
-                )}
+                <FileText className="w-[22px] flex-shrink-0" />
                 <span className="flex flex-col items-start min-w-0">
-                  <span>{shareStatus === "pdf" ? "Exporting PDF…" : "Share PDF"}</span>
+                  <span>Share PDF</span>
                   <span className="text-[12px] font-normal text-[#7D5B59]/60">
-                    Download all pages as PDF
+                    Preview and adjust, then download
                   </span>
                 </span>
               </button>
@@ -918,6 +916,15 @@ export default function EditorHeader(props: {
             <span>Local Preview</span>
           </button>
         </nav>
+      )}
+
+      {/* PDF export panel — preview + paper/fit/margin/page options. */}
+      {pdfOpen && (
+        <PdfExportModal
+          editorRef={editorRef}
+          eventName={eventName}
+          onClose={() => setPdfOpen(false)}
+        />
       )}
     </header>
   );
