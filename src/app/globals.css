@@ -201,7 +201,7 @@ body {
 .footer-rsvp-wrapper {
   position: absolute;
   top: -1.2rem;
-  left: 52%;
+  left: 50%;
   transform: translateX(-50%);
   /* Snappy slide when moving to/from the Info slot (prototype used 600ms). */
   transition: left 0.6s ease, transform 0.6s ease;
@@ -234,9 +234,10 @@ body {
     border-radius: 12px;
   }
 .footer-rsvp-wrapper.move-right {
-  /* Shifted left of the Info anchor (74.5%) so the moved circle centers on the
-     floating star, which sits left of the Info icon's center. */
-  left: 68%;
+  /* The nav is a five-slot grid (see "Even nav spacing" at the end of this
+     file): Guestbook 10%, Gift 30%, RSVP 50%, Info 70%, Contact 90%. The
+     circle slides onto the Info slot, so this is simply that slot's centre. */
+  left: 70%;
   transform: translateX(-50%);
 }
 
@@ -244,7 +245,7 @@ body {
   content: "";
   position: absolute;
   top: -3.5px;
-  left: 52%;
+  left: 50%;
   transform: translateX(-50%);
   width: 60px;
   height: 40px;
@@ -259,7 +260,7 @@ body {
 
 .footer-container.bump-shift::before {
   /* Keep the white notch under the moved RSVP circle (see .move-right). */
-  left: 68%;
+  left: 70%;
 }
 
 .footer-buttons {
@@ -273,21 +274,6 @@ body {
   position: absolute;
   top: -5px;
   display: flex;
-  gap: 4rem;
-}
-
-.footer-side.right a:nth-child(1) {
-  margin-right: 1rem;
-}
-
-.footer-side.left {
-  right: 1.7rem;
-
-}
-
-.footer-side.right {
-    left: 3.7rem;
-    gap: 2rem;
 }
 
 .footer-side a {
@@ -319,7 +305,7 @@ body {
 .footer-rsvp-text {
   position: absolute;
   top: 0%;
-  left: 52%;
+  left: 50%;
   transform: translate(-50%, 0);
   color: white;
   font-weight: bold;
@@ -387,7 +373,10 @@ star-fly-in {
 .floating-star {
   position: absolute;
   top: 28%;
-  left: 6%;
+  /* Percentage of .footer-side.right, the star's positioned ancestor. That
+     group spans the right 40% of the bar and holds Info then Contact, each
+     taking half of it — so the Info slot's centre is a flat 25% across. */
+  left: 25%;
   transform: translate(-50%, -50%) scale(1);
   opacity: 1;
   transition: all 0.6s ease;
@@ -400,10 +389,10 @@ star-fly-in {
 
 .floating-star.visible {
   top: -28%;
-  /* Percentage of .footer-side.right (the star's positioned ancestor). Measured
-     against the moved circle's center at 68% (.move-right): 5% left the star
-     ~7px short of it, which is ~7% of that side group's width. */
-  left: 12%;
+  /* Same 25% as at rest: the moved circle (.move-right) lands on the Info slot
+     too, so the star only rises — it no longer has to drift sideways to meet
+     it. */
+  left: 25%;
   transform: translate(-50%, -50%) scale(1.2);
   opacity: 1;
 }
@@ -497,28 +486,8 @@ star-fly-in {
     color: #A9925C;
   }
 
-  .footer-side.left,
-  .footer-side.right {
-    position: absolute;
-    top: -5px;
-    display: flex;
-    gap: 3rem;
-    margin-left: -10px;
-  }
-
-  .footer-side.right a:nth-child(1) {
-    margin-right: -0.3rem;
-  }
-
-  .footer-side.left {
-    right: 1.5rem;
-  }
-
-  .footer-side.right {
-    left: 3.7rem;
-    gap: 2rem;
-}
-
+  /* Group placement is width-independent now (see "Even nav spacing" at the end
+     of this file), so this breakpoint only bumps the type. */
   .footer-side a {
     color: white;
     text-decoration: none;
@@ -1527,8 +1496,10 @@ star-fly-in {
 #info-buttons {
   position: absolute;
   bottom: calc(0% + 10px);
-  /* sits just above the info-popup card, aligned with the Info icon (~74.5% across the 396px footer) */
-  left: 74.5%;
+  /* Sits just above the info-popup card, aligned with the Info slot — which the
+     five-slot nav grid puts on a flat 70% at any width (see "Even nav spacing"),
+     the same place the RSVP circle slides to while Info is open. */
+  left: 70%;
   transform: translateX(-50%);
   display: flex;
   flex-direction: row;
@@ -1782,31 +1753,11 @@ star-fly-in {
   box-sizing: border-box;
 }
 
-/* The base footer pins the two icon groups toward the centre with fixed offsets
-   (left group anchored by `right`, right group by `left`), so they cluster in the
-   middle and leave gaps at the borders. In the preview we re-anchor each group to
-   its own border instead — keeping them absolutely positioned so the floating
-   star / info-open animation (which is positioned relative to .footer-side.right)
-   still works — so the items reach the edges and end up evenly spread, with the
-   centre left clear for the RSVP circle. */
-.preview-local .footer-side.left,
-.preview-local .footer-side.right {
-  gap: 1.6rem;
-}
-
-.preview-local .footer-side.left {
-  left: 0.75rem;
-  right: auto;
-}
-
-.preview-local .footer-side.right {
-  right: 0.75rem;
-  left: auto;
-}
-
-.preview-local .footer-side.right a:nth-child(1) {
-  margin-right: 0;
-}
+/* The preview used to re-anchor the two icon groups to its own borders, because
+   the base footer pinned them toward the centre with fixed offsets and they
+   clustered in the middle. Both surfaces now share the one five-slot nav grid
+   (see "Even nav spacing" at the end of this file), so nothing is preview-
+   specific about the group placement any more. */
 
 /* Contact / Money Gift cards (sticky) — confine to a centered card. */
 .preview-local .contact-card,
@@ -2497,13 +2448,6 @@ img[alt="Mayaxasyraff"],
     margin-top: 6px;
   }
 
-  .floating-star.visible {
-    top: -28%;
-    left: 14%;
-    transform: translate(-50%, -50%) scale(1.2);
-    opacity: 1;
-  }
-
   .head-img {
     width: 572px;
     margin-top: -463px;
@@ -2621,26 +2565,17 @@ img[alt="Mayaxasyraff"],
    RSVP circle centred — so the remaining items stay evenly spread with no gap.
 
    Safe to re-anchor here because the Info button (whose open-state offsets are
-   tuned against the base geometry: .move-right 68%, .floating-star.visible 5%)
+   tuned against the base geometry: .move-right 70%, .floating-star.visible 25%)
    only ever appears when BOTH slots are filled, i.e. never in compact mode. */
 .footer-container.footer-nav-compact {
   padding: 8px 20px;
 }
 
-.footer-container.footer-nav-compact .footer-side.left {
-  left: 0.75rem;
-  right: auto;
-}
-
-.footer-container.footer-nav-compact .footer-side.right {
-  right: 0.75rem;
-  left: auto;
-}
-
-/* Only meaningful between two items; with one it would push it off-centre. */
-.footer-container.footer-nav-compact .footer-side.right a:nth-child(1) {
-  margin-right: 0;
-}
+/* The group anchors and the dropped nth-child nudge that used to live here are
+   now the shared behaviour of every RSVP layout (see "Even nav spacing"), so
+   only the bar's own padding is compact-specific. With a slot empty the lone
+   item simply centres in its side group, landing on 20% / 80% of the bar with
+   the circle still on 50%. */
 
 /* ── RSVP off: no centre slot to reserve ──────────────────────────────────────
    The full bar keeps its two icon groups clear of the centred RSVP circle by
@@ -2695,8 +2630,8 @@ img[alt="Mayaxasyraff"],
   margin-right: 0;
 }
 
-/* Beats the fixed 23px slot footprint below (3 classes vs 2), so Gift / Info /
-   Calendar / Location share the row equally with Guestbook and Contact. */
+/* Every item takes an equal share of the row, so Gift / Info / Calendar /
+   Location line up with Guestbook and Contact whatever their labels measure. */
 .footer-container.footer-no-rsvp .footer-side > * {
   flex: 1 1 0;
   width: auto;
@@ -2728,33 +2663,11 @@ img[alt="Mayaxasyraff"],
   transform: translate(-50%, -50%) scale(1.2);
 }
 
-/* ── Slot items keep a constant footprint ─────────────────────────────────────
-   The two swappable slots either side of the RSVP circle sit in absolutely
-   positioned groups whose items are spaced by a fixed `gap`, so each item's own
-   width decides where its centre — and every item after it — lands. A wide
-   label ("Calendar", "Location") therefore pushed the whole group outward and
-   the gaps no longer matched the Money Gift / Info layout.
-
-   Pin the slot items to the icon width (the same 23px .footer-icon and
-   .footer-side i already use) and let the label overflow it, centred: Gift and
-   Info were already icon-width, so their spacing is unchanged, and Calendar /
-   Location now fall in exactly the same places. Guestbook and Contact are
-   fixtures in every layout, so they keep sizing to their labels. */
-.footer-side .moneygift-toggle,
-.footer-side .footer-calendar,
-.footer-side .footer-info {
-  flex: 0 0 23px;
-  width: 23px;
-  min-width: 0;
-}
-
-.footer-side .moneygift-toggle .footer-label,
-.footer-side .footer-calendar .footer-label,
-.footer-side .footer-info .footer-label {
-  /* Overflows the 23px box symmetrically (the item centres its children), so a
-     long label stays readable without taking part in the layout. */
-  white-space: nowrap;
-}
+/* Slot items used to be pinned to a 23px footprint so a wide label
+   ("Calendar", "Location") could not shove the fixed-gap group outward. The
+   groups no longer use a fixed gap — every slot is an equal share of its side
+   (see "Even nav spacing" below, and the .footer-no-rsvp row above) — so the
+   pin is gone and a label simply centres in the slot it belongs to. */
 
 /* The wide RSVP-era side padding only worked because the items were absolutely
    positioned; the Basic row is normal flow, so tighten the padding. The double
@@ -2799,7 +2712,7 @@ img[alt="Mayaxasyraff"],
 
 /* No RSVP circle/notch in the Basic footer, so the Info-open shift is a no-op. */
 .footer-basic.bump-shift::before {
-  left: 52%;
+  left: 50%;
 }
 
 /* ──────────────────────────────────────────────────────────────────────────
@@ -2840,35 +2753,13 @@ img[alt="Mayaxasyraff"],
 }
 
 /* ──────────────────────────────────────────────────────────────────────────
-   Info-open choreography fixes for the preview footer (.preview-local)
-   The preview re-anchors the right icon group to the border (see the
-   containment rules above), so the base 68% circle slot and the star offset
-   no longer line up at narrow widths: the moved circle sat left of the Info
-   slot and the star drifted right of the circle. Re-tune both to meet over
-   the Info slot, and lift the Calendar/Location chooser bubbles clear of the
-   nav bar border they were clashing with.
+   Preview footer (.preview-local)
+   The Info-open choreography used to need its own offsets here, because the
+   preview re-anchored the icon groups to the borders while the editor left
+   them clustered around the centre. Both surfaces now share the one five-slot
+   nav grid at the end of this file, so the base offsets are already correct
+   and those overrides are gone. Only the chooser-bubble lift is preview-only.
    ────────────────────────────────────────────────────────────────────────── */
-.preview-local .footer-rsvp-wrapper.move-right {
-  left: 72%;
-}
-
-.preview-local .footer-container.bump-shift::before {
-  left: 72%;
-}
-
-/* Percentage is relative to .footer-side.right (the star's positioned
-   ancestor), whose left edge sits at ~72% of the preview width. The group is
-   border-anchored, so on wider previews the star needs to sit further left
-   and on narrow phones slightly right to stay centered on the moved circle. */
-.preview-local .floating-star.visible {
-  left: -4%;
-}
-
-@media (max-width: 390px) {
-  .preview-local .floating-star.visible {
-    left: 3%;
-  }
-}
 
 .preview-local #info-buttons {
   bottom: 26px;
@@ -2943,6 +2834,86 @@ img[alt="Mayaxasyraff"],
   height: 100%;
   align-items: center;
 }
+
+/* ──────────────────────────────────────────────────────────────────────────
+   Even nav spacing — the five-slot grid (RSVP layout)
+   The bar carries five things: Guestbook, the left slot (Gift/Calendar), the
+   RSVP circle, the right slot (Info/Calendar/Location) and Contact. They used
+   to be placed by hand — each icon group absolutely positioned at a fixed
+   offset from the centre with a fixed `gap` between its two items — and every
+   surface tuned those numbers separately (base, the 789px media query, the
+   preview, compact). The result was a bar whose items sat at different spacings
+   on the left and the right, drifted with the label widths, and did not match
+   between the editor and the published preview.
+
+   Place them on one grid instead. The nav row is stretched across the bar's
+   full padding box, each side group takes the outer 40% of it, and the two
+   items inside a group split that evenly — which lands the five centres on an
+   exact 10% / 30% / 50% / 70% / 90%. Every gap is then the same 20% of the bar
+   and the two end margins match each other, at any width, on every surface.
+   The RSVP circle and its notch sit at 50% and slide to the Info slot's 70%
+   (see .move-right), so the circle stays dead centre at rest.
+
+   Scoped with :not(.footer-no-rsvp) because that layout has no centre slot to
+   reserve and already spreads its items across the whole bar; .footer-basic
+   uses .footer-basic-row and is untouched.
+   ────────────────────────────────────────────────────────────────────────── */
+.footer-container:not(.footer-no-rsvp) .footer-buttons {
+  /* Stretch across the bar's padding box — the same box the RSVP circle and its
+     notch resolve their percentages against, so the five slots and the circle
+     share one coordinate system. Absolute positioning also ignores the bar's
+     horizontal padding, which every surface used to set differently (199px in
+     the base rule, 20px in the preview and compact ones) and which was half the
+     reason the editor and the preview never lined up. And it keeps the row from
+     feeding back into the bar's fixed height. */
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 19px;
+  height: 40px;
+  margin: 0;
+}
+
+.footer-container:not(.footer-no-rsvp) .footer-side.left,
+.footer-container:not(.footer-no-rsvp) .footer-side.right {
+  /* Two items sharing the outer 40% → centres at 10% and 30% of the bar. */
+  width: 40%;
+  justify-content: space-around;
+  gap: 0;
+  margin-left: 0;
+}
+
+.footer-container:not(.footer-no-rsvp) .footer-side.left {
+  left: 0;
+  right: auto;
+}
+
+.footer-container:not(.footer-no-rsvp) .footer-side.right {
+  right: 0;
+  left: auto;
+}
+
+/* Equal shares, so a slot's own label width no longer decides where it — or
+   anything after it — sits. This replaces the 23px footprint pin further up,
+   which existed only to stop wide labels ("Calendar", "Location") shoving the
+   fixed-gap group outward. */
+.footer-container:not(.footer-no-rsvp) .footer-side > * {
+  flex: 1 1 0;
+  width: auto;
+  min-width: 0;
+}
+
+/* The slot is now wider than the icon but can still be narrower than a long
+   label, which overflows it symmetrically — centred, and out of the layout. */
+.footer-container:not(.footer-no-rsvp) .footer-side .footer-label {
+  white-space: nowrap;
+}
+
+/* Nudges that propped up the old hand-placed spacing. */
+.footer-container:not(.footer-no-rsvp) .footer-side.right a:nth-child(1) {
+  margin-right: 0;
+}
+
 
 /* ── RSVP loading skeleton (see components/RsvpSkeleton.tsx) ────────────────
    Named uniquely on purpose: this file already redefines `pulse` as a scale
