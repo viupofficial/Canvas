@@ -534,6 +534,10 @@ export default function EditorHeader(props: {
             aria-haspopup="true"
             aria-expanded={previewOpen}
             title="Preview"
+            // Walkthrough target (canvas-tutorial). The mobile preview button
+            // carries the same attribute; the tutorial highlights whichever
+            // one is visible.
+            data-tutorial="preview"
             className=" rounded-full text-white p-2"
           >
             <img src="/preview.svg" alt="Preview" className="h-[34px] w-[34px] lg:h-[45px] lg:w-[45px]" />
@@ -808,6 +812,7 @@ export default function EditorHeader(props: {
           onClick={() => setPreviewOpen((o) => !o)}
           className="p-1.5 hover:bg-[#D4C9C4] rounded-lg transition-colors"
           title="Preview"
+          data-tutorial="preview"
         >
           <img src="/preview.svg" alt="Preview" className="h-5 w-5" />
         </button>

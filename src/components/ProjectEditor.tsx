@@ -15,6 +15,7 @@ import type { CanvasUser } from "@/src/lib/userSession";
 import { getPackageRules, readFeatureUsage, normalizeUsageCounter, type FeatureUsage } from "@/src/lib/packageRules";
 import { PackageToastHost, showPackageToast } from "@/src/components/PackageLimitToast";
 import PaymentUpgradeModal from "@/src/components/PaymentUpgradeModal";
+import CanvasTutorial from "@/src/components/canvas-tutorial/CanvasTutorial";
 import { publishAndSyncCanvas } from "@/src/lib/publishEvent";
 import { compactDesignJson } from "@/src/lib/compactDesignJson";
 import { parseDbTime } from "@/src/lib/dbTime";
@@ -1095,6 +1096,13 @@ function ProjectEditorInner({
           </div>
         </div>
       </div>
+
+      {/* First-run guided walkthrough. Additive overlay only — it reads
+          users.canvas_tutorial_seen from iFastNet AFTER the canvas has mounted
+          and waits for the real controls to exist before showing anything, so
+          it can neither block nor race canvas initialisation. Teaser/legacy
+          canvases have no account to record against, so it stays off there. */}
+      <CanvasTutorial userId={userId ?? null} enabled={isEventMode && !teaser} />
 
       {/* Top toast for package-limit upgrade nudges (gallery/location/music). */}
       <PackageToastHost />

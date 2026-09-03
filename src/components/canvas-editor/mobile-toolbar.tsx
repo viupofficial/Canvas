@@ -116,6 +116,8 @@ export default function MobileToolbar({
               <button
                 key={item.id}
                 data-tab={item.id}
+                // Mirrors the desktop rail's attribute — see canvas-tutorial.
+                data-tutorial={`tool-${item.id}`}
                 onClick={() => onTabChange(item.id)}
                 className={`flex flex-col items-center justify-center gap-0.5 min-w-[50px] shrink-0 py-2 px-2 rounded-[12px] transition-all ${
                   activeTab === item.id

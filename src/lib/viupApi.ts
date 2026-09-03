@@ -736,3 +736,90 @@ export async function loadOrCreateEventDesign({
   if (!full) throw new Error("Failed to load design");
   return full;
 }
+
+// ── Canvas onboarding tutorial (users.canvas_tutorial_seen) ──────────────────
+// The first-run walkthrough's completion flag lives on the iFastNet `users`
+// row — NOT in localStorage, not in designs.json_data — so it follows the
+// account across browsers and devices. Two endpoints, both keyed by the actor's
+// own user_id exactly like get_user.php:
+//
+//   GET  get_canvas_tutorial.php?user_id=N   → { canvas_tutorial_seen: 0|1 }
+//   POST mark_canvas_tutorial_seen.php       → { user_id: N }  (sets it to 1)
+//
+// CORS: same origin/headers/JSON shape as every other helper in this file. No
+// `credentials: "include"` here — these mirror get_user.php's user_id-parameter
+// contract, so vi-up.com may keep answering with its existing plain CORS
+// headers. (check_event_access.php is the only credentialed endpoint.)
+//
+// Neither call is allowed to break the canvas: the read returns `null` when the
+// answer is unusable (endpoint missing, offline, non-JSON) and the caller then
+// simply does not show the tutorial. The write DOES throw, because "mark as
+// seen" failing must surface to the user as a retry rather than being silently
+// treated as permanent.
+const TUTORIAL_STATUS_ENDPOINT = `${API_BASE}/get_canvas_tutorial.php`;
+const TUTORIAL_SEEN_ENDPOINT = `${API_BASE}/mark_canvas_tutorial_seen.php`;
+
+// Accept the flag wherever a reasonable PHP build might put it: at the top
+// level, nested under `user`, or under `data`. Same defensive shape as the
+// access probe's optionalBool.
+function readTutorialSeen(data: unknown): boolean | null {
+  const asRecord = (value: unknown): Record<string, unknown> | null =>
+    value && typeof value === "object" ? (value as Record<string, unknown>) : null;
+
+  const root = asRecord(data);
+  const sources = [root, asRecord(root?.user), asRecord(root?.data)];
+  for (const src of sources) {
+    if (!src) continue;
+    for (const key of ["canvas_tutorial_seen", "tutorial_seen", "seen"]) {
+      const v = src[key];
+      if (v === undefined || v === null) continue;
+      if (v === true || v === 1 || v === "1" || v === "true") return true;
+      if (v === false || v === 0 || v === "0" || v === "false") return false;
+    }
+  }
+  return null;
+}
+
+/**
+ * Has this user already finished or skipped the canvas walkthrough?
+ *
+ * Never throws and never blocks the canvas. Returns:
+ *   false → users.canvas_tutorial_seen = 0, show the tutorial
+ *   true  → already seen, do nothing
+ *   null  → unknown (endpoint not deployed, offline, bad payload). Treated by
+ *           the caller as "do not show", so an API outage can never spam the
+ *           tutorial at customers who already completed it.
+ */
+export async function getCanvasTutorialSeen(
+  userId: string | number,
+): Promise<boolean | null> {
+  const params = new URLSearchParams({ user_id: String(userId) });
+  try {
+    const res = await fetch(`${TUTORIAL_STATUS_ENDPOINT}?${params.toString()}`, {
+      method: "GET",
+      cache: "no-store",
+      headers: { Accept: "application/json" },
+    });
+    if (!res.ok) return null;
+    const data = await res.json();
+    if (data?.success === false) return null;
+    return readTutorialSeen(data);
+  } catch {
+    // Offline, CORS, 404, or PHP served HTML — unknown, not "unseen".
+    return null;
+  }
+}
+
+/**
+ * Persist users.canvas_tutorial_seen = 1 for this user.
+ *
+ * Called ONLY when the user explicitly presses Finish Tutorial or Skip
+ * Tutorial — never merely because the tutorial was displayed. Throws on
+ * failure so the overlay can offer a retry instead of pretending it stuck.
+ */
+export async function markCanvasTutorialSeen(userId: string | number): Promise<void> {
+  await fetchJson(TUTORIAL_SEEN_ENDPOINT, {
+    method: "POST",
+    body: JSON.stringify({ user_id: num(userId), canvas_tutorial_seen: 1 }),
+  });
+}

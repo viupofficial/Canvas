@@ -3171,6 +3171,10 @@ export default function Sidebar({
           return (
             <button
               key={it.id}
+              // Stable hook for the first-run walkthrough (canvas-tutorial).
+              // The phone rail carries the same attribute, so the tutorial
+              // resolves whichever copy is actually visible.
+              data-tutorial={`tool-${it.id}`}
               onClick={() => toggle(it.id, it.disabled)}
               aria-pressed={active === it.id}
               className={`relative flex flex-col items-center justify-center gap-4 text-left text-[13px] text-nowrap font-semibold px-3 py-2 rounded hover:bg-brand-accent/30 ${
