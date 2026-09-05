@@ -11,7 +11,6 @@ import {
   ChevronLeft,
   ChevronRight,
   ChevronDown,
-  ChevronUp,
   Trash2,
 } from "lucide-react";
 import { FONT_GROUPS } from "@/src/lib/fonts";
@@ -294,7 +293,7 @@ function SpacingRow(props: { editorRef?: React.RefObject<any> }) {
 // Sections of the Design tab, in the order they appear down the desktop
 // column. On a phone the inspector shows exactly one of these at a time.
 type DesignSection = "position" | "typography" | "border" | "color" | "appearance";
-type PhoneSection = DesignSection | "layers" | "artboard";
+export type PhoneSection = DesignSection | "layers" | "artboard";
 
 const PHONE_SECTIONS: { id: PhoneSection; label: string }[] = [
   { id: "position", label: "Position" },
@@ -315,6 +314,13 @@ export default function Inspector(props: {
   currentPageIndex?: number;
   // Artboard → Continuous Scroll, mirrored from the editor. Presentation only.
   presentationMode?: PresentationMode;
+  // ── Phone sheet ──────────────────────────────────────────────────────────
+  // On a phone this inspector is a bottom sheet, and the floating selection
+  // bubble (canvas-editor/selection-bubble) decides when it opens and on which
+  // section. Desktop ignores all three — it always shows the full column.
+  phoneOpen?: boolean;
+  phoneSection?: PhoneSection | null;
+  onPhoneClose?: () => void;
 }) {
   const {
     selected,
@@ -324,6 +330,9 @@ export default function Inspector(props: {
     pageCount = 1,
     currentPageIndex = 0,
     presentationMode = DEFAULT_PRESENTATION_MODE,
+    phoneOpen = false,
+    phoneSection = null,
+    onPhoneClose,
   } = props;
   const [tab, setTab] = React.useState<"design" | "layers" | "artboard">("design");
   const [showTextStyles, setShowTextStyles] = React.useState(false);
@@ -335,7 +344,6 @@ export default function Inspector(props: {
   const [designSection, setDesignSection] =
     React.useState<DesignSection>("position");
   const [sectionMenuOpen, setSectionMenuOpen] = React.useState(false);
-  const [phoneCollapsed, setPhoneCollapsed] = React.useState(false);
 
   // Which entry the bubble is currently on. Layers/Artboard are whole tabs;
   // everything else is a section of the Design tab.
@@ -356,6 +364,17 @@ export default function Inspector(props: {
     const next = PHONE_SECTIONS[phoneIndex + delta];
     if (next) goToSection(next.id);
   };
+
+  // The bubble opens the sheet on a specific section (Color, Typography, …).
+  // Re-applied whenever that request changes, so tapping the same button twice
+  // after paging away still lands back on the section it names.
+  React.useEffect(() => {
+    if (phoneOpen && phoneSection) goToSection(phoneSection);
+  }, [phoneOpen, phoneSection]);
+
+  // A phone sheet parked over the canvas needs an escape that isn't the tiny
+  // chevron; tapping the dimmed canvas closes it, as the tool sheet already does.
+  const phoneSheetOpen = phoneOpen && !!selected;
 
   // Horizontal drag on the bubble pages between sections. Pointer events cover
   // touch and mouse; taps on the bubble's own buttons fall under the threshold
@@ -462,16 +481,26 @@ export default function Inspector(props: {
   // };
 
   return (
+    <>
+      {/* Phone: tap-away backdrop. Deliberately transparent — the sheet is a
+          transient panel over the artboard the user is still looking at. */}
+      {phoneSheetOpen && (
+        <div
+          className="fixed inset-0 z-[44] pc:hidden"
+          onClick={() => onPhoneClose?.()}
+          aria-hidden
+        />
+      )}
     <aside
       className={[
-        // Phone: a sheet that floats above the tool rail, only while something
-        // is selected. Desktop: the sidebar column, unchanged.
+        // Phone: a sheet that floats above the tool rail, opened on demand by
+        // the floating selection bubble. Desktop: the sidebar column, unchanged.
         "fixed inset-x-0 bottom-[var(--mobile-rail-h)] z-[45] w-full h-auto max-h-[52vh]",
         "rounded-t-[18px] shadow-[0_-8px_24px_rgba(0,0,0,0.15)] bg-[#F8F7F6]",
         "pc:static pc:inset-auto pc:z-auto pc:h-full pc:max-h-none",
         "pc:rounded-none pc:shadow-none pc:bg-transparent",
         "pc:w-60 lg:w-80 min-w-0 lg:shrink-0 border-[#EDE2DE] border-[1px] overflow-y-auto",
-        selected ? "" : "hidden pc:block",
+        phoneSheetOpen ? "" : "hidden pc:block",
       ].join(" ")}
     >
       {/* ── Phone: section bubble ─────────────────────────────────────────
@@ -534,11 +563,11 @@ export default function Inspector(props: {
 
           <button
             type="button"
-            onClick={() => setPhoneCollapsed((c) => !c)}
-            aria-label={phoneCollapsed ? "Expand inspector" : "Collapse inspector"}
+            onClick={() => onPhoneClose?.()}
+            aria-label="Close inspector"
             className="p-1 rounded-[10px] text-[#7D5B59] hover:bg-[#F2E8E6B2] shrink-0"
           >
-            {phoneCollapsed ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
+            <ChevronDown size={18} />
           </button>
         </div>
 
@@ -573,7 +602,6 @@ export default function Inspector(props: {
                 role="menuitem"
                 onClick={() => {
                   goToSection(s.id);
-                  setPhoneCollapsed(false);
                   setSectionMenuOpen(false);
                 }}
                 className={`w-full text-left px-4 py-2 text-[13px] border-b border-[#F2E8E6B2] last:border-b-0 ${
@@ -589,7 +617,7 @@ export default function Inspector(props: {
         )}
       </div>
 
-      <div className={phoneCollapsed ? "hidden pc:block" : ""}>
+      <div>
       <div className="hidden pc:block border-b-[1px] border-[#EDE2DE] pb-3 p-4">
         <h3 className="font-[600] text-[20px] capitalize">
           {tab === "layers" ? "Layers" : tab === "artboard" ? "Artboard" : selected?.type ?? "Inspector"}
@@ -1452,5 +1480,6 @@ export default function Inspector(props: {
       )}
       </div>
     </aside>
+    </>
   );
 }

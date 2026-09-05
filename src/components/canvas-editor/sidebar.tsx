@@ -29,15 +29,7 @@ import {
 } from '@/src/store/EventDataContext';
 import LivePreviewPanel from '@/src/components/canvas-editor/LivePreviewPanel';
 import MobileToolbar from '@/src/components/canvas-editor/mobile-toolbar';
-import { prayerPage } from "@/src/components/template-list/prayerTemplate";
-import { countdownPage } from "@/src/components/template-list/timeBoxTemplate";
-import { itineraryPage } from "@/src/components/template-list/itineraryTemplate";
-import { eventDetailsPage } from "@/src/components/template-list/eventTemplate";
-import { parentsPage } from "@/src/components/template-list/parentsTemplate";
-import { invitationPage } from "@/src/components/template-list/invitationTemplate";
-import { guestbookPage } from "@/src/components/template-list/guestbookTemplate";
-import { galleryPage } from "@/src/components/template-list/galleryTemplate";
-import { envelopePage } from "@/src/components/template-list/EnvelopeTemplate";
+import { buildTemplatePages, getTemplateManifest, listTemplates } from "@/src/config/templateLoader";
 import { downscaleImageFile } from "@/src/lib/imageDownscale";
 import Scrubbable from "@/src/components/canvas-editor/scrubbable";
 import GradientEditor, { FillTypeSelect } from "@/src/components/canvas-editor/GradientEditor";
@@ -151,28 +143,12 @@ const INTERACTIVE_ELEMENTS: { id: 'countdown' | 'guestbook'; label: string; icon
 
 // const PREMIUM_TABS: Tab[] = ['rsvp', 'money', 'wishlist']; // disabled — all tabs unlocked
 
-const TEMPLATE_LIST = [
-  {
-    id: "full-template",
-    name: "Full Invitation",
-    pages: [
-      envelopePage,
-      invitationPage,
-      parentsPage,
-      eventDetailsPage,
-       itineraryPage,
-       galleryPage,
-       guestbookPage,
-      countdownPage,
-      prayerPage,
-     
-      
-      
-      
-      
-    ],
-  },
-];
+// Card data for the Templates panel, straight from the registry
+// (src/config/templates.ts). Metadata only — no page is built and no template
+// asset is fetched until the user actually applies one, so this stays cheap
+// however many templates are registered. To add a template, edit that file;
+// nothing here needs to change.
+const TEMPLATE_LIST = listTemplates();
 
 // ─── Tab components defined OUTSIDE Sidebar so they are stable across renders ───
 
@@ -2870,14 +2846,21 @@ function TemplatesTab({
   // The pages that were on the canvas before the template replaced them.
   previousPagesRef: React.MutableRefObject<any[] | null>;
 }) {
+  // Which template is being fetched right now (remote templates only), and the
+  // last failure, so a template whose media lives on iFastNet can report "could
+  // not reach the library" instead of quietly applying a design full of holes.
+  const [loadingId, setLoadingId] = useState<string | null>(null);
+  const [loadError, setLoadError] = useState<{ id: string; message: string } | null>(null);
+
   // Click a template to switch it on, click the same one again to switch it off
   // and get the previous design back. loadTemplate() REPLACES every page, so the
   // pages are snapshotted before it runs. (Undo can also step back out of a
   // template — the editor records the swap itself — which is why the applied id
   // lives there and is mirrored into this panel.)
-  const toggleTemplate = (tpl: (typeof TEMPLATE_LIST)[number]) => {
+  const toggleTemplate = async (tpl: (typeof TEMPLATE_LIST)[number]) => {
     const editor = editorRef?.current;
     if (!editor?.loadTemplate) return;
+    if (loadingId) return; // a fetch is already running
 
     if (appliedTemplateId === tpl.id) {
       // Switching off discards whatever was edited on the template's pages and
@@ -2896,12 +2879,49 @@ function TemplatesTab({
       return;
     }
 
+    // A template whose media lives on iFastNet: read its asset manifest FIRST.
+    // Two reasons, in this order:
+    //   1. it is the honest place to fail. If vi-up.com cannot be reached we
+    //      say so and change nothing — never silently apply a design whose
+    //      pictures will not arrive, and never quietly substitute another
+    //      template;
+    //   2. once cached, the resolver resolves every asset to the exact url the
+    //      API published, which is what makes filenames with spaces and "&"
+    //      land byte-for-byte right.
+    // Cached for the session, so switching back to this template later costs
+    // no request at all. Local templates skip this entirely — no fetch, no
+    // await, no behaviour change.
+    setLoadError(null);
+    if (tpl.assetProvider === 'ifastnet') {
+      setLoadingId(tpl.id);
+      try {
+        await getTemplateManifest(tpl.id);
+      } catch (e: any) {
+        const message =
+          e?.message || 'The template library could not be reached. Please try again.';
+        console.error('[TemplateAsset] manifest fetch failed for', tpl.id, e);
+        setLoadError({ id: tpl.id, message });
+        showPackageToast(message, 'error');
+        return;
+      } finally {
+        setLoadingId(null);
+      }
+    }
+
     // Only snapshot when no template is on, so swapping straight from one
     // template to another still remembers the user's own design.
     if (!appliedTemplateId) {
       previousPagesRef.current = editor.getProjectData?.().pages ?? null;
     }
-    editor.loadTemplate(tpl.pages, tpl.id);
+    // Built on demand, and freshly deep-cloned each time: what lands on the
+    // canvas is this project's own copy, so editing it can never write back
+    // into the master definition or into another project's design.
+    const pages = buildTemplatePages(tpl.id);
+    if (!pages.length) {
+      console.warn('[sidebar] template produced no pages', tpl.id);
+      return;
+    }
+    editor.loadTemplate(pages, tpl.id);
     onAppliedTemplateChange(tpl.id);
   };
 
@@ -2911,22 +2931,45 @@ function TemplatesTab({
       <div className="grid grid-cols-2 gap-3">
         {TEMPLATE_LIST.map((tpl) => {
           const applied = appliedTemplateId === tpl.id;
+          const loading = loadingId === tpl.id;
+          const failed = loadError?.id === tpl.id;
           return (
             <button
               key={tpl.id}
               type="button"
               aria-pressed={applied}
+              aria-busy={loading}
+              disabled={!!loadingId && !loading}
               title={applied ? `Turn off ${tpl.name}` : `Use ${tpl.name}`}
-              onClick={() => toggleTemplate(tpl)}
+              onClick={() => { void toggleTemplate(tpl); }}
               className={`border rounded p-2 hover:shadow text-left transition-colors ${
-                applied ? 'border-[#8C6B6B] bg-[#F2E8E6]' : 'border-gray-200'
-              }`}
+                applied ? 'border-[#8C6B6B] bg-[#F2E8E6]' : failed ? 'border-red-300' : 'border-gray-200'
+              } ${loadingId && !loading ? 'opacity-60' : ''}`}
             >
+              {/* Only rendered when the template declares one, so nothing is
+                  requested for templates that have no thumbnail yet. */}
+              {tpl.thumbnail ? (
+                <img
+                  src={tpl.thumbnail}
+                  alt=""
+                  loading="lazy"
+                  aria-hidden
+                  className="w-full aspect-396/704 object-cover rounded mb-2"
+                />
+              ) : null}
               <div className="text-sm font-semibold">{tpl.name}</div>
-              <div className="text-xs text-gray-500">{tpl.pages.length} pages</div>
-              <div className={`text-[11px] mt-1 ${applied ? 'text-[#8C6B6B] font-semibold' : 'text-gray-400'}`}>
-                {applied ? 'On — click to turn off' : 'Click to use'}
-              </div>
+              <div className="text-xs text-gray-500">{tpl.pageCount} pages</div>
+              {/* Status line. A remote template can be fetching or unreachable;
+                  a local one only ever shows on/off, exactly as before. */}
+              {loading ? (
+                <div className="text-[11px] mt-1 text-gray-500">Loading template…</div>
+              ) : failed ? (
+                <div className="text-[11px] mt-1 text-red-600">{loadError.message}</div>
+              ) : (
+                <div className={`text-[11px] mt-1 ${applied ? 'text-[#8C6B6B] font-semibold' : 'text-gray-400'}`}>
+                  {applied ? 'On — click to turn off' : 'Click to use'}
+                </div>
+              )}
             </button>
           );
         })}

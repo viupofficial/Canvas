@@ -2946,3 +2946,14 @@ img[alt="Mayaxasyraff"],
     display: none;
   }
 }
+
+/* Scrollable strip with no visible scrollbar — used by the phone selection
+   bubble, whose button row scrolls sideways on a narrow artboard. */
+.no-scrollbar {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}

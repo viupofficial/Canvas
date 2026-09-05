@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { collectFontFamilies, preloadFonts } from "@/src/lib/fonts";
 import { createGifOverlay } from "@/src/lib/gifOverlay";
+import { loadPageResilient } from "@/src/lib/templateAssetLoading";
 import MusicPlayer from "@/src/components/MusicPlayer";
 import { normalizePresentationMode, type PresentationMode } from "@/src/lib/presentationMode";
 
@@ -917,8 +918,19 @@ export default function RsvpPlayer({
           // this once *after* the page (including its background image) has fully
           // loaded, so use the promise — otherwise rc.backgroundImage is still
           // unset and the background transition below never arms.
-          rc.loadFromJSON(pageData).then(() => {
+          // Not a bare loadFromJSON: Fabric enlivens a page with Promise.all,
+          // so ONE image that will not load rejects the batch and the guest
+          // gets a completely blank page (plus an unhandled rejection). With
+          // template media now served from vi-up.com that is a matter of time —
+          // a deleted file, a slow host, a patchy mobile connection. This loads
+          // the page anyway and leaves the broken picture out; the guest sees
+          // the invitation, and the details go to the console, not the screen.
+          loadPageResilient(rc as any, pageData, `invitation page ${index + 1}`).then((loadResult) => {
             if (cancelled) return;
+            if (!loadResult.ok) {
+              console.error(`[TemplateAsset] page ${index + 1} could not be rendered`, loadResult.error);
+              return;
+            }
             rc.discardActiveObject();
             // Capture this page's resting background transform so navigation can
             // animate the incoming background from the page we left to here.

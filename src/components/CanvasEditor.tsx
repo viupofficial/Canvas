@@ -14,21 +14,22 @@ import { Copy, Trash, Trash2, ClipboardPaste, ArrowUpToLine, ArrowDownToLine, Ey
 import EventFooter from "../components/EventFooter";
 import MusicPlayer from "../components/MusicPlayer";
 import '../app/globals.css'
-import TemplateList from "@/src/components/template-list";
-import { envelopePage } from "@/src/components/template-list/EnvelopeTemplate";
-import { galleryPage } from "@/src/components/template-list/galleryTemplate";
-// The gallery template ships with a few decorative starter photos
+// Template DESIGN data lives in src/config/templates.ts and is read only
+// through the loader, which hands back a fresh deep clone every time. The
+// editor never holds a reference into the master definitions, so editing one
+// project can't rewrite a template — or another project.
+import {
+  RUNTIME_BLOCKS,
+  buildBlockObjects,
+  buildBlockPage,
+  getGalleryStarterCount,
+} from "@/src/config/templateLoader";
+// The gallery block ships with a few decorative starter photos
 // (galleryImage1 / galleryImage2 / …). Those are free defaults and must NOT
 // count against the package photo budget — otherwise a Standard user (limit 8)
 // could only add 6 of their own before hitting the cap. Derive the starter count
-// from the template itself so it stays correct if the template changes.
-const GALLERY_STARTER_COUNT = Array.isArray((galleryPage as any)?.objects)
-  ? (galleryPage as any).objects.filter(
-      (o: any) => typeof o?.name === "string" && o.name.startsWith("galleryImage"),
-    ).length
-  : 0;
-import { countdownPage } from "@/src/components/template-list/timeBoxTemplate";
-import { guestbookPage } from "@/src/components/template-list/guestbookTemplate";
+// from the block itself so it stays correct if the design changes.
+const GALLERY_STARTER_COUNT = getGalleryStarterCount();
 import { useEventDataOptional, type MaxPaxComboKey } from "@/src/store/EventDataContext";
 import { useFabricEventSync } from "@/src/hooks/useFabricEventSync";
 import { FONT_GROUPS, loadGoogleFont, collectFontFamilies, preloadFonts } from "@/src/lib/fonts";
@@ -51,6 +52,16 @@ import { normalizePresentationMode, type PresentationMode } from "@/src/lib/pres
 import { upload } from "@vercel/blob/client";
 import { uploadEditedImage } from "@/src/lib/uploadEditedImage";
 import { createGifOverlay, type GifOverlay } from "@/src/lib/gifOverlay";
+// A remote template asset that will not load must cost the design that one
+// picture, not the whole page — see the file header for why Fabric otherwise
+// blanks it. restoreOriginalSources puts the real url back on the way out, so a
+// placeholder shown during an outage is never persisted.
+import {
+  hasPlaceholders,
+  loadPageResilient,
+  restoreOriginalSources,
+} from "@/src/lib/templateAssetLoading";
+import SelectionBubble, { type BubbleSection } from "@/src/components/canvas-editor/selection-bubble";
 import { showPackageToast } from "@/src/components/PackageLimitToast";
 import {
   ENABLE_SMART_SNAPPING,
@@ -327,6 +338,12 @@ const FABRIC_EXPORT_PROPS = [
   "url",
   "src",
   "_editedSrc",
+  // Parks the REAL url of an image that is currently showing the transparent
+  // placeholder because its host was unreachable. It has to survive
+  // toObject() so serializeCanvas can put the url back — and serializeCanvas
+  // deletes the key while doing so, which is why it never reaches a saved
+  // design, a publish or an export.
+  "_remoteSrc",
   "targetPage",
   "pageIndex",
   "name",
@@ -814,12 +831,22 @@ const CanvasEditor = forwardRef<
     // Purely a presentation setting — the editor canvas stays page-by-page.
     initialPresentationMode?: PresentationMode | string | null;
     onPresentationModeChange?: (mode: PresentationMode) => void;
+    // Phone only. Fired by the floating selection bubble when the user asks for
+    // a control the bubble itself doesn't carry — the parent opens the inspector
+    // sheet on that section (null = wherever it was left).
+    onRequestInspector?: (section: BubbleSection | null) => void;
   }
 >((props, ref) => {
   const canvasEl = useRef<HTMLCanvasElement | null>(null);
   const fabricRef = useRef<FabricCanvas | null>(null);
   const [pages, setPages] = useState<any[]>(
-    props.initialPages && props.initialPages.length ? props.initialPages : [envelopePage]
+    props.initialPages && props.initialPages.length
+      ? props.initialPages
+      // A canvas opened with nothing saved starts on the envelope. Built fresh
+      // from the registry, so this page is this project's own copy — the old
+      // code pushed the shared module export in here, where any later edit
+      // could write through to every other canvas in the tab.
+      : [buildBlockPage(RUNTIME_BLOCKS.envelope)]
   );
   // Mirror of `pages` readable synchronously (history code runs from callbacks
   // and imperative-handle methods, where the state may not have committed yet).
@@ -897,6 +924,10 @@ const [currentPage, setCurrentPage] = useState(0);
   const countdownTargetRef = useRef<Date | null>(null);
   const globalBordersRef = useRef<{ url: string; id: string }[]>([]);
   const [overlay, setOverlay] = useState<{ left: number; top: number; width: number; height: number; isImage: boolean; isText: boolean; fontFamily: string } | null>(null);
+  // True while the selection is being dragged / scaled / rotated, or a textbox
+  // is in edit mode. The phone selection bubble hides for the duration so it
+  // never sits under the finger that's moving the element.
+  const [selectionBusy, setSelectionBusy] = useState(false);
   const [fontMenuOpen, setFontMenuOpen] = useState(false);
   // Selection-toolbar "Arrange" dropdown (stacking order).
   const [arrangeMenuOpen, setArrangeMenuOpen] = useState(false);
@@ -1079,7 +1110,12 @@ const [currentPage, setCurrentPage] = useState(0);
     // NOTE: in Fabric v7 `Canvas.toJSON()` ignores any argument and serializes with NO
     // custom props — so we must use `toObject([...props])` (as the object-level calls do)
     // for FABRIC_EXPORT_PROPS like `name`, `linkUrl`, `locked` to actually round-trip.
-    return (canvas as any).toObject([...FABRIC_EXPORT_PROPS]);
+    const json = (canvas as any).toObject([...FABRIC_EXPORT_PROPS]);
+    // If an image is currently showing the transparent placeholder because its
+    // host was unreachable, swap the real url back in before this JSON becomes
+    // history, a save, a publish or an export. Costs one cheap scan and only
+    // rewrites anything in the (rare) outage case.
+    return hasPlaceholders(json) ? restoreOriginalSources(json) : json;
   }, []);
 
   // ---------- History core ----------
@@ -1180,8 +1216,28 @@ const [currentPage, setCurrentPage] = useState(0);
       // Fabric v5: loadFromJSON is callback-based and returns the canvas synchronously.
       const result = canvas.loadFromJSON(json);
       if (result && typeof (result as any).then === 'function') {
-        (result as any).then(finish).catch((e: any) => {
-          console.error("replaceCanvasContent failed", e);
+        (result as any).then(finish).catch(async (e: any) => {
+          // Fabric enlivens a page with Promise.all, so ONE image that will not
+          // load rejects the whole batch and the page paints EMPTY. That is now
+          // a live risk for the iFastNet-hosted templates (and always was for a
+          // mistyped /public filename), so before giving up, find out which
+          // pictures are actually broken and load the page without them. The
+          // real urls are parked on the objects and put back by
+          // serializeCanvas(), so a placeholder can never be saved over one.
+          const recovery = await loadPageResilient(canvas as any, json, 'editor page');
+          if (recovery.ok) {
+            if (recovery.missing.length) {
+              showPackageToast(
+                recovery.missing.length === 1
+                  ? "One picture on this page could not be loaded — everything else is here."
+                  : `${recovery.missing.length} pictures on this page could not be loaded — everything else is here.`,
+                'warn',
+              );
+            }
+            finish();
+            return;
+          }
+          console.error("replaceCanvasContent failed", recovery.error ?? e);
           isRestoringRef.current = false;
           onDone?.();
         });
@@ -1285,9 +1341,11 @@ const [currentPage, setCurrentPage] = useState(0);
     const fabric = fabricModuleRef.current;
     if (!canvas || !fabric) return;
 
-    const source = kind === 'countdown' ? countdownPage.objects : guestbookPage.objects;
-    // Deep-clone the template defs so we never mutate the shared module export.
-    const defs = source.map((o) => ({ ...o }));
+    // Built from the registry, which already returns a fresh deep clone — the
+    // shared block definition is never handed out by reference.
+    const defs = buildBlockObjects(
+      kind === 'countdown' ? RUNTIME_BLOCKS.countdown : RUNTIME_BLOCKS.guestbook,
+    );
 
     // Enliven each def on its own so a single object that fails to revive (e.g. an
     // image whose src 404s) is skipped instead of rejecting the whole batch and
@@ -2528,13 +2586,21 @@ const [currentPage, setCurrentPage] = useState(0);
 
         canvas.on('selection:created', () => { stopPreview(); onSelectionChange(); updateOverlayFromActive(); onLayersChangeRef.current?.(); });
         canvas.on('selection:updated', () => { stopPreview(); onSelectionChange(); updateOverlayFromActive(); onLayersChangeRef.current?.(); });
-        canvas.on('selection:cleared', () => { stopPreview(); onSelectionChange(); setOverlay(null); onLayersChangeRef.current?.(); });
+        canvas.on('selection:cleared', () => { stopPreview(); onSelectionChange(); setOverlay(null); setSelectionBusy(false); onLayersChangeRef.current?.(); });
 
-        // Keep the overlay in sync while objects move/transform
-        canvas.on('object:moving', () => { onSelectionChange(); updateOverlayFromActive(); });
-        canvas.on('object:scaling', () => { onSelectionChange(); updateOverlayFromActive(); });
-        canvas.on('object:rotating', () => { onSelectionChange(); updateOverlayFromActive(); });
-        canvas.on('object:modified', () => { onSelectionChange(); updateOverlayFromActive(); });
+        // Keep the overlay in sync while objects move/transform. Each of these
+        // also marks the selection busy so the phone bubble gets out of the way
+        // until the gesture ends (object:modified / mouse:up).
+        canvas.on('object:moving', () => { setSelectionBusy(true); onSelectionChange(); updateOverlayFromActive(); });
+        canvas.on('object:scaling', () => { setSelectionBusy(true); onSelectionChange(); updateOverlayFromActive(); });
+        canvas.on('object:rotating', () => { setSelectionBusy(true); onSelectionChange(); updateOverlayFromActive(); });
+        canvas.on('object:modified', () => { setSelectionBusy(false); onSelectionChange(); updateOverlayFromActive(); });
+        canvas.on('mouse:up', () => setSelectionBusy(false));
+
+        // Typing in a textbox puts the caret and the on-screen keyboard where the
+        // bubble would be, so it steps aside until editing ends.
+        canvas.on('text:editing:entered', () => setSelectionBusy(true));
+        canvas.on('text:editing:exited', () => { setSelectionBusy(false); updateOverlayFromActive(); });
 
         // Double-click a path: enter point editing, the way double-clicking a
         // vector object in Figma (or reaching for Direct Selection in Adobe)
@@ -3897,6 +3963,38 @@ const [currentPage, setCurrentPage] = useState(0);
     });
   }, []);
 
+  // Lock the selection from the phone bubble. Mirrors toggleLayerLock (the
+  // Layers panel's action) so a lock set either way looks the same to save/load;
+  // locking deselects, which is why the bubble only ever locks — unlocking stays
+  // in the Layers panel, where a locked element can still be reached.
+  const lockFromOverlay = useCallback(() => {
+    const canvas = fabricRef.current;
+    if (!canvas) return;
+    const active: any = canvas.getActiveObject();
+    if (!active) return;
+    const targets: any[] = active.type === 'activeselection' && Array.isArray(active._objects)
+      ? [...active._objects]
+      : [active];
+    targets.forEach((obj) => {
+      obj.locked = true;
+      obj.selectable = false;
+      obj.evented = false;
+      obj.lockMovementX = true;
+      obj.lockMovementY = true;
+      obj.lockScalingX = true;
+      obj.lockScalingY = true;
+      obj.lockRotation = true;
+      obj.hasControls = false;
+    });
+    canvas.discardActiveObject();
+    canvas.requestRenderAll();
+    setOverlay(null);
+    props.onSelectionChange?.(null);
+    pushSnapshot();
+    saveCurrentPage(currentPageRef.current);
+    onLayersChangeRef.current?.();
+  }, []);
+
   const bringToFrontFromOverlay = useCallback(() => {
     const c = fabricRef.current;
     if (!c) return;
@@ -4657,8 +4755,14 @@ const [currentPage, setCurrentPage] = useState(0);
           offscreen.backgroundColor = "#ffffff";
           const json = allPages[index];
           if (json) {
-            const result = offscreen.loadFromJSON(json);
-            if (result && typeof result.then === "function") await result;
+            // One unreachable picture must not fail the whole export: render
+            // the page without it rather than throwing out the PDF. (toDataURL
+            // below is also why every remote image carries crossOrigin —
+            // without it this line throws SecurityError on a tainted canvas.)
+            const result = await loadPageResilient(offscreen, json, `export page ${index + 1}`);
+            if (!result.ok) {
+              console.error(`[TemplateAsset] export page ${index + 1} failed to load`, result.error);
+            }
           }
           offscreen.renderAll();
           images.push(offscreen.toDataURL({ format: "png", multiplier }));
@@ -4858,8 +4962,11 @@ const applyBgToOtherPages = (patch: { backgroundImage?: any; backgroundColor?: a
     const canvas = fabricRef.current;
     if (!canvas) return;
     flushPending();
-    // Deep-clone so the shared module export is never mutated by the editor.
-    const pageJSON = JSON.parse(JSON.stringify(kind === 'countdown' ? countdownPage : guestbookPage));
+    // A fresh page from the registry — the loader deep-clones, so nothing the
+    // user does to it can reach the shared block definition.
+    const pageJSON = buildBlockPage(
+      kind === 'countdown' ? RUNTIME_BLOCKS.countdown : RUNTIME_BLOCKS.guestbook,
+    );
     const prevIndex = currentPageRef.current;
     const currentJSON = serializeCanvas(canvas);
     const newIndex = pagesRef.current.length; // append semantics, as in addPage
@@ -5123,14 +5230,17 @@ const applyBgToOtherPages = (patch: { backgroundImage?: any; backgroundColor?: a
     goToPage(idx, () => applyGalleryLayout(layout));
   };
 
-  // Append the gallery template as a new page and switch to it. No-op if a
-  // gallery page already exists (we never add a second one). The template
-  // already carries the default photos in its image slots.
+  // Append the gallery block as a new page and switch to it. No-op if a gallery
+  // page already exists (we never add a second one). The block already carries
+  // the default photos in its image slots.
   const addGalleryPage = () => {
     const canvas = fabricRef.current;
     if (!canvas) return;
     if (hasGalleryPage()) return;
     flushPending();
+    // Built fresh: this page belongs to this project, so photos added to it
+    // can never appear in another canvas built from the same block.
+    const galleryPageJson = buildBlockPage(RUNTIME_BLOCKS.gallery);
     const prevIndex = currentPage;
     const currentJSON = serializeCanvas(canvas);
     const newIndex = pages.length;
@@ -5138,10 +5248,10 @@ const applyBgToOtherPages = (patch: { backgroundImage?: any; backgroundColor?: a
     setPages(prev => {
       const updated = [...prev];
       updated[prevIndex] = currentJSON;
-      updated.push(galleryPage);
+      updated.push(galleryPageJson);
       return updated;
     });
-    replaceCanvasContent(galleryPage, () => {
+    replaceCanvasContent(galleryPageJson, () => {
       const h = getPageHistory(newIndex);
       if (h.undo.length === 0) commitSnapshot();
     });
@@ -5819,6 +5929,23 @@ const applyBgToOtherPages = (patch: { backgroundImage?: any; backgroundColor?: a
                 <EventFooter contacts={props.contacts} moneyGift={props.moneyGift} calendar={props.calendar} location={props.location} rsvpConfig={props.rsvpConfig} userId={props.userId} eventId={props.eventId} showRsvpAndMoneyGift={getPackageRules(props.packageId).showRsvpAndMoneyGift}/>
               </div>
             </div>
+          )}
+
+          {/* Phone: the contextual action bubble that floats beside the
+              selection. It lives in the stage (not the workspace) so it pans
+              with the artboard, exactly like the footer above. Desktop keeps
+              the inspector column and hides it — see selection-bubble.tsx. */}
+          {!selectionBusy && (
+            <SelectionBubble
+              rect={overlay}
+              canvasBox={canvasBox}
+              onOpenSection={(section) => props.onRequestInspector?.(section)}
+              onDuplicate={cloneFromOverlay}
+              onLock={lockFromOverlay}
+              onDelete={deleteFromOverlay}
+              onEditImage={() => requestEditActiveImage(false)}
+              onCropImage={() => requestEditActiveImage(true)}
+            />
           )}
           </div>
         </div>

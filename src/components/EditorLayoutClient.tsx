@@ -6,7 +6,7 @@ import {
   DEFAULT_PRESENTATION_MODE,
   type PresentationMode,
 } from "@/src/lib/presentationMode";
-import Inspector from "./canvas-editor/inspector";
+import Inspector, { type PhoneSection } from "./canvas-editor/inspector";
 import PhonePreviewWrapper from "./canvas-editor/PhonePreviewWrapper";
 import { Monitor, Smartphone } from "lucide-react";
 
@@ -68,6 +68,15 @@ export default function EditorLayoutClient({
     DEFAULT_PRESENTATION_MODE
   );
   const [internalPreviewMode, setInternalPreviewMode] = useState<"desktop" | "phone">("desktop");
+  // Phone inspector sheet. It used to open with every selection and swallow the
+  // bottom third of the screen; now the floating selection bubble is what a
+  // selection gets, and the sheet only opens when the bubble asks for a control
+  // it doesn't carry. `section` is what the bubble asked for (null = leave the
+  // sheet on whichever section it was last showing).
+  const [phoneSheet, setPhoneSheet] = useState<{ open: boolean; section: PhoneSection | null }>({
+    open: false,
+    section: null,
+  });
 
   const previewMode = previewModeProp ?? internalPreviewMode;
   const setPreviewMode = setPreviewModeProp ?? setInternalPreviewMode;
@@ -85,6 +94,8 @@ export default function EditorLayoutClient({
 
   const onSelectionChange = (obj: any | null) => {
     setSelected(obj);
+    // Deselecting takes the sheet with it — it has nothing left to edit.
+    if (!obj) setPhoneSheet({ open: false, section: null });
     // On a phone the tool panel and the inspector both live at the bottom of the
     // screen, so selecting an element hands that space over to the inspector.
     // Desktop shows them side by side and needs no such trade.
@@ -124,6 +135,7 @@ export default function EditorLayoutClient({
       userId={userId}
       eventId={eventId}
       packageId={packageId}
+      onRequestInspector={(section) => setPhoneSheet({ open: true, section })}
     />
   );
 
@@ -239,6 +251,9 @@ export default function EditorLayoutClient({
             pageCount={pagesInfo.count}
             currentPageIndex={pagesInfo.current}
             presentationMode={presentationMode}
+            phoneOpen={phoneSheet.open}
+            phoneSection={phoneSheet.section}
+            onPhoneClose={() => setPhoneSheet({ open: false, section: null })}
           />
         </div>
       )}
