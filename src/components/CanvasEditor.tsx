@@ -20,9 +20,12 @@ import '../app/globals.css'
 // project can't rewrite a template — or another project.
 import {
   RUNTIME_BLOCKS,
+  INTERACTIVE_ELEMENT_BLOCKS,
+  isInteractiveElementKind,
   buildBlockObjects,
   buildBlockPage,
   getGalleryStarterCount,
+  type InteractiveElementKind,
 } from "@/src/config/templateLoader";
 // The gallery block ships with a few decorative starter photos
 // (galleryImage1 / galleryImage2 / …). Those are free defaults and must NOT
@@ -149,6 +152,8 @@ export type EditorHandle = {
   // (Dragging one from the panel still drops it onto the current page.)
   addCountdown: () => void;
   addGuestbook: () => void;
+  // The date plate is an ornament, not a page: it lands on the CURRENT page.
+  addDatePlate: () => void;
   addText: (text?: string, opts?: Record<string, any>) => void;
   enterTextTool: () => void;
   exitTextTool: () => void;
@@ -166,7 +171,7 @@ export type EditorHandle = {
   enterEllipseTool: () => void;
   exitEllipseTool: () => void;
   uploadImage: () => void;
-  addImageFromUrl: (url: string) => void;
+  addImageFromUrl: (url: string, opts?: { cover?: boolean }) => void;
   addMusicFromUrl: (url: string) => void;
   uploadMusic: () => void;
   playMusic: () => void;
@@ -349,6 +354,17 @@ const canvasSizeOf = (canvas: any): { w: number; h: number } => ({
   w: (canvas?.getWidth?.() ?? canvas?.width ?? 396) as number,
   h: (canvas?.getHeight?.() ?? canvas?.height ?? 704) as number,
 });
+
+/**
+ * Scale that makes a picture COVER the whole page — the background case, where
+ * "shrink so it fits" is exactly wrong. Enlarges when it has to, and crops the
+ * overhang on the shorter axis rather than letterboxing.
+ */
+const coverImageScale = (img: any, canvas: any): number => {
+  const { w, h } = naturalSizeOf(img);
+  const page = canvasSizeOf(canvas);
+  return Math.max(page.w / w, page.h / h);
+};
 
 /** 0.6, or less when the picture is bigger than most of the page. */
 const placedImageScale = (img: any, canvas: any): number => {
@@ -1369,16 +1385,14 @@ const [currentPage, setCurrentPage] = useState(0);
   // `name`) the editor and the published player rely on to drive its behaviour.
   // Objects are added loose (not grouped) so the countdown ticker can find and
   // rewrite each value box in place. An optional drop point shifts the whole set.
-  const addElement = useCallback((kind: 'countdown' | 'guestbook', pos?: { x: number; y: number }) => {
+  const addElement = useCallback((kind: InteractiveElementKind, pos?: { x: number; y: number }) => {
     const canvas = fabricRef.current;
     const fabric = fabricModuleRef.current;
     if (!canvas || !fabric) return;
 
     // Built from the registry, which already returns a fresh deep clone — the
     // shared block definition is never handed out by reference.
-    const defs = buildBlockObjects(
-      kind === 'countdown' ? RUNTIME_BLOCKS.countdown : RUNTIME_BLOCKS.guestbook,
-    );
+    const defs = buildBlockObjects(INTERACTIVE_ELEMENT_BLOCKS[kind]);
 
     // Enliven each def on its own so a single object that fails to revive (e.g. an
     // image whose src 404s) is skipped instead of rejecting the whole batch and
@@ -1839,6 +1853,11 @@ const [currentPage, setCurrentPage] = useState(0);
     addGuestbook: () => {
       addElementPage('guestbook');
     },
+    addDatePlate: () => {
+      // No page of its own — it is a small ornament, so it goes onto whatever
+      // page the user is looking at, at the coordinates the block authors.
+      addElement('datePlate');
+    },
     addText: (text?: string, opts?: Record<string, any>) => {
       addText(text, opts);
     },
@@ -1868,8 +1887,8 @@ const [currentPage, setCurrentPage] = useState(0);
     uploadImage: () => {
       triggerImageUpload();
     },
-    addImageFromUrl: (url: string) => {
-      addImageFromUrl(url);
+    addImageFromUrl: (url: string, opts?: { cover?: boolean }) => {
+      addImageFromUrl(url, opts);
     },
     addMusicFromUrl: (url: string) => {
       addMusicFromUrl(url);
@@ -3954,7 +3973,7 @@ const [currentPage, setCurrentPage] = useState(0);
           addShape(data.shape);
           const active = fabricRef.current?.getActiveObject();
           if (active) { active.set({ left: x, top: y }); canvas.requestRenderAll(); pushSnapshot(); }
-        } else if (data.type === 'element' && (data.element === 'countdown' || data.element === 'guestbook')) {
+        } else if (data.type === 'element' && isInteractiveElementKind(data.element)) {
           addElement(data.element, { x, y });
         } else if (data.type === 'text' && data.text) {
           addText(data.text, { ...(data.opts || {}), left: x, top: y });
@@ -3965,11 +3984,15 @@ const [currentPage, setCurrentPage] = useState(0);
             // Ornaments from the Elements panel ask (data.center) to land in the
             // middle of the page, so adding one by click and by drag give the same
             // result; a gallery photo sends no flag and lands under the cursor.
+            // A background (data.cover) always covers the page and goes to the
+            // back, wherever it was dropped.
             const page = canvasSizeOf(canvas);
-            const scale = placedImageScale(img, canvas);
-            const at = data.center ? { left: page.w / 2, top: page.h / 2 } : { left: x, top: y };
+            const cover = !!data.cover;
+            const scale = cover ? coverImageScale(img, canvas) : placedImageScale(img, canvas);
+            const at = cover || data.center ? { left: page.w / 2, top: page.h / 2 } : { left: x, top: y };
             img.set({ ...at, originX: 'center', originY: 'center', scaleX: scale, scaleY: scale });
             canvas.add(img);
+            if (cover) (canvas as any).moveObjectTo(img, 0);
             canvas.requestRenderAll();
             pushSnapshot();
           }).catch((err: any) => console.error('Failed to load image-url', err));
@@ -4590,7 +4613,7 @@ const [currentPage, setCurrentPage] = useState(0);
     }
   }, [props.onMusicChange]);
 
-  const addImageFromUrl = useCallback((url: string) => {
+  const addImageFromUrl = useCallback((url: string, opts?: { cover?: boolean }) => {
     const canvas = fabricRef.current;
     const fabric = fabricModuleRef.current;
     if (!canvas || !fabric || !url) return;
@@ -4602,7 +4625,8 @@ const [currentPage, setCurrentPage] = useState(0);
       // stays centred whatever its size. Same convention the templates' own
       // images use; a drag still lands wherever it was dropped.
       const page = canvasSizeOf(canvas);
-      const scale = placedImageScale(img, canvas);
+      const cover = !!opts?.cover;
+      const scale = cover ? coverImageScale(img, canvas) : placedImageScale(img, canvas);
       img.set({
         left: page.w / 2,
         top: page.h / 2,
@@ -4612,6 +4636,11 @@ const [currentPage, setCurrentPage] = useState(0);
         scaleY: scale,
       });
       canvas.add(img);
+      // A background belongs behind the design, not on top of it. Left
+      // selectable on purpose, so it can still be moved or deleted like any
+      // other image — the templates lock their own sheets, but one the user
+      // dropped by hand they must be able to take back off.
+      if (cover) (canvas as any).moveObjectTo(img, 0);
       canvas.requestRenderAll();
       pushSnapshot();
     }).catch((err: any) => console.error('Failed to load image from url', err));
@@ -5022,9 +5051,7 @@ const applyBgToOtherPages = (patch: { backgroundImage?: any; backgroundColor?: a
     flushPending();
     // A fresh page from the registry — the loader deep-clones, so nothing the
     // user does to it can reach the shared block definition.
-    const pageJSON = buildBlockPage(
-      kind === 'countdown' ? RUNTIME_BLOCKS.countdown : RUNTIME_BLOCKS.guestbook,
-    );
+    const pageJSON = buildBlockPage(INTERACTIVE_ELEMENT_BLOCKS[kind]);
     const prevIndex = currentPageRef.current;
     const currentJSON = serializeCanvas(canvas);
     const newIndex = pagesRef.current.length; // append semantics, as in addPage

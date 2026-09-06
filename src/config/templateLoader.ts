@@ -41,6 +41,11 @@ import {
 } from "@/src/lib/templateManifest";
 import { createPageJson } from "./templateElementFactory";
 import { RUNTIME_BLOCKS, templateBlocks, templates } from "./templates";
+import {
+  INTERACTIVE_ELEMENT_BLOCKS,
+  isInteractiveElementKind,
+  type InteractiveElementKind,
+} from "./templates";
 import { reportTemplateIssuesOnce } from "./templateValidation";
 import {
   isBlockRef,
@@ -292,4 +297,5 @@ export function getGalleryStarterCount(): number {
   ).length;
 }
 
-export { RUNTIME_BLOCKS };
+export { RUNTIME_BLOCKS, INTERACTIVE_ELEMENT_BLOCKS, isInteractiveElementKind };
+export type { InteractiveElementKind };

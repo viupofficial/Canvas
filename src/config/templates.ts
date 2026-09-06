@@ -35,6 +35,13 @@
 // images — countdown — are safe to reuse anywhere; for the rest, spell the page
 // out inline, as the Tunku Ismail x Farah Elise template below does.
 //
+// ── POSITIONS ARE CENTRES, NOT CORNERS ───────────────────────────────
+// Objects default to a CENTRE origin, so an element's left/top is the middle of
+// its box, not its top-left corner. A 190-wide textbox at left: 240 therefore
+// occupies 145-335, and a multi-line one at top: 428 grows both up and down.
+// Two columns or a heading above a tall value must be spaced with that in mind,
+// or they silently overlap. Set originX/originY explicitly when you want an edge.
+//
 // ── SVG ASSETS: THE FILE MUST DECLARE width AND height ──────────────────────
 // An .svg whose root tag has only a `viewBox` renders as an enlarged TOP-LEFT
 // CROP of itself on the canvas, and only on retina displays — which is most of
@@ -359,6 +366,265 @@ const idItineraryRow = (time: string, description: string, top: number): Templat
     lineHeight: 1.4,
     textAlign: "left",
     fill: ID_.ink,
+  },
+];
+
+// ── Date plate helpers ───────────────────────────────────────────
+/** The gold the shipped date artwork is drawn in. */
+const DP_GOLD = "#8b6914";
+
+/** One hairline rule of the date plate: a 106x1 bar centred on (left, top). */
+const dpRule = (key: string, left: number, top: number): TemplateElement => ({
+  type: "shape",
+  shape: "rect",
+  key,
+  left,
+  top,
+  width: 106,
+  height: 1,
+  fill: DP_GOLD,
+});
+
+// ── Sepia Paper (iFastNet template 7) layout helpers ────────────────────────
+// Palette read off the source stylesheet: #2e190d is the ink every text node
+// declares, #f5e8dd the envelope cover's background-color and #ede2de the body
+// behind the paper sheet. #b87f27 is the accent the source puts on the paper
+// overlay's `color`.
+const SP_ = {
+  ink: "#2e190d",
+  gold: "#b87f27",
+  paper: "#ede2de",
+  cover: "#f5e8dd",
+  muted: "#6b5544",
+} as const;
+
+/**
+ * Full-bleed artwork. Every sheet this template ships — HD_Classic Paper.png,
+ * the two envelope halves, Border Flower/7.png — is authored on the same
+ * 1080x1920 frame, so one uniform 0.3667 scale lands them all pixel-exact on
+ * the 396x704 artboard.
+ */
+const spFullBleed = (
+  key: string,
+  asset: string,
+  extra: Partial<TemplateElement> = {},
+): TemplateElement =>
+  ({
+    type: "image",
+    key,
+    asset,
+    left: 198,
+    top: 352,
+    originX: "center",
+    originY: "center",
+    scaleX: 396 / 1080,
+    scaleY: 704 / 1920,
+    ...extra,
+  }) as TemplateElement;
+
+/** Event Details label — the source's bold Alice `.event-heading`. */
+const spHeading = (text: string, top: number): TemplateElement => ({
+  type: "text",
+  text,
+  left: 198,
+  top,
+  originX: "center",
+  width: 284,
+  fontFamily: "Alice",
+  fontSize: 16,
+  fontWeight: "bold",
+  textAlign: "center",
+  fill: SP_.ink,
+});
+
+/** Event Details value — the source's `.event-text`. */
+const spBody = (text: string, top: number, fontSize = 15): TemplateElement => ({
+  type: "text",
+  text,
+  left: 198,
+  top,
+  originX: "center",
+  width: 284,
+  fontFamily: "Alice",
+  fontSize,
+  lineHeight: 1.5,
+  textAlign: "center",
+  fill: SP_.ink,
+});
+
+/**
+ * One itinerary line. The source writes it as a single `.itinerary-item` with a
+ * bold `.time` span inside; two textboxes give the same reading order while
+ * keeping both halves independently editable on the canvas.
+ *
+ * NOTE the centre origin: an element's `left` is the CENTRE of its box, not its
+ * left edge, so the two columns are placed by their midpoints — time spans
+ * 56-134 and description 145-335, which is what keeps them from overlapping.
+ */
+const spItineraryRow = (time: string, description: string, top: number): TemplateElement[] => [
+  {
+    type: "text",
+    text: time,
+    left: 95,
+    top,
+    width: 78,
+    fontFamily: "Alice",
+    fontSize: 13,
+    fontWeight: "bold",
+    textAlign: "left",
+    fill: SP_.ink,
+  },
+  {
+    type: "text",
+    text: description,
+    left: 240,
+    top,
+    width: 190,
+    fontFamily: "Alice",
+    fontSize: 13,
+    fontStyle: "italic",
+    lineHeight: 1.4,
+    textAlign: "left",
+    fill: SP_.ink,
+  },
+];
+
+// ── Pureline (iFastNet template 8) layout helpers ───────────────────────────
+// Palette read off the source stylesheet: #272321 is the charcoal ink every
+// text node declares, #FEF8F7 the body background-color and #f5e8dd the
+// envelope cover's. #b87f27 is the gold the border rule names.
+const PL_ = {
+  ink: "#272321",
+  gold: "#b87f27",
+  ground: "#fef8f7",
+  cover: "#f5e8dd",
+  muted: "#6b6360",
+} as const;
+
+/**
+ * Full-bleed artwork. This template's envelope halves are authored on the same
+ * 1080x1920 frame as every other remote template's, so one uniform 0.3667
+ * scale lands them pixel-exact on the 396x704 artboard.
+ */
+const plFullBleed = (
+  key: string,
+  asset: string,
+  extra: Partial<TemplateElement> = {},
+): TemplateElement =>
+  ({
+    type: "image",
+    key,
+    asset,
+    left: 198,
+    top: 352,
+    originX: "center",
+    originY: "center",
+    scaleX: 396 / 1080,
+    scaleY: 704 / 1920,
+    ...extra,
+  }) as TemplateElement;
+
+/**
+ * The double hairline frame this template is named for — its `.borderline`
+ * overlay, drawn as two nested rects instead of loading Bordeline.svg.
+ *
+ * The SVG is one of the viewBox-only files described in this file's header, so
+ * it would render as a stretched top-left crop. It is also nothing but two
+ * concentric 2px-stroked rectangles, which the generic `shape` element draws
+ * natively — crisper at every zoom, exportable, and editable. `currentColor`
+ * in the file resolves to the same #272321 the rule sets.
+ *
+ * Kept clear of the bottom edge: the floating event footer sits over roughly
+ * the last 60px of the artboard, so a frame drawn to the true edge would have
+ * its bottom rule hidden behind it.
+ */
+const plBorderFrame = (): TemplateElement[] =>
+  [
+    { outer: true, width: 356, height: 596 },
+    { outer: false, width: 344, height: 584 },
+  ].map(
+    ({ outer, width, height }) =>
+      ({
+        type: "shape",
+        shape: "rect",
+        key: outer ? "frame-outer" : "frame-inner",
+        left: 198,
+        top: 314,
+        originX: "center",
+        originY: "center",
+        width,
+        height,
+        fill: "transparent",
+        stroke: PL_.ink,
+        strokeWidth: 1,
+        // Decoration, like the full-bleed sheets the other templates lock.
+        selectable: false,
+        locked: true,
+      }) as TemplateElement,
+  );
+
+/** Event Details label — the source's bold Alice `.event-heading`. */
+const plHeading = (text: string, top: number): TemplateElement => ({
+  type: "text",
+  text,
+  left: 198,
+  top,
+  originX: "center",
+  width: 284,
+  fontFamily: "Alice",
+  fontSize: 16,
+  fontWeight: "bold",
+  textAlign: "center",
+  fill: PL_.ink,
+});
+
+/** Event Details value — the source's `.event-text`. */
+const plBody = (text: string, top: number, fontSize = 15): TemplateElement => ({
+  type: "text",
+  text,
+  left: 198,
+  top,
+  originX: "center",
+  width: 284,
+  fontFamily: "Alice",
+  fontSize,
+  lineHeight: 1.5,
+  textAlign: "center",
+  fill: PL_.ink,
+});
+
+/**
+ * One itinerary line — the source's `.itinerary-item` with its bold `.time`
+ * span, split into two textboxes so both halves stay editable.
+ *
+ * Placed by MIDPOINT (see the centre-origin note in this file's header): time
+ * spans 56-134, description 145-335.
+ */
+const plItineraryRow = (time: string, description: string, top: number): TemplateElement[] => [
+  {
+    type: "text",
+    text: time,
+    left: 95,
+    top,
+    width: 78,
+    fontFamily: "Alice",
+    fontSize: 13,
+    fontWeight: "bold",
+    textAlign: "left",
+    fill: PL_.ink,
+  },
+  {
+    type: "text",
+    text: description,
+    left: 240,
+    top,
+    width: 190,
+    fontFamily: "Alice",
+    fontSize: 13,
+    fontStyle: "italic",
+    lineHeight: 1.4,
+    textAlign: "left",
+    fill: PL_.ink,
   },
 ];
 
@@ -819,6 +1085,102 @@ walimatulurus puteri kami dan pasangannya”`,
     ],
   },
 
+  // ── Date plate ────────────────────────────────────────────────────────────
+  // The engraved date panel, as EDITABLE TEXT rather than a picture.
+  //
+  // Templates 1/8 ship it as Text-Logo/date.svg and template 11 as date.png,
+  // both with the date burnt into the artwork — so a customer who dropped one
+  // onto a page was stuck with 15 August 2026. This block redraws that same
+  // plate out of five textboxes and four hairline rules, so every part of it is
+  // ordinary editable canvas text: click to retype, restyle, recolour.
+  //
+  // Geometry measured off date.png (696x324) and scaled by 0.431 onto the
+  // 396x704 artboard, so it reads as the same plate:
+  //     month band      src y 22-48    -> 245
+  //     rules           src y 119/199  -> 282 / 316, two 106px spans
+  //     day / time row  src y 129-187  -> 299
+  //     year            src y 273-300  -> 354
+  // Ink is the gold the file uses, #8b6914. Positions are CENTRES (see the
+  // centre-origin note in this file's header): the left column is centred on
+  // 101, the right on 295, both symmetric about the page's 198.
+  //
+  // Not wired to the Calendar date on purpose — the countdown ticks towards the
+  // event, but this plate is free text so a design can name any date it likes.
+  datePlate: {
+    id: "datePlate",
+    name: "Date Plate",
+    elements: [
+      {
+        type: "text",
+        key: "month",
+        text: "AUGUST",
+        left: 198,
+        top: 245,
+        width: 284,
+        fontFamily: "Playfair Display",
+        fontSize: 15,
+        charSpacing: 500,
+        textAlign: "center",
+        fill: DP_GOLD,
+      },
+      dpRule("rule-top-left", 101, 282),
+      dpRule("rule-top-right", 295, 282),
+      {
+        type: "text",
+        key: "day-name",
+        text: "SABTU",
+        left: 101,
+        top: 299,
+        width: 106,
+        fontFamily: "Playfair Display",
+        fontSize: 12,
+        charSpacing: 300,
+        textAlign: "center",
+        fill: DP_GOLD,
+      },
+      {
+        type: "text",
+        key: "day",
+        text: "15",
+        left: 198,
+        top: 298,
+        width: 90,
+        fontFamily: "Playfair Display",
+        fontSize: 34,
+        textAlign: "center",
+        fill: DP_GOLD,
+      },
+      {
+        type: "text",
+        key: "time",
+        text: "8.30 PM",
+        left: 295,
+        top: 299,
+        width: 106,
+        fontFamily: "Playfair Display",
+        fontSize: 12,
+        charSpacing: 300,
+        textAlign: "center",
+        fill: DP_GOLD,
+      },
+      dpRule("rule-bottom-left", 101, 316),
+      dpRule("rule-bottom-right", 295, 316),
+      {
+        type: "text",
+        key: "year",
+        text: "2026",
+        left: 198,
+        top: 354,
+        width: 284,
+        fontFamily: "Playfair Display",
+        fontSize: 13,
+        charSpacing: 400,
+        textAlign: "center",
+        fill: DP_GOLD,
+      },
+    ],
+  },
+
   // ── Prayer / closing ──────────────────────────────────────────────────────
   prayer: {
     id: "prayer",
@@ -954,7 +1316,28 @@ export const RUNTIME_BLOCKS = {
   gallery: "gallery",
   countdown: "countdown",
   guestbook: "guestbook",
+  datePlate: "datePlate",
 } as const;
+
+/**
+ * The prebuilt pieces the Elements panel can drop onto a design, each mapped to
+ * the block it is built from. One table so the panel, the click handlers and the
+ * drag-and-drop handler cannot drift apart.
+ *
+ * `countdown` and `guestbook` are whole-page designs — clicking one gives it its
+ * own page. `datePlate` is an ornament and always lands on the current page.
+ */
+export const INTERACTIVE_ELEMENT_BLOCKS = {
+  countdown: RUNTIME_BLOCKS.countdown,
+  guestbook: RUNTIME_BLOCKS.guestbook,
+  datePlate: RUNTIME_BLOCKS.datePlate,
+} as const;
+
+export type InteractiveElementKind = keyof typeof INTERACTIVE_ELEMENT_BLOCKS;
+
+/** Guard for the value that arrives on a drag payload, which is untrusted. */
+export const isInteractiveElementKind = (value: unknown): value is InteractiveElementKind =>
+  typeof value === "string" && Object.prototype.hasOwnProperty.call(INTERACTIVE_ELEMENT_BLOCKS, value);
 
 // ═════════════════════════════════════════════════════════════════════════════
 // TEMPLATE REGISTRY
@@ -2994,6 +3377,1463 @@ export const templates: Record<string, TemplateDefinition> = {
     ],
   },
 
+  // ═══════════════════════════════════════════════════════════════════════
+  // Sepia Paper — iFastNet template 7.
+  //
+  // Fourth template on the shared remote pipeline, registered exactly like the
+  // three above: media stays on vi-up.com, design data lives here, and not one
+  // line of the manifest client, resolver, cache, Fabric loader, element
+  // factory or renderer changed to add it.
+  //
+  //   assetProvider: "ifastnet" + remoteTemplateId: 7
+  //     "Envelop_Classic/head.png"
+  //        -> https://vi-up.com/uploads/templates/7/Envelop_Classic/head.png
+  //     "HD_Classic Paper.png"
+  //        -> https://vi-up.com/uploads/templates/7/HD_Classic%20Paper.png
+  //
+  // DISPLAY NAME vs SOURCE NAME. `name` is the only thing the Templates panel
+  // shows. The iFastNet folder keeps its legacy layout untouched — its
+  // MayaxAsyraaf wrapper page, its Text-Logo/Logo_MayaAsyraaf.png and the
+  // manifest's own `name: "sepia"` all stay exactly as they are. Nothing was
+  // renamed remotely to produce "Sepia Paper" on the card.
+  //
+  // NOT USED, because the manifest reports them missing on disk:
+  //   Border Flower/PAPER.png (the top-level PAPER.png below is present and is
+  //   what the guestbook uses), waze_btn.png, YOUR_FLORAL_IMAGE.png,
+  //   Music/…mp3, fonts/Alice-{regular,bold}.otf — the design still asks for
+  //   Alice, which the app loads from Google Fonts, so those cost nothing.
+  // NOT USED for the SVG reason in this file's header: B&G.svg (the source's
+  //   couple wordmark), ornament border1.svg and bismillah.svg all declare only
+  //   a viewBox and would render as a stretched top-left crop. The wordmark is
+  //   authored as editable Alex Brush text instead, which is better anyway —
+  //   the customer can type their own names. Text-Logo/Da_intial_small.svg DOES
+  //   carry width/height (23x26) and is used, at the 23px the source renders it.
+  // NOT USED deliberately: Text-Logo/Logo_MayaAsyraaf.png renders the legacy
+  //   source name as artwork, which must never appear in the Canvas UI.
+  // ═══════════════════════════════════════════════════════════════════════
+  sepiaPaper: {
+    id: "sepia-paper",
+    name: "Sepia Paper",
+    slug: "sepia-paper",
+    description:
+      "Nine-page invitation on warm sepia kraft paper: a classic wax-sealed envelope, script date line, hosts, itinerary, countdown, gallery and guestbook. Media is hosted on vi-up.com.",
+    category: "wedding",
+    version: "1.0.0",
+    assetProvider: "ifastnet",
+    remoteTemplateId: 7,
+    // No `thumbnail`, matching the other cards: the Templates panel only renders
+    // an image when one is declared, so listing this template costs no request
+    // at all and nothing is fetched until it is actually applied.
+    canvas: {
+      width: 396,
+      height: 704,
+      background: SP_.paper,
+    },
+    // Descriptive only — the footer features are event-data driven and wired
+    // globally, not per template. See TemplateFeatureHints.
+    features: {
+      rsvp: true,
+      moneyGift: true,
+      calendar: true,
+      location: true,
+      contact: true,
+      music: true,
+      guestbook: true,
+      countdown: true,
+      gallery: true,
+    },
+    pages: [
+      // ── 1. Envelope ─────────────────────────────────────────────────────
+      // This template's own envelope artwork, not the shared block's: head.png
+      // and body.png are both authored on one 1080x1920 frame (head's ink runs
+      // y 0-1010, body's y 598-1920), so full-bleeding both composes the
+      // envelope exactly as the source page does, with the flap over the pocket.
+      // The three `envelope-*` names are FUNCTIONAL: they mark the openable
+      // cover, lock the parts, and are what extract-envelope lifts into the
+      // published page. "Undangan" / "Walimatulurus" / "Press to open" are
+      // likewise the strings the publisher matches for title, subtitle and
+      // prompt. Body first, then head, then the texts and the seal on top —
+      // array order is z-order, and it mirrors the source's z-indexes.
+      {
+        id: "envelope",
+        name: "Envelope",
+        background: SP_.cover,
+        elements: [
+          spFullBleed("body", "Envelop_Classic/body.png", { name: "envelope-body" }),
+          spFullBleed("head", "Envelop_Classic/head.png", { name: "envelope-head" }),
+          {
+            type: "text",
+            key: "title",
+            text: "Undangan",
+            left: 198,
+            top: 96,
+            originX: "center",
+            width: 284,
+            fontFamily: "Alice",
+            fontSize: 20,
+            fontStyle: "italic",
+            textAlign: "center",
+            fill: SP_.ink,
+          },
+          {
+            type: "text",
+            key: "subtitle",
+            text: "Walimatulurus",
+            left: 198,
+            top: 126,
+            originX: "center",
+            width: 284,
+            fontFamily: "Alice",
+            fontSize: 15,
+            fontStyle: "italic",
+            charSpacing: 80,
+            textAlign: "center",
+            fill: SP_.ink,
+          },
+          {
+            // The source's B&G.svg wordmark, as editable text — see the SVG
+            // note above. Alex Brush is the family the source sets on the
+            // element that carries it.
+            type: "text",
+            key: "couple",
+            text: "Bride & Groom",
+            left: 198,
+            top: 196,
+            originX: "center",
+            width: 284,
+            fontFamily: "Alex Brush",
+            fontSize: 40,
+            textAlign: "center",
+            fill: SP_.ink,
+          },
+          {
+            type: "image",
+            key: "seal",
+            name: "envelope-seal",
+            asset: "Envelope Intro (2)/Envelope Intro/seal.png",
+            // Sits where the flap's point meets the pocket: head's ink ends at
+            // y 1010 of 1920, which is 370 on the artboard.
+            left: 198,
+            top: 370,
+            originX: "center",
+            originY: "center",
+            // 1000px square down to the 120px the source's .sigil renders.
+            scaleX: 0.12,
+            scaleY: 0.12,
+          },
+          {
+            type: "text",
+            key: "press",
+            text: "Press to open",
+            left: 198,
+            top: 520,
+            originX: "center",
+            width: 284,
+            fontFamily: "Alice",
+            fontSize: 24,
+            fontStyle: "italic",
+            textAlign: "center",
+            fill: SP_.ink,
+          },
+        ],
+      },
+
+      // ── 2. Invitation ───────────────────────────────────────────────────
+      // HD_Classic Paper.png is the sheet every inner page sits on — the source
+      // pins it behind the whole scroll with pointer-events:none, so here it is
+      // locked and unselectable on each page that uses it.
+      {
+        id: "invitation",
+        name: "Invitation",
+        background: SP_.paper,
+        elements: [
+          spFullBleed("paper", "HD_Classic Paper.png", { selectable: false, locked: true }),
+          {
+            type: "text",
+            key: "couple",
+            text: "Bride & Groom",
+            left: 198,
+            top: 130,
+            originX: "center",
+            width: 284,
+            fontFamily: "Alex Brush",
+            fontSize: 44,
+            textAlign: "center",
+            fill: SP_.ink,
+          },
+          {
+            type: "text",
+            key: "story",
+            text: "What began as a simple connection\nblossomed into a love full of laughter, faith and dreams",
+            left: 198,
+            top: 230,
+            originX: "center",
+            width: 284,
+            fontFamily: "Alice",
+            fontSize: 13,
+            fontStyle: "italic",
+            lineHeight: 1.5,
+            textAlign: "center",
+            fill: SP_.ink,
+          },
+          {
+            type: "text",
+            key: "invite-line",
+            text: "you are invited to the day love finds its forever for,",
+            left: 198,
+            top: 300,
+            originX: "center",
+            width: 284,
+            fontFamily: "Alice",
+            fontSize: 13,
+            fontStyle: "italic",
+            textAlign: "center",
+            fill: SP_.ink,
+          },
+          {
+            // The source sets Dancing Script on .day / .date.
+            type: "text",
+            key: "date-line",
+            text: "26 April 2026 | Sunday",
+            left: 198,
+            top: 370,
+            originX: "center",
+            width: 284,
+            fontFamily: "Dancing Script",
+            fontSize: 26,
+            textAlign: "center",
+            fill: SP_.ink,
+          },
+          {
+            type: "text",
+            key: "venue",
+            text: "Neverleave Island Resort",
+            left: 198,
+            top: 420,
+            originX: "center",
+            width: 284,
+            fontFamily: "Dancing Script",
+            fontSize: 18,
+            textAlign: "center",
+            fill: SP_.ink,
+          },
+          {
+            type: "image",
+            key: "monogram",
+            // 23x26 with explicit width/height in the file, used at the 23px
+            // the source's inline style asks for — so it rasterizes crisply.
+            asset: "Text-Logo/Da_intial_small.svg",
+            left: 198,
+            top: 480,
+            originX: "center",
+            originY: "center",
+          },
+        ],
+      },
+
+      // ── 3. Hosts ────────────────────────────────────────────────────────
+      // The source splits this across .parents-wrapper and .bridegroom-wrapper;
+      // on a 704px artboard both fit on one page, as Ivory Decree does.
+      {
+        id: "parents",
+        name: "Hosts",
+        background: SP_.paper,
+        elements: [
+          spFullBleed("paper", "HD_Classic Paper.png", { selectable: false, locked: true }),
+          {
+            type: "text",
+            key: "greeting",
+            text: "Assalamualaikum WBT & Salam Sejahtera",
+            left: 198,
+            top: 100,
+            originX: "center",
+            width: 284,
+            fontFamily: "Alice",
+            fontSize: 13,
+            textAlign: "center",
+            fill: SP_.ink,
+          },
+          {
+            type: "text",
+            key: "host-1",
+            text: "VZLY NEXUS",
+            left: 198,
+            top: 150,
+            originX: "center",
+            width: 284,
+            fontFamily: "Alice",
+            fontSize: 18,
+            textAlign: "center",
+            fill: SP_.ink,
+          },
+          {
+            type: "text",
+            key: "host-amp",
+            text: "&",
+            left: 198,
+            top: 186,
+            originX: "center",
+            width: 284,
+            fontFamily: "Alex Brush",
+            fontSize: 26,
+            textAlign: "center",
+            fill: SP_.gold,
+          },
+          {
+            type: "text",
+            key: "host-2",
+            text: "VI-UP",
+            left: 198,
+            top: 224,
+            originX: "center",
+            width: 284,
+            fontFamily: "Alice",
+            fontSize: 18,
+            textAlign: "center",
+            fill: SP_.ink,
+          },
+          {
+            type: "text",
+            key: "invitation-text",
+            text: "“Dengan penuh hormat dan takzim,\nsukacita menjunjung Pengiran berangkat\nmenjemput Pehin / Dato / Datin\n/ Awang / Dayang / Tuan / Puan / Cik\nuntuk bersama-sama memeriahkan majlis\nwalimatulurus puteri kami dan pasangannya”",
+            left: 198,
+            top: 320,
+            originX: "center",
+            width: 284,
+            fontFamily: "Alice",
+            fontSize: 13,
+            fontStyle: "italic",
+            lineHeight: 1.6,
+            textAlign: "center",
+            fill: SP_.ink,
+          },
+          {
+            type: "text",
+            key: "couple-1",
+            text: "BRIDE",
+            left: 198,
+            top: 450,
+            originX: "center",
+            width: 284,
+            fontFamily: "Alice",
+            fontSize: 20,
+            fontStyle: "italic",
+            fontWeight: "bold",
+            charSpacing: 60,
+            textAlign: "center",
+            fill: SP_.ink,
+          },
+          {
+            type: "text",
+            key: "couple-amp",
+            text: "&",
+            left: 198,
+            top: 490,
+            originX: "center",
+            width: 284,
+            fontFamily: "Alex Brush",
+            fontSize: 26,
+            textAlign: "center",
+            fill: SP_.gold,
+          },
+          {
+            type: "text",
+            key: "couple-2",
+            text: "GROOM",
+            left: 198,
+            top: 530,
+            originX: "center",
+            width: 284,
+            fontFamily: "Alice",
+            fontSize: 20,
+            fontStyle: "italic",
+            fontWeight: "bold",
+            charSpacing: 60,
+            textAlign: "center",
+            fill: SP_.ink,
+          },
+        ],
+      },
+
+      // ── 4. Event details ────────────────────────────────────────────────
+      {
+        id: "eventDetails",
+        name: "Event Details",
+        background: SP_.paper,
+        elements: [
+          spFullBleed("paper", "HD_Classic Paper.png", { selectable: false, locked: true }),
+          spHeading("Date", 120),
+          spBody("26 April 2026", 148),
+          spHeading("Time", 210),
+          spBody("9.00 AM – 2.00 PM", 238),
+          spHeading("Venue", 300),
+          spBody("Neverleave Island Resort", 328),
+          // Four lines, so this value needs more clearance than the one-liners
+          // above: centred on 445 it spans 406-484, clear of the heading.
+          spHeading("Dress Code", 390),
+          spBody(
+            "Pakaian Tradisional –\nBaju Kurung, Baju Melayu Lengkap,\nBatik atau lain-lain pakaian\ntradisional yang sopan",
+            445,
+            13,
+          ),
+        ],
+      },
+
+      // ── 5. Itinerary ────────────────────────────────────────────────────
+      {
+        id: "itinerary",
+        name: "Itinerary",
+        background: SP_.paper,
+        elements: [
+          spFullBleed("paper", "HD_Classic Paper.png", { selectable: false, locked: true }),
+          {
+            type: "text",
+            key: "title",
+            text: "Itinerary",
+            left: 198,
+            top: 100,
+            originX: "center",
+            width: 284,
+            fontFamily: "Alice",
+            fontSize: 26,
+            fontWeight: "bold",
+            textAlign: "center",
+            fill: SP_.ink,
+          },
+          ...spItineraryRow("9.00 AM", "Ketibaan para jemputan", 175),
+          ...spItineraryRow("9.30 AM", "Majlis Akad Nikah", 220),
+          ...spItineraryRow("10.00 AM", "Bacaan doa\n(diikuti dengan jamuan ringan)", 265),
+          ...spItineraryRow("11.30 AM", "Majlis bersanding", 325),
+          ...spItineraryRow("12.00 PM", "Jamuan makan bermula", 370),
+          ...spItineraryRow("2.00 PM", "Majlis bersurai", 415),
+          {
+            type: "text",
+            key: "closing-note",
+            text: "Jemput hadir mengikut masa yang ditetapkan",
+            left: 198,
+            top: 480,
+            originX: "center",
+            width: 284,
+            fontFamily: "Alice",
+            fontSize: 13,
+            fontWeight: "bold",
+            lineHeight: 1.5,
+            textAlign: "center",
+            fill: SP_.ink,
+          },
+        ],
+      },
+
+      // ── 6. Counting Days ────────────────────────────────────────────────
+      // countdownBox emits `countdownUnit`, which the per-second ticker in the
+      // editor and in the published invitation rewrites. No per-template code.
+      {
+        id: "countdown",
+        name: "Counting Days",
+        background: SP_.paper,
+        elements: [
+          spFullBleed("paper", "HD_Classic Paper.png", { selectable: false, locked: true }),
+          {
+            type: "text",
+            key: "title",
+            text: "Counting Days",
+            left: 198,
+            top: 150,
+            originX: "center",
+            width: 284,
+            fontFamily: "Alice",
+            fontSize: 26,
+            fontWeight: "bold",
+            textAlign: "center",
+            fill: SP_.ink,
+          },
+          {
+            type: "countdownBox",
+            key: "day",
+            label: "Day",
+            value: "00",
+            // `top` shifts the whole box; the parts keep their stock offsets.
+            top: 300,
+            left: 92,
+            width: 62,
+            height: 76,
+            // originX centre on the box shares the label's and value's anchor,
+            // so all three line up.
+            box: { originX: "center", fill: "#e3d4c6", rx: 8, ry: 8 },
+            labelStyle: { width: 62, fontSize: 11, fill: SP_.muted, fontFamily: "Alice" },
+            valueStyle: { width: 62, fontSize: 20, fill: SP_.ink, fontFamily: "Alice" },
+          },
+          {
+            type: "countdownBox",
+            key: "hour",
+            label: "Hour",
+            value: "00",
+            top: 300,
+            left: 163,
+            width: 62,
+            height: 76,
+            box: { originX: "center", fill: "#e3d4c6", rx: 8, ry: 8 },
+            labelStyle: { width: 62, fontSize: 11, fill: SP_.muted, fontFamily: "Alice" },
+            valueStyle: { width: 62, fontSize: 20, fill: SP_.ink, fontFamily: "Alice" },
+          },
+          {
+            type: "countdownBox",
+            key: "minute",
+            label: "Minute",
+            value: "00",
+            top: 300,
+            left: 234,
+            width: 62,
+            height: 76,
+            box: { originX: "center", fill: "#e3d4c6", rx: 8, ry: 8 },
+            labelStyle: { width: 62, fontSize: 11, fill: SP_.muted, fontFamily: "Alice" },
+            valueStyle: { width: 62, fontSize: 20, fill: SP_.ink, fontFamily: "Alice" },
+          },
+          {
+            type: "countdownBox",
+            key: "second",
+            label: "Second",
+            value: "00",
+            top: 300,
+            left: 305,
+            width: 62,
+            height: 76,
+            box: { originX: "center", fill: "#e3d4c6", rx: 8, ry: 8 },
+            labelStyle: { width: 62, fontSize: 11, fill: SP_.muted, fontFamily: "Alice" },
+            valueStyle: { width: 62, fontSize: 20, fill: SP_.ink, fontFamily: "Alice" },
+          },
+        ],
+      },
+
+      // ── 7. Gallery ──────────────────────────────────────────────────────
+      // TWO starter photos, like every other template: the package photo counter
+      // discounts a FIXED starter count (GALLERY_STARTER_COUNT in CanvasEditor,
+      // derived from the shared gallery block), so shipping more would eat into
+      // the customer's own photo budget. The source marks aiCouple-1 active.
+      {
+        id: "gallery",
+        name: "Gallery",
+        background: SP_.paper,
+        elements: [
+          {
+            type: "text",
+            key: "title",
+            text: "Gallery",
+            left: 198,
+            top: 80,
+            originX: "center",
+            width: 284,
+            fontFamily: "Alice",
+            fontSize: 26,
+            fontWeight: "bold",
+            textAlign: "center",
+            fill: SP_.ink,
+          },
+          {
+            type: "gallerySlot",
+            key: "photo-1",
+            index: 1,
+            asset: "aiCouple-1.png",
+            left: 198,
+            top: 350,
+            originX: "center",
+            originY: "center",
+            // Source 1024x1536 into the standard 292x443 frame.
+            scaleX: 292 / 1024,
+            scaleY: 443 / 1536,
+          },
+          {
+            type: "gallerySlot",
+            key: "photo-2",
+            index: 2,
+            asset: "aiCouple-2.png",
+            left: 198,
+            top: 350,
+            originX: "center",
+            originY: "center",
+            scaleX: 292 / 1024,
+            scaleY: 443 / 1536,
+            // Hidden initially — the slideshow reveals one photo at a time.
+            visible: false,
+          },
+        ],
+      },
+
+      // ── 8. Guestbook ────────────────────────────────────────────────────
+      // Visual only: startGuestbook() fills guestMessage / guestSender with the
+      // real wishes on the published invitation. The source's paper overlay
+      // points at Border Flower/PAPER.png, which the manifest reports missing,
+      // so this uses the top-level PAPER.png that is actually on disk.
+      {
+        id: "guestbook",
+        name: "Guestbook",
+        background: SP_.paper,
+        elements: [
+          {
+            type: "image",
+            key: "paper",
+            asset: "PAPER.png",
+            left: 450,
+            top: 312,
+            originX: "center",
+            scaleX: 0.3,
+            scaleY: 0.3,
+          },
+          {
+            type: "text",
+            key: "title",
+            text: "Guestbook",
+            left: 198,
+            top: 80,
+            originX: "center",
+            width: 284,
+            fontFamily: "Alice",
+            fontSize: 26,
+            fontWeight: "bold",
+            textAlign: "center",
+            fill: SP_.ink,
+          },
+          {
+            type: "text",
+            key: "message",
+            name: "guestMessage",
+            text: "“Your wishes will appear here...”",
+            left: 198,
+            top: 170,
+            originX: "center",
+            width: 284,
+            fontFamily: "Dancing Script",
+            fontSize: 20,
+            textAlign: "center",
+            fill: SP_.ink,
+          },
+          {
+            type: "text",
+            key: "sender",
+            name: "guestSender",
+            text: "- Guest Name",
+            left: 198,
+            top: 235,
+            originX: "center",
+            width: 284,
+            fontFamily: "Dancing Script",
+            fontSize: 15,
+            textAlign: "center",
+            fill: SP_.muted,
+          },
+          { type: "guestbookNav", key: "prev", direction: "prev", left: 170, top: 300 },
+          { type: "guestbookNav", key: "next", direction: "next", left: 226, top: 300 },
+        ],
+      },
+
+      // ── 9. Prayer / closing ─────────────────────────────────────────────
+      // The one page that uses Border Flower/7.png — the floral sheet the
+      // source's stylesheet pulls in as a background — instead of the plain
+      // kraft paper, to close the invitation on the template's one piece of
+      // colour. Same 1080x1920 frame, so the same full-bleed scale.
+      {
+        id: "prayer",
+        name: "Prayer",
+        background: SP_.paper,
+        elements: [
+          spFullBleed("frame", "Border Flower/7.png", { selectable: false, locked: true }),
+          {
+            type: "text",
+            key: "title",
+            text: "Prayer",
+            left: 198,
+            top: 150,
+            originX: "center",
+            width: 284,
+            fontFamily: "Alice",
+            fontSize: 28,
+            fontWeight: "bold",
+            textAlign: "center",
+            fill: SP_.ink,
+          },
+          {
+            type: "text",
+            key: "body",
+            text: "Semoga Allah melimpahkan\nkeberkahan kepadamu dan\nkeberkahan atas pernikahanmu,\nserta mengumpulkan kalian\nberdua dalam kebaikan",
+            left: 198,
+            top: 260,
+            originX: "center",
+            width: 284,
+            fontFamily: "Alice",
+            fontSize: 15,
+            lineHeight: 1.6,
+            textAlign: "center",
+            fill: SP_.ink,
+          },
+          {
+            type: "text",
+            key: "hashtag",
+            text: "#SendItOut",
+            left: 198,
+            top: 400,
+            originX: "center",
+            width: 284,
+            fontFamily: "Alice",
+            fontSize: 20,
+            fontStyle: "italic",
+            textAlign: "center",
+            fill: SP_.ink,
+          },
+          {
+            type: "text",
+            key: "credit",
+            text: "Made for your special day by",
+            left: 198,
+            top: 500,
+            originX: "center",
+            width: 284,
+            fontFamily: "Alice",
+            fontSize: 11,
+            textAlign: "center",
+            fill: SP_.muted,
+          },
+          {
+            type: "image",
+            key: "submark",
+            asset: "Logo/Vi-Up Submark.png",
+            left: 198,
+            top: 535,
+            originX: "center",
+            originY: "center",
+            // 1296x1115 at the 31px the source's inline style renders it.
+            scaleX: 31 / 1296,
+            scaleY: 31 / 1296,
+          },
+        ],
+      },
+    ],
+  },
+
+  // ═══════════════════════════════════════════════════════════════════════
+  // Pureline — iFastNet template 8.
+  //
+  // Fifth template on the shared remote pipeline, registered exactly like the
+  // four above: media stays on vi-up.com, design data lives here, and not one
+  // line of the manifest client, resolver, cache, Fabric loader, element
+  // factory or renderer changed to add it.
+  //
+  //   assetProvider: "ifastnet" + remoteTemplateId: 8
+  //     "Envelope_Pureline/head.png"
+  //        -> https://vi-up.com/uploads/templates/8/Envelope_Pureline/head.png
+  //     "Text-Logo/date.svg"
+  //        -> https://vi-up.com/uploads/templates/8/Text-Logo/date.svg
+  //
+  // DISPLAY NAME vs SOURCE NAME. `name` is the only thing the Templates panel
+  // shows. The iFastNet folder keeps its legacy layout untouched — its
+  // MayaxAsyraaf wrapper page and its Text-Logo/Logo_MayaAsyraaf.png stay
+  // exactly as they are; nothing was renamed remotely. (This template's own
+  // manifest already reports name "Pureline", but the card reads from `name`
+  // here either way.)
+  //
+  // THE FRAME IS DRAWN, NOT LOADED. What gives this design its name — the
+  // double hairline border on every inner page — is two `shape` rects, not the
+  // template's Bordeline.svg. See plBorderFrame() for why.
+  //
+  // NOT USED, because the manifest reports them missing on disk:
+  //   Border Flower/PAPER.png (the source's guestbook wash), YOUR_FLORAL_IMAGE.png,
+  //   Music/Yehezkel Raz - Murmuring.mp3, fonts/Alice-{regular,bold}.otf —
+  //   the design still asks for Alice, which the app loads from Google Fonts.
+  // NOT USED for the SVG reason in this file's header: B&G.svg (the source's
+  //   couple wordmark), bismillah.svg and Bordeline.svg declare only a viewBox
+  //   and would render as a stretched top-left crop. The wordmark is authored
+  //   as editable Alex Brush text instead, which is better anyway — the
+  //   customer types their own names. The two Text-Logo SVGs DO carry
+  //   width/height (DA_initials 81x93, date 213x106) and are used at 1:1.
+  // NOT USED by choice, for the same reason: Border Flower/7.png (the floral
+  //   sheet the source only pulls in from a style block) and the top-level
+  //   PAPER.png. Both are heavy textures, and this design is one thin rule —
+  //   the closing and guestbook pages keep the frame instead. Leaving them on
+  //   the host costs nothing.
+  // NOT USED deliberately: Text-Logo/Logo_MayaAsyraaf.png renders the legacy
+  //   source name as artwork, which must never appear in the Canvas UI.
+  // ═══════════════════════════════════════════════════════════════════════
+  pureline: {
+    id: "pureline",
+    name: "Pureline",
+    slug: "pureline",
+    description:
+      "Nine-page invitation drawn in one thin rule: a flat blush envelope with a wax seal, engraved monogram and date plate, hosts, itinerary, countdown, gallery and guestbook. Media is hosted on vi-up.com.",
+    category: "wedding",
+    version: "1.0.0",
+    assetProvider: "ifastnet",
+    remoteTemplateId: 8,
+    // No `thumbnail`, matching the other cards: the Templates panel only renders
+    // an image when one is declared, so listing this template costs no request
+    // at all and nothing is fetched until it is actually applied.
+    canvas: {
+      width: 396,
+      height: 704,
+      background: PL_.ground,
+    },
+    // Descriptive only — the footer features are event-data driven and wired
+    // globally, not per template. See TemplateFeatureHints.
+    features: {
+      rsvp: true,
+      moneyGift: true,
+      calendar: true,
+      location: true,
+      contact: true,
+      music: true,
+      guestbook: true,
+      countdown: true,
+      gallery: true,
+    },
+    pages: [
+      // ── 1. Envelope ─────────────────────────────────────────────────────
+      // Both halves are authored on one 1080x1920 frame (head's ink runs
+      // y 0-992, body's y 687-1920), so full-bleeding the pair composes the
+      // envelope exactly as the source page does, flap over pocket. The three
+      // `envelope-*` names are FUNCTIONAL: they mark the openable cover, lock
+      // the parts, and are what extract-envelope lifts into the published page.
+      // "Undangan" / "Walimatulurus" / "Press to open" are likewise the strings
+      // the publisher matches for title, subtitle and prompt. Array order is
+      // z-order and mirrors the source's z-indexes: body, head, then the text
+      // and the seal on top.
+      {
+        id: "envelope",
+        name: "Envelope",
+        background: PL_.cover,
+        elements: [
+          plFullBleed("body", "Envelope_Pureline/body.png", { name: "envelope-body" }),
+          plFullBleed("head", "Envelope_Pureline/head.png", { name: "envelope-head" }),
+          {
+            type: "text",
+            key: "title",
+            text: "Undangan",
+            left: 198,
+            top: 92,
+            originX: "center",
+            width: 284,
+            fontFamily: "Alice",
+            fontSize: 20,
+            fontStyle: "italic",
+            textAlign: "center",
+            fill: PL_.ink,
+          },
+          {
+            type: "text",
+            key: "subtitle",
+            text: "Walimatulurus",
+            left: 198,
+            top: 122,
+            originX: "center",
+            width: 284,
+            fontFamily: "Alice",
+            fontSize: 15,
+            fontStyle: "italic",
+            charSpacing: 80,
+            textAlign: "center",
+            fill: PL_.ink,
+          },
+          {
+            // The source's B&G.svg wordmark, as editable text — see the SVG
+            // note above. Alex Brush is the family the source sets on the
+            // element that carries it.
+            type: "text",
+            key: "couple",
+            text: "Bride & Groom",
+            left: 198,
+            top: 196,
+            originX: "center",
+            width: 284,
+            fontFamily: "Alex Brush",
+            fontSize: 40,
+            textAlign: "center",
+            fill: PL_.ink,
+          },
+          {
+            type: "image",
+            key: "seal",
+            name: "envelope-seal",
+            asset: "Envelope Intro (2)/Envelope Intro/seal.png",
+            // Sits where the flap's point meets the pocket: head's ink ends at
+            // y 992 of 1920, which is 364 on the artboard.
+            left: 198,
+            top: 364,
+            originX: "center",
+            originY: "center",
+            // 1000px square down to the 120px the source's .sigil renders.
+            scaleX: 0.12,
+            scaleY: 0.12,
+          },
+          {
+            type: "text",
+            key: "press",
+            text: "Press to open",
+            left: 198,
+            top: 520,
+            originX: "center",
+            width: 284,
+            fontFamily: "Alice",
+            fontSize: 24,
+            fontStyle: "italic",
+            textAlign: "center",
+            fill: PL_.ink,
+          },
+        ],
+      },
+
+      // ── 2. Invitation ───────────────────────────────────────────────────
+      {
+        id: "invitation",
+        name: "Invitation",
+        background: PL_.ground,
+        elements: [
+          ...plBorderFrame(),
+          {
+            type: "image",
+            key: "monogram",
+            // 81x93 with explicit width/height in the file, used 1:1 so it
+            // rasterizes crisply.
+            asset: "Text-Logo/DA_initials.svg",
+            left: 198,
+            top: 110,
+            originX: "center",
+            originY: "center",
+          },
+          {
+            type: "text",
+            key: "couple",
+            text: "Bride & Groom",
+            left: 198,
+            top: 205,
+            originX: "center",
+            width: 284,
+            fontFamily: "Alex Brush",
+            fontSize: 40,
+            textAlign: "center",
+            fill: PL_.ink,
+          },
+          {
+            type: "text",
+            key: "story",
+            text: "What began as a simple connection\nblossomed into a love full of laughter, faith and dreams",
+            left: 198,
+            top: 285,
+            originX: "center",
+            width: 276,
+            fontFamily: "Alice",
+            fontSize: 13,
+            fontStyle: "italic",
+            lineHeight: 1.5,
+            textAlign: "center",
+            fill: PL_.ink,
+          },
+          {
+            type: "text",
+            key: "invite-line",
+            text: "you are invited to the day love finds its forever for,",
+            left: 198,
+            top: 348,
+            originX: "center",
+            width: 276,
+            fontFamily: "Alice",
+            fontSize: 13,
+            fontStyle: "italic",
+            textAlign: "center",
+            fill: PL_.ink,
+          },
+          {
+            type: "image",
+            key: "date-plate",
+            // 213x106, width/height declared in the file. Used 1:1.
+            asset: "Text-Logo/date.svg",
+            left: 198,
+            top: 440,
+            originX: "center",
+            originY: "center",
+          },
+          {
+            type: "text",
+            key: "venue",
+            text: "Neverleave Island Resort",
+            left: 198,
+            top: 535,
+            originX: "center",
+            width: 276,
+            fontFamily: "Dancing Script",
+            fontSize: 20,
+            textAlign: "center",
+            fill: PL_.ink,
+          },
+        ],
+      },
+
+      // ── 3. Hosts ────────────────────────────────────────────────────────
+      // The source splits this across .parents-wrapper and .bridegroom-wrapper;
+      // on a 704px artboard both fit on one page, as the others do.
+      {
+        id: "parents",
+        name: "Hosts",
+        background: PL_.ground,
+        elements: [
+          ...plBorderFrame(),
+          {
+            type: "text",
+            key: "greeting",
+            text: "Assalamualaikum WBT & Salam Sejahtera",
+            left: 198,
+            top: 90,
+            originX: "center",
+            width: 276,
+            fontFamily: "Alice",
+            fontSize: 13,
+            textAlign: "center",
+            fill: PL_.ink,
+          },
+          {
+            type: "text",
+            key: "host-1",
+            text: "VZLY NEXUS",
+            left: 198,
+            top: 140,
+            originX: "center",
+            width: 276,
+            fontFamily: "Alice",
+            fontSize: 18,
+            textAlign: "center",
+            fill: PL_.ink,
+          },
+          {
+            type: "text",
+            key: "host-amp",
+            text: "&",
+            left: 198,
+            top: 176,
+            originX: "center",
+            width: 276,
+            fontFamily: "Alex Brush",
+            fontSize: 26,
+            textAlign: "center",
+            fill: PL_.gold,
+          },
+          {
+            type: "text",
+            key: "host-2",
+            text: "VI-UP",
+            left: 198,
+            top: 214,
+            originX: "center",
+            width: 276,
+            fontFamily: "Alice",
+            fontSize: 18,
+            textAlign: "center",
+            fill: PL_.ink,
+          },
+          {
+            // Six lines at 1.6 line-height is ~125px tall; centred on 320 it
+            // spans 257-382, clear of "VI-UP" above and "BRIDE" below.
+            type: "text",
+            key: "invitation-text",
+            text: "“Dengan penuh hormat dan takzim,\nsukacita menjunjung Pengiran berangkat\nmenjemput Pehin / Dato / Datin\n/ Awang / Dayang / Tuan / Puan / Cik\nuntuk bersama-sama memeriahkan majlis\nwalimatulurus puteri kami dan pasangannya”",
+            left: 198,
+            top: 320,
+            originX: "center",
+            width: 276,
+            fontFamily: "Alice",
+            fontSize: 13,
+            fontStyle: "italic",
+            lineHeight: 1.6,
+            textAlign: "center",
+            fill: PL_.ink,
+          },
+          {
+            type: "text",
+            key: "couple-1",
+            text: "BRIDE",
+            left: 198,
+            top: 450,
+            originX: "center",
+            width: 276,
+            fontFamily: "Alice",
+            fontSize: 20,
+            fontStyle: "italic",
+            fontWeight: "bold",
+            charSpacing: 60,
+            textAlign: "center",
+            fill: PL_.ink,
+          },
+          {
+            type: "text",
+            key: "couple-amp",
+            text: "&",
+            left: 198,
+            top: 490,
+            originX: "center",
+            width: 276,
+            fontFamily: "Alex Brush",
+            fontSize: 26,
+            textAlign: "center",
+            fill: PL_.gold,
+          },
+          {
+            type: "text",
+            key: "couple-2",
+            text: "GROOM",
+            left: 198,
+            top: 530,
+            originX: "center",
+            width: 276,
+            fontFamily: "Alice",
+            fontSize: 20,
+            fontStyle: "italic",
+            fontWeight: "bold",
+            charSpacing: 60,
+            textAlign: "center",
+            fill: PL_.ink,
+          },
+        ],
+      },
+
+      // ── 4. Event details ────────────────────────────────────────────────
+      {
+        id: "eventDetails",
+        name: "Event Details",
+        background: PL_.ground,
+        elements: [
+          ...plBorderFrame(),
+          plHeading("Date", 110),
+          plBody("26 April 2026", 138),
+          plHeading("Time", 200),
+          plBody("9.00 AM – 2.00 PM", 228),
+          plHeading("Venue", 290),
+          plBody("Neverleave Island Resort", 318),
+          // Four lines, so this value needs more clearance than the one-liners
+          // above: centred on 445 it spans 406-484, clear of the heading.
+          plHeading("Dress Code", 390),
+          plBody(
+            "Pakaian Tradisional –\nBaju Kurung, Baju Melayu Lengkap,\nBatik atau lain-lain pakaian\ntradisional yang sopan",
+            445,
+            13,
+          ),
+        ],
+      },
+
+      // ── 5. Itinerary ────────────────────────────────────────────────────
+      {
+        id: "itinerary",
+        name: "Itinerary",
+        background: PL_.ground,
+        elements: [
+          ...plBorderFrame(),
+          {
+            type: "text",
+            key: "title",
+            text: "Itinerary",
+            left: 198,
+            top: 100,
+            originX: "center",
+            width: 276,
+            fontFamily: "Alice",
+            fontSize: 26,
+            fontWeight: "bold",
+            textAlign: "center",
+            fill: PL_.ink,
+          },
+          ...plItineraryRow("9.00 AM", "Ketibaan para jemputan", 175),
+          ...plItineraryRow("9.30 AM", "Majlis Akad Nikah", 220),
+          ...plItineraryRow("10.00 AM", "Bacaan doa\n(diikuti dengan jamuan ringan)", 265),
+          ...plItineraryRow("11.30 AM", "Majlis bersanding", 325),
+          ...plItineraryRow("12.00 PM", "Jamuan makan bermula", 370),
+          ...plItineraryRow("2.00 PM", "Majlis bersurai", 415),
+          {
+            type: "text",
+            key: "closing-note",
+            text: "Jemput hadir mengikut masa yang ditetapkan",
+            left: 198,
+            top: 480,
+            originX: "center",
+            width: 276,
+            fontFamily: "Alice",
+            fontSize: 13,
+            fontWeight: "bold",
+            lineHeight: 1.5,
+            textAlign: "center",
+            fill: PL_.ink,
+          },
+        ],
+      },
+
+      // ── 6. Counting Days ────────────────────────────────────────────────
+      // countdownBox emits `countdownUnit`, which the per-second ticker in the
+      // editor and in the published invitation rewrites. No per-template code.
+      {
+        id: "countdown",
+        name: "Counting Days",
+        background: PL_.ground,
+        elements: [
+          ...plBorderFrame(),
+          {
+            type: "text",
+            key: "title",
+            text: "Counting Days",
+            left: 198,
+            top: 150,
+            originX: "center",
+            width: 276,
+            fontFamily: "Alice",
+            fontSize: 26,
+            fontWeight: "bold",
+            textAlign: "center",
+            fill: PL_.ink,
+          },
+          // Outlined rather than filled, to stay in the line idiom — the source
+          // gives .countdown-box no background either, just a bottom rule.
+          {
+            type: "countdownBox",
+            key: "day",
+            label: "Day",
+            value: "00",
+            // `top` shifts the whole box; the parts keep their stock offsets.
+            top: 300,
+            left: 92,
+            width: 62,
+            height: 76,
+            // originX centre on the box shares the label's and value's anchor,
+            // so all three line up.
+            box: { originX: "center", fill: "transparent", stroke: PL_.ink, strokeWidth: 1, rx: 2, ry: 2 },
+            labelStyle: { width: 62, fontSize: 11, fill: PL_.muted, fontFamily: "Alice" },
+            valueStyle: { width: 62, fontSize: 20, fill: PL_.ink, fontFamily: "Alice" },
+          },
+          {
+            type: "countdownBox",
+            key: "hour",
+            label: "Hour",
+            value: "00",
+            top: 300,
+            left: 163,
+            width: 62,
+            height: 76,
+            box: { originX: "center", fill: "transparent", stroke: PL_.ink, strokeWidth: 1, rx: 2, ry: 2 },
+            labelStyle: { width: 62, fontSize: 11, fill: PL_.muted, fontFamily: "Alice" },
+            valueStyle: { width: 62, fontSize: 20, fill: PL_.ink, fontFamily: "Alice" },
+          },
+          {
+            type: "countdownBox",
+            key: "minute",
+            label: "Minute",
+            value: "00",
+            top: 300,
+            left: 234,
+            width: 62,
+            height: 76,
+            box: { originX: "center", fill: "transparent", stroke: PL_.ink, strokeWidth: 1, rx: 2, ry: 2 },
+            labelStyle: { width: 62, fontSize: 11, fill: PL_.muted, fontFamily: "Alice" },
+            valueStyle: { width: 62, fontSize: 20, fill: PL_.ink, fontFamily: "Alice" },
+          },
+          {
+            type: "countdownBox",
+            key: "second",
+            label: "Second",
+            value: "00",
+            top: 300,
+            left: 305,
+            width: 62,
+            height: 76,
+            box: { originX: "center", fill: "transparent", stroke: PL_.ink, strokeWidth: 1, rx: 2, ry: 2 },
+            labelStyle: { width: 62, fontSize: 11, fill: PL_.muted, fontFamily: "Alice" },
+            valueStyle: { width: 62, fontSize: 20, fill: PL_.ink, fontFamily: "Alice" },
+          },
+        ],
+      },
+
+      // ── 7. Gallery ──────────────────────────────────────────────────────
+      // TWO starter photos, like every other template: the package photo counter
+      // discounts a FIXED starter count (GALLERY_STARTER_COUNT in CanvasEditor,
+      // derived from the shared gallery block), so shipping more would eat into
+      // the customer's own photo budget. The source marks aiCouple-1 active.
+      {
+        id: "gallery",
+        name: "Gallery",
+        background: PL_.ground,
+        elements: [
+          ...plBorderFrame(),
+          {
+            type: "text",
+            key: "title",
+            text: "Gallery",
+            left: 198,
+            top: 80,
+            originX: "center",
+            width: 276,
+            fontFamily: "Alice",
+            fontSize: 26,
+            fontWeight: "bold",
+            textAlign: "center",
+            fill: PL_.ink,
+          },
+          {
+            type: "gallerySlot",
+            key: "photo-1",
+            index: 1,
+            asset: "aiCouple-1.png",
+            left: 198,
+            top: 350,
+            originX: "center",
+            originY: "center",
+            // Source 1024x1536 into the standard 292x443 frame.
+            scaleX: 292 / 1024,
+            scaleY: 443 / 1536,
+          },
+          {
+            type: "gallerySlot",
+            key: "photo-2",
+            index: 2,
+            asset: "aiCouple-2.png",
+            left: 198,
+            top: 350,
+            originX: "center",
+            originY: "center",
+            scaleX: 292 / 1024,
+            scaleY: 443 / 1536,
+            // Hidden initially — the slideshow reveals one photo at a time.
+            visible: false,
+          },
+        ],
+      },
+
+      // ── 8. Guestbook ────────────────────────────────────────────────────
+      // Visual only: startGuestbook() fills guestMessage / guestSender with the
+      // real wishes on the published invitation. No paper wash here: the
+      // source's own overlay points at Border Flower/PAPER.png, which the
+      // manifest reports missing, and the top-level PAPER.png that IS on disk
+      // is a heavy texture at odds with this design's single thin rule.
+      {
+        id: "guestbook",
+        name: "Guestbook",
+        background: PL_.ground,
+        elements: [
+          ...plBorderFrame(),
+          {
+            type: "text",
+            key: "title",
+            text: "Guestbook",
+            left: 198,
+            top: 80,
+            originX: "center",
+            width: 276,
+            fontFamily: "Alice",
+            fontSize: 26,
+            fontWeight: "bold",
+            textAlign: "center",
+            fill: PL_.ink,
+          },
+          {
+            type: "text",
+            key: "message",
+            name: "guestMessage",
+            text: "“Your wishes will appear here...”",
+            left: 198,
+            top: 170,
+            originX: "center",
+            width: 276,
+            fontFamily: "Dancing Script",
+            fontSize: 20,
+            textAlign: "center",
+            fill: PL_.ink,
+          },
+          {
+            type: "text",
+            key: "sender",
+            name: "guestSender",
+            text: "- Guest Name",
+            left: 198,
+            top: 235,
+            originX: "center",
+            width: 276,
+            fontFamily: "Dancing Script",
+            fontSize: 15,
+            textAlign: "center",
+            fill: PL_.muted,
+          },
+          { type: "guestbookNav", key: "prev", direction: "prev", left: 170, top: 300 },
+          { type: "guestbookNav", key: "next", direction: "next", left: 226, top: 300 },
+        ],
+      },
+
+      // ── 9. Prayer / closing ─────────────────────────────────────────────
+      {
+        id: "prayer",
+        name: "Prayer",
+        background: PL_.ground,
+        elements: [
+          ...plBorderFrame(),
+          {
+            type: "text",
+            key: "title",
+            text: "Prayer",
+            left: 198,
+            top: 140,
+            originX: "center",
+            width: 276,
+            fontFamily: "Alice",
+            fontSize: 28,
+            fontWeight: "bold",
+            textAlign: "center",
+            fill: PL_.ink,
+          },
+          {
+            type: "text",
+            key: "body",
+            text: "Semoga Allah melimpahkan\nkeberkahan kepadamu dan\nkeberkahan atas pernikahanmu,\nserta mengumpulkan kalian\nberdua dalam kebaikan",
+            left: 198,
+            top: 260,
+            originX: "center",
+            width: 276,
+            fontFamily: "Alice",
+            fontSize: 15,
+            lineHeight: 1.6,
+            textAlign: "center",
+            fill: PL_.ink,
+          },
+          {
+            type: "text",
+            key: "hashtag",
+            text: "#SendItOut",
+            left: 198,
+            top: 400,
+            originX: "center",
+            width: 276,
+            fontFamily: "Alice",
+            fontSize: 20,
+            fontStyle: "italic",
+            textAlign: "center",
+            fill: PL_.ink,
+          },
+          {
+            type: "text",
+            key: "credit",
+            text: "Made for your special day by",
+            left: 198,
+            top: 500,
+            originX: "center",
+            width: 276,
+            fontFamily: "Alice",
+            fontSize: 11,
+            textAlign: "center",
+            fill: PL_.muted,
+          },
+          {
+            type: "image",
+            key: "submark",
+            asset: "Logo/Vi-Up Submark.png",
+            left: 198,
+            top: 535,
+            originX: "center",
+            originY: "center",
+            // 1296x1115 at the 31px the source's inline style renders it.
+            scaleX: 31 / 1296,
+            scaleY: 31 / 1296,
+          },
+        ],
+      },
+    ],
+  },
   // ── Add the next template below ─────────────────────────────────────────
   // A LOCAL (Vercel-hosted) template, for contrast with the two above:
   // midnightVelvet: {

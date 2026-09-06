@@ -37,7 +37,12 @@ import {
 } from '@/src/store/EventDataContext';
 import LivePreviewPanel from '@/src/components/canvas-editor/LivePreviewPanel';
 import MobileToolbar from '@/src/components/canvas-editor/mobile-toolbar';
-import { buildTemplatePages, getTemplateManifest, listTemplates } from "@/src/config/templateLoader";
+import {
+  buildTemplatePages,
+  getTemplateManifest,
+  listTemplates,
+  type InteractiveElementKind,
+} from "@/src/config/templateLoader";
 import { downscaleImageFile } from "@/src/lib/imageDownscale";
 import { getElementGraphics } from "@/src/config/elementGraphics";
 import Scrubbable from "@/src/components/canvas-editor/scrubbable";
@@ -134,10 +139,20 @@ const SIDEBAR_ITEMS: { id: Tab; label: string; icon: string; disabled?: boolean 
   // { id: 'wishlist', label: 'Wishlist', icon: '/wishlist.svg' },
 ];
 
-// Interactive elements that can be dropped onto any page. Both are functional:
-// "Counting Days" ticks towards the saved Calendar date; "Guestbook" cycles
-// through wishes in the published invitation.
-const INTERACTIVE_ELEMENTS: { id: 'countdown' | 'guestbook'; label: string; icon: React.ReactNode }[] = [
+// Prebuilt elements that can be dropped onto any page.
+//
+// "Counting Days" ticks towards the saved Calendar date and "Guestbook" cycles
+// through wishes in the published invitation — both are full-page designs, so
+// clicking one gives it its own page. "Date Plate" is an ornament instead: it
+// lands on the page the user is already on. `onPage` is what draws that
+// distinction, in the label, the tooltip and the click handler.
+const INTERACTIVE_ELEMENTS: {
+  id: InteractiveElementKind;
+  label: string;
+  icon: React.ReactNode;
+  /** True for ornaments that go onto the current page rather than a new one. */
+  onPage?: boolean;
+}[] = [
   {
     id: 'countdown',
     label: 'Counting Days',
@@ -147,6 +162,31 @@ const INTERACTIVE_ELEMENTS: { id: 'countdown' | 'guestbook'; label: string; icon
     id: 'guestbook',
     label: 'Guestbook',
     icon: <img src="/Guestbook.svg" width={28} height={28} aria-hidden alt="" />,
+  },
+  {
+    id: 'datePlate',
+    label: 'Date Plate',
+    onPage: true,
+    // Drawn inline rather than shipped as a file: it is a 28px thumbnail of the
+    // plate itself (month, rules either side of the day, year).
+    icon: (
+      <svg width={28} height={28} viewBox="0 0 28 28" aria-hidden fill="none">
+        <g stroke="#8b6914" strokeWidth={1.2} strokeLinecap="round">
+          <path d="M8 7h12M3.5 12h6M18.5 12h6M3.5 20h6M18.5 20h6M9 25h10" />
+        </g>
+        <text
+          x={14}
+          y={19.5}
+          textAnchor="middle"
+          fontSize={11}
+          fontWeight={600}
+          fontFamily="Playfair Display, serif"
+          fill="#8b6914"
+        >
+          15
+        </text>
+      </svg>
+    ),
   },
 ];
 
@@ -3402,35 +3442,41 @@ export default function Sidebar({
             onChange={(e) => handleElementUpload(e.target.files)}
           />
           <div className="flex flex-col gap-4">
-            {/* Interactive elements — a fully-functional countdown or guestbook.
-                Both are full-page designs, so clicking one gives it its own page;
-                dragging still drops it wherever it lands on the current page. */}
+            {/* Prebuilt elements — the countdown and guestbook are full-page
+                designs, so clicking one gives it its own page; the date plate is
+                an ornament and lands on the current page. Dragging any of them
+                drops it wherever it lands. */}
             <div className="mb-3">
               <div className="text-[#191212] text-[17px] font-bold mb-2">Interactive</div>
               <div className="grid grid-cols-2 gap-2">
-                {INTERACTIVE_ELEMENTS.map((el) => (
-                  <button
-                    key={el.id}
-                    draggable
-                    onDragStart={(e) => {
-                      const payload = JSON.stringify({ type: 'element', element: el.id });
-                      try { e.dataTransfer.setData('application/json', payload); e.dataTransfer.effectAllowed = 'copy'; } catch (err) { }
-                    }}
-                    onClick={() => {
-                      if (el.id === 'countdown') editorRef?.current?.addCountdown?.();
-                      else editorRef?.current?.addGuestbook?.();
-                    }}
-                    title={`Add ${el.label} as a new page`}
-                    aria-label={`Add ${el.label} as a new page`}
-                    className="h-24 bg-gray-100 rounded flex flex-col items-center justify-center gap-2 text-[12px] font-semibold text-[#7D5B59] hover:bg-gray-200 transition"
-                  >
-                    {el.icon}
-                    <span>{el.label}</span>
-                  </button>
-                ))}
+                {INTERACTIVE_ELEMENTS.map((el) => {
+                  const how = el.onPage ? 'to this page' : 'as a new page';
+                  return (
+                    <button
+                      key={el.id}
+                      draggable
+                      onDragStart={(e) => {
+                        const payload = JSON.stringify({ type: 'element', element: el.id });
+                        try { e.dataTransfer.setData('application/json', payload); e.dataTransfer.effectAllowed = 'copy'; } catch (err) { }
+                      }}
+                      onClick={() => {
+                        if (el.id === 'countdown') editorRef?.current?.addCountdown?.();
+                        else if (el.id === 'guestbook') editorRef?.current?.addGuestbook?.();
+                        else editorRef?.current?.addDatePlate?.();
+                      }}
+                      title={`Add ${el.label} ${how}`}
+                      aria-label={`Add ${el.label} ${how}`}
+                      className="h-24 bg-gray-100 rounded flex flex-col items-center justify-center gap-2 text-[12px] font-semibold text-[#7D5B59] hover:bg-gray-200 transition"
+                    >
+                      {el.icon}
+                      <span>{el.label}</span>
+                    </button>
+                  );
+                })}
               </div>
               <div className="text-[11px] text-gray-400 text-center mt-2">
-                Click to add as a new page · drag onto this page to place.
+                Click to add · drag onto this page to place. The Date Plate&rsquo;s text is
+                editable like any other text.
               </div>
             </div>
 
@@ -3543,9 +3589,40 @@ export default function Sidebar({
                   const builtIn = cat === 'Graphics' ? getElementGraphics() : [];
                   return (
                     <div className="mt-2">
-                      {builtIn.map((group) => (
+                      {builtIn.map((group) => {
+                        // The whole-page sheets are 1-3.5MB each, and
+                        // loading="lazy" does not help inside a scroll panel the
+                        // browser considers near-viewport — it fetched all of
+                        // them on open. So the heavy group is collapsed by
+                        // default and its tiles are not mounted until asked for,
+                        // which is the only thing that reliably defers the
+                        // request. Opening Elements costs what it always did.
+                        const heavy = group.graphics.some((g) => g.cover);
+                        const open = !heavy || !!expanded[`gfx:${group.name}`];
+                        return (
                         <div key={group.name} className="mb-3">
-                          <div className="text-[#7D5B59] text-[12px] font-semibold mb-1.5">{group.name}</div>
+                          <div className="flex items-center justify-between mb-1.5">
+                            <div className="text-[#7D5B59] text-[12px] font-semibold">{group.name}</div>
+                            {heavy && (
+                              <button
+                                type="button"
+                                onClick={() => setExpanded((prev) => ({ ...prev, [`gfx:${group.name}`]: !open }))}
+                                aria-expanded={open}
+                                className="text-[#BBA8A7] text-[10px] font-bold"
+                              >
+                                {open ? 'Show Less' : 'Show'}
+                              </button>
+                            )}
+                          </div>
+                          {!open ? (
+                            <button
+                              type="button"
+                              onClick={() => setExpanded((prev) => ({ ...prev, [`gfx:${group.name}`]: true }))}
+                              className="w-full py-2 rounded bg-gray-100 text-[11px] text-gray-500 hover:bg-gray-200 transition"
+                            >
+                              {group.graphics.length} full-page {group.graphics.length === 1 ? 'sheet' : 'sheets'} — tap to load
+                            </button>
+                          ) : (
                           <div className="grid grid-cols-3 gap-2">
                             {group.graphics.map((graphic) => (
                               <img
@@ -3553,23 +3630,43 @@ export default function Sidebar({
                                 src={graphic.url}
                                 alt={graphic.label}
                                 draggable
-                                onClick={() => editorRef?.current?.addImageFromUrl?.(graphic.url)}
+                                // The whole-page sheets in "Backgrounds" are a
+                                // few MB each. Lazy + async keeps them off the
+                                // wire until the group is actually scrolled to,
+                                // so opening Elements stays as cheap as it was.
+                                loading="lazy"
+                                decoding="async"
+                                onClick={() => editorRef?.current?.addImageFromUrl?.(graphic.url, { cover: graphic.cover })}
                                 onDragStart={(e) => {
                                   // `center` asks the drop handler to put it in the
                                   // middle of the page rather than under the cursor,
                                   // so an ornament lands identically however it is
                                   // added. Gallery photos send no flag and still
-                                  // land where they are dropped.
-                                  const payload = JSON.stringify({ type: 'image-url', url: graphic.url, center: true });
+                                  // land where they are dropped. `cover` makes a
+                                  // background fill the page and drop to the back.
+                                  const payload = JSON.stringify({
+                                    type: 'image-url',
+                                    url: graphic.url,
+                                    center: true,
+                                    cover: !!graphic.cover,
+                                  });
                                   try { e.dataTransfer.setData('application/json', payload); e.dataTransfer.effectAllowed = 'copy'; } catch (err) { }
                                 }}
-                                title={`${graphic.label} — click to add to canvas · drag onto the page`}
-                                className="w-full h-20 object-contain rounded border bg-gray-50 p-1 cursor-pointer hover:opacity-80 transition"
+                                title={
+                                  graphic.cover
+                                    ? `${graphic.label} — click to fill the page · drag onto the page`
+                                    : `${graphic.label} — click to add to canvas · drag onto the page`
+                                }
+                                className={`w-full h-20 rounded border bg-gray-50 cursor-pointer hover:opacity-80 transition ${
+                                  graphic.cover ? 'object-cover' : 'object-contain p-1'
+                                }`}
                               />
                             ))}
                           </div>
+                          )}
                         </div>
-                      ))}
+                        );
+                      })}
                       <button
                         type="button"
                         onClick={() => openElementUpload(key)}
