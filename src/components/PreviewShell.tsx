@@ -28,6 +28,8 @@ export type PreviewShellData = {
   calendar?: any | null;
   location?: any | null;
   rsvpConfig?: any | null;
+  // Host-written card headings + the Money Gift note (see resolveCardTexts).
+  cardTexts?: any | null;
   userId?: string | number | null;
   eventId?: string | number | null;
   packageId?: string | number | null;
@@ -85,6 +87,7 @@ export default function PreviewShell({ data }: { data: PreviewShellData }) {
         calendar={data.calendar ?? null}
         location={data.location ?? null}
         rsvpConfig={data.rsvpConfig ?? null}
+        cardTexts={data.cardTexts ?? null}
         userId={userId}
         eventId={eventId}
         onGuestbookUpdate={handleGuestbookUpdate}

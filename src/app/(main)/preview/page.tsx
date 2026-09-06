@@ -18,6 +18,7 @@ export default function PreviewPage() {
   const [calendar, setCalendar] = useState<any | null>(null);
   const [location, setLocation] = useState<any | null>(null);
   const [rsvpConfig, setRsvpConfig] = useState<any | null>(null);
+  const [cardTexts, setCardTexts] = useState<any | null>(null);
 
   // 🔥 LOAD DATA FROM LOCAL STORAGE
   useEffect(() => {
@@ -37,6 +38,7 @@ export default function PreviewPage() {
       setCalendar(eventData.calendar || null);
       setLocation(eventData.location || null);
       setRsvpConfig(eventData.rsvpConfig || null);
+      setCardTexts(eventData.cardTexts || null);
     }
   }, []);
 
@@ -159,6 +161,7 @@ export default function PreviewPage() {
               calendar={calendar}
               location={location}
               rsvpConfig={rsvpConfig}
+              cardTexts={cardTexts}
             />
           </div>
         </div>

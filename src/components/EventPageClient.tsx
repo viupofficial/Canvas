@@ -18,6 +18,7 @@ export default function EventPageClient({ data }: { data: any }) {
         calendar: data.calendar ?? null,
         location: data.location ?? null,
         rsvpConfig: data.rsvpConfig ?? null,
+        cardTexts: data.cardTexts ?? null,
         userId: data.userId ?? null,
         eventId: data.eventId ?? null,
         packageId: data.packageId ?? null,

@@ -277,6 +277,71 @@ export function rsvpTexts(
   };
 }
 
+/** ── Footer card wording ───────────────────────────────────────────────────
+ *
+ * The headings guests read on the Contact / Money Gift / Location / Calendar
+ * cards, plus the small note under the Money Gift heading.
+ *
+ * These live in their own section rather than inside `location` / `calendar` /
+ * `moneyGift` because each of those is replaced wholesale on Save — and dropped
+ * to `null` when its form is cleared (see LocationTab.commitAddress and
+ * CalendarTab.handleDateChange). Wording has to survive that. It also keeps the
+ * Calendar card heading clear of `calendar.title`, which is the EVENT title used
+ * by the ICS / Google exports and the mini calendar.
+ */
+
+/** Longest heading the sidebar accepts — long enough for a phrase in any
+ *  language, short enough to stay on one line of the card. */
+export const CARD_TITLE_MAX_LENGTH = 60;
+/** The Money Gift note is a sentence or two, so it gets its own, larger cap. */
+export const GIFT_NOTE_MAX_LENGTH = 300;
+
+export const CONTACT_DEFAULT_TITLE = "Contact";
+export const GIFT_DEFAULT_TITLE = "Money Gift";
+export const GIFT_DEFAULT_NOTE =
+  "Your presence is the greatest gift of all. However, should you wish to honour us with a gift, a small contribution towards our future together would be sincerely appreciated.";
+export const LOCATION_DEFAULT_TITLE = "Location";
+export const CALENDAR_DEFAULT_TITLE = "Calendar";
+
+/** Host-written wording. Every field is optional and a blank one means "use the
+ *  default", which is what invitations saved before this existed do for all of
+ *  them. */
+export type CardTexts = {
+  contactTitle?: string;
+  giftTitle?: string;
+  giftNote?: string;
+  // Whether the note is shown under the Money Gift heading. Opt-in, so it is
+  // OFF when undefined — invitations saved before it existed (and every new one
+  // until the host turns it on) show the accounts alone, exactly as before.
+  // Read it as `=== true`, never `!== false`.
+  giftNoteEnabled?: boolean;
+  locationTitle?: string;
+  calendarTitle?: string;
+} | null;
+
+export type ResolvedCardTexts = {
+  contactTitle: string;
+  giftTitle: string;
+  giftNote: string;
+  /** False ⇒ don't render the note at all, whatever `giftNote` holds. */
+  giftNoteEnabled: boolean;
+  locationTitle: string;
+  calendarTitle: string;
+};
+
+/** The wording to render, in one reader for every surface (public footer, live
+ *  preview panel, sidebar placeholders) so they can never drift apart. */
+export function resolveCardTexts(texts?: CardTexts): ResolvedCardTexts {
+  return {
+    contactTitle: texts?.contactTitle?.trim() || CONTACT_DEFAULT_TITLE,
+    giftTitle: texts?.giftTitle?.trim() || GIFT_DEFAULT_TITLE,
+    giftNote: texts?.giftNote?.trim() || GIFT_DEFAULT_NOTE,
+    giftNoteEnabled: texts?.giftNoteEnabled === true,
+    locationTitle: texts?.locationTitle?.trim() || LOCATION_DEFAULT_TITLE,
+    calendarTitle: texts?.calendarTitle?.trim() || CALENDAR_DEFAULT_TITLE,
+  };
+}
+
 export type RSVPConfig = {
   // Whether RSVP is available on the invitation. Treated as ON when undefined so
   // pre-existing designs (saved before this toggle existed) keep showing RSVP.
@@ -331,6 +396,8 @@ export type EventData = {
   calendar: CalendarData;
   moneyGift: GiftData;
   rsvpConfig: RSVPConfig;
+  // Host-written headings for the footer cards (see resolveCardTexts).
+  cardTexts: CardTexts;
 };
 
 export type EventSection = keyof EventData;
@@ -341,6 +408,7 @@ const DEFAULT_EVENT_DATA: EventData = {
   calendar: null,
   moneyGift: null,
   rsvpConfig: null,
+  cardTexts: null,
 };
 
 const STORAGE_KEY = "viup_event_data";

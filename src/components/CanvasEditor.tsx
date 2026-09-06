@@ -329,6 +329,38 @@ const imageLoadOpts = (src: string) =>
     ? undefined
     : { crossOrigin: "anonymous" as const };
 
+// ── Placing an image that came from a panel or a drag ───────────────────────
+// Panel art is stored at print resolution — the royal wax seal is 1254px wide
+// on a 396px page — so the flat 0.6 scale these paths used to apply pushed most
+// of the picture off the artboard. Shrink whatever would not fit; never enlarge,
+// so an ordinary photo still arrives at the size it always did.
+const PLACED_IMAGE_SCALE = 0.6;
+const PLACED_IMAGE_MAX_FRACTION = 0.8;
+
+const naturalSizeOf = (img: any): { w: number; h: number } => {
+  const el = img?.getElement?.() as HTMLImageElement | null;
+  return {
+    w: (el?.naturalWidth ?? 0) > 0 ? el!.naturalWidth : (img?.width || 1),
+    h: (el?.naturalHeight ?? 0) > 0 ? el!.naturalHeight : (img?.height || 1),
+  };
+};
+
+const canvasSizeOf = (canvas: any): { w: number; h: number } => ({
+  w: (canvas?.getWidth?.() ?? canvas?.width ?? 396) as number,
+  h: (canvas?.getHeight?.() ?? canvas?.height ?? 704) as number,
+});
+
+/** 0.6, or less when the picture is bigger than most of the page. */
+const placedImageScale = (img: any, canvas: any): number => {
+  const { w, h } = naturalSizeOf(img);
+  const page = canvasSizeOf(canvas);
+  return Math.min(
+    PLACED_IMAGE_SCALE,
+    (page.w * PLACED_IMAGE_MAX_FRACTION) / w,
+    (page.h * PLACED_IMAGE_MAX_FRACTION) / h,
+  );
+};
+
 const FABRIC_EXPORT_PROPS = [
   "action",
   "animationType",
@@ -1057,6 +1089,7 @@ const [currentPage, setCurrentPage] = useState(0);
       calendar: null,
       moneyGift: null,
       rsvpConfig: null,
+      cardTexts: null,
     },
     !!eventCtx && isLoaded,
   );
@@ -1629,6 +1662,9 @@ const [currentPage, setCurrentPage] = useState(0);
         // Same store-first read as exportHTML — /preview-local must show the RSVP
         // settings currently being edited, not the defaults.
         rsvpConfig: eventCtx?.eventData.rsvpConfig ?? props.rsvpConfig ?? null,
+        // Card headings / Money Gift note. Store-only, like rsvpConfig — the
+        // sidebar writes them straight into the shared store.
+        cardTexts: eventCtx?.eventData.cardTexts ?? null,
         borders: globalBordersRef.current,
         userId: props.userId ?? null,
         eventId: props.eventId ?? null,
@@ -3925,7 +3961,14 @@ const [currentPage, setCurrentPage] = useState(0);
         } else if (data.type === 'image-url' && data.url) {
           const imgOpts = imageLoadOpts(data.url);
           fabric.Image.fromURL(data.url, imgOpts).then((img: any) => {
-            img.set({ left: x, top: y, scaleX: 0.6, scaleY: 0.6 });
+            // Fit it to the page like the click path, and hang it off its centre.
+            // Ornaments from the Elements panel ask (data.center) to land in the
+            // middle of the page, so adding one by click and by drag give the same
+            // result; a gallery photo sends no flag and lands under the cursor.
+            const page = canvasSizeOf(canvas);
+            const scale = placedImageScale(img, canvas);
+            const at = data.center ? { left: page.w / 2, top: page.h / 2 } : { left: x, top: y };
+            img.set({ ...at, originX: 'center', originY: 'center', scaleX: scale, scaleY: scale });
             canvas.add(img);
             canvas.requestRenderAll();
             pushSnapshot();
@@ -4554,7 +4597,20 @@ const [currentPage, setCurrentPage] = useState(0);
 
     const imgOpts = imageLoadOpts(url);
     fabric.Image.fromURL(url, imgOpts).then((img: any) => {
-      img.set({ left: 100, top: 100, scaleX: 0.6, scaleY: 0.6 });
+      // Middle of the page (198 x 350 on the standard 396x704 artboard) with a
+      // centre origin, so the object reads as x:198 / y:350 in the inspector and
+      // stays centred whatever its size. Same convention the templates' own
+      // images use; a drag still lands wherever it was dropped.
+      const page = canvasSizeOf(canvas);
+      const scale = placedImageScale(img, canvas);
+      img.set({
+        left: page.w / 2,
+        top: page.h / 2,
+        originX: 'center',
+        originY: 'center',
+        scaleX: scale,
+        scaleY: scale,
+      });
       canvas.add(img);
       canvas.requestRenderAll();
       pushSnapshot();
@@ -4693,6 +4749,8 @@ const [currentPage, setCurrentPage] = useState(0);
     // the sidebar defaults, which is why it went unnoticed. Store first, prop as
     // the fallback for surfaces that render outside a provider.
     rsvpConfig: eventCtx?.eventData.rsvpConfig ?? props.rsvpConfig ?? null,
+    // Card headings / Money Gift note — store-only for the same reason.
+    cardTexts: eventCtx?.eventData.cardTexts ?? null,
     userId: props.userId ?? null,
     eventId: props.eventId ?? null,
     packageId: props.packageId ?? null,

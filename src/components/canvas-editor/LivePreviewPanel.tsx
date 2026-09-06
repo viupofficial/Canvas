@@ -1,6 +1,6 @@
 "use client";
 
-import { useEventDataOptional, giftAccounts, packTypeOptions, guestSideOptions, rsvpTexts, type CalendarData, type GiftData, type LocationData } from "@/src/store/EventDataContext";
+import { useEventDataOptional, giftAccounts, packTypeOptions, guestSideOptions, rsvpTexts, resolveCardTexts, type CalendarData, type GiftData, type LocationData, type ResolvedCardTexts } from "@/src/store/EventDataContext";
 import { cssBackground, firstColorHex, type GradientDescriptor } from "@/src/lib/gradient";
 import GiftCarousel from "@/src/components/GiftCarousel";
 
@@ -24,6 +24,9 @@ export default function LivePreviewPanel({ activeTab }: { activeTab: PreviewTab 
 
   const { eventData, isPreviewPulsing } = ctx;
   const { contacts, moneyGift, calendar, location, rsvpConfig } = eventData;
+  // Same reader the invitation footer uses, so the panel previews the host's
+  // headings (and the Money Gift note) exactly as guests will read them.
+  const cardText = resolveCardTexts(eventData.cardTexts);
 
   return (
     <div className="mb-4">
@@ -44,10 +47,10 @@ export default function LivePreviewPanel({ activeTab }: { activeTab: PreviewTab 
         }`}
         style={{ minHeight: 220 }}
       >
-        {activeTab === "contact" && <ContactCard contacts={contacts} />}
-        {activeTab === "location" && <LocationCard location={location} />}
-        {activeTab === "calendar" && <CalendarCard calendar={calendar} />}
-        {activeTab === "money" && <GiftCard moneyGift={moneyGift} />}
+        {activeTab === "contact" && <ContactCard contacts={contacts} title={cardText.contactTitle} />}
+        {activeTab === "location" && <LocationCard location={location} title={cardText.locationTitle} />}
+        {activeTab === "calendar" && <CalendarCard calendar={calendar} title={cardText.calendarTitle} />}
+        {activeTab === "money" && <GiftCard moneyGift={moneyGift} cardText={cardText} />}
         {activeTab === "rsvp" && <RSVPCard rsvpConfig={rsvpConfig} />}
       </div>
     </div>
@@ -66,10 +69,16 @@ function CardFrame({ title, children }: { title: string; children: React.ReactNo
   );
 }
 
-function ContactCard({ contacts }: { contacts: { name: string; phone: string }[] }) {
+function ContactCard({
+  contacts,
+  title,
+}: {
+  contacts: { name: string; phone: string }[];
+  title: string;
+}) {
   const list = contacts.length ? contacts : [{ name: "—", phone: "" }];
   return (
-    <CardFrame title="Contact">
+    <CardFrame title={title}>
       <div className="flex flex-col gap-2">
         {list.map((c, i) => (
           <div
@@ -90,13 +99,13 @@ function ContactCard({ contacts }: { contacts: { name: string; phone: string }[]
   );
 }
 
-function LocationCard({ location }: { location: LocationData }) {
+function LocationCard({ location, title }: { location: LocationData; title: string }) {
   const address = location?.address || "Enter a location";
   const mapSrc = location?.address
     ? `https://www.google.com/maps?q=${encodeURIComponent(location.address)}&output=embed`
     : "";
   return (
-    <CardFrame title="Location">
+    <CardFrame title={title}>
       <p className="text-[11px] text-center text-[#191212] mb-2 break-words">{address}</p>
       {mapSrc ? (
         <iframe
@@ -114,9 +123,9 @@ function LocationCard({ location }: { location: LocationData }) {
   );
 }
 
-function CalendarCard({ calendar }: { calendar: CalendarData }) {
+function CalendarCard({ calendar, title }: { calendar: CalendarData; title: string }) {
   return (
-    <CardFrame title="Calendar">
+    <CardFrame title={title}>
       <p className="text-[11px] text-center text-[#191212] font-semibold mb-1">
         {calendar?.date ? formatDate(calendar.date) : "Select a date"}
       </p>
@@ -154,8 +163,10 @@ function CalendarCard({ calendar }: { calendar: CalendarData }) {
 
 function GiftCard({
   moneyGift,
+  cardText,
 }: {
   moneyGift: GiftData;
+  cardText: ResolvedCardTexts;
 }) {
   const accounts = giftAccounts(moneyGift);
   // Empty section: keep the placeholder card the panel showed before anything
@@ -181,7 +192,12 @@ function GiftCard({
     ),
   );
   return (
-    <CardFrame title="Money Gift">
+    <CardFrame title={cardText.giftTitle}>
+      {cardText.giftNoteEnabled && (
+        <p className="text-[9px] italic leading-snug text-center text-[#7D5B59] mb-2">
+          {cardText.giftNote}
+        </p>
+      )}
       {/* Same swipeable gallery as the invitation footer, at panel scale. */}
       <GiftCarousel slides={slides} itemLabel="account" />
     </CardFrame>

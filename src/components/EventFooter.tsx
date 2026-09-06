@@ -1,7 +1,7 @@
 "use client"
 
 import React, { useState, useRef, useEffect } from "react"
-import { useEventDataOptional, giftAccounts, clampQrSize, type GiftAccount } from "@/src/store/EventDataContext"
+import { useEventDataOptional, giftAccounts, clampQrSize, resolveCardTexts, type CardTexts, type GiftAccount } from "@/src/store/EventDataContext"
 import GiftCarousel from "@/src/components/GiftCarousel"
 import { buildIcs, icsFilename } from "@/src/lib/calendar/icsBuilder"
 import { buildGoogleCalendarLink } from "@/src/lib/calendar/googleCalendarLink"
@@ -27,6 +27,7 @@ export default function EventFooter({
   calendar: calendarProp,
   location: locationProp,
   rsvpConfig: rsvpConfigProp,
+  cardTexts: cardTextsProp,
   userId,
   eventId,
   onGuestbookUpdate,
@@ -89,6 +90,10 @@ export default function EventFooter({
     circleColor?: string | GradientDescriptor;
     circleOpacity?: number;
   } | null;
+  // Host-written headings for the Contact / Money Gift / Location / Calendar
+  // cards, plus the Money Gift note. Blank/absent ⇒ the default wording, so
+  // invitations published before this existed read exactly as they did.
+  cardTexts?: CardTexts;
   userId?: string | number | null;
   eventId?: string | number | null;
   onGuestbookUpdate?: (entries: { message: string; sender: string }[]) => void;
@@ -104,6 +109,8 @@ export default function EventFooter({
   const calendar = ctx?.eventData.calendar ?? calendarProp ?? null;
   const location = ctx?.eventData.location ?? locationProp ?? null;
   const rsvpConfig = ctx?.eventData.rsvpConfig ?? rsvpConfigProp ?? null;
+  // Card headings + the Money Gift note, with the defaults filled in.
+  const cardText = resolveCardTexts(ctx?.eventData.cardTexts ?? cardTextsProp ?? null);
 
   // ── Footer navigation ─────────────────────────────────────────────────────
   // Which items the two slots either side of the RSVP circle hold is decided in
@@ -394,7 +401,7 @@ const generateICS = (event: any, loc?: any) => {
             {activeCard === "contact" && (
 
                 <div className={`contact-card contact-popup ${fadeCls}`}>
-                    <h3 className="center">Contact</h3>
+                    <h3 className="center">{cardText.contactTitle}</h3>
 
                     {contacts.length > 0 ? (
   contacts.map((c, i) => (
@@ -439,7 +446,13 @@ const generateICS = (event: any, loc?: any) => {
             {showMoneyGift && activeCard === "gift" && (
 
                 <div className={`moneygift-card ${fadeCls}`}>
-                    <h3>Money Gift</h3>
+                    <h3>{cardText.giftTitle}</h3>
+
+                  {/* Small print under the heading — off unless the host turns
+                      it on, then their wording or the default sentence. */}
+                  {cardText.giftNoteEnabled && (
+                    <p className="gift-note">{cardText.giftNote}</p>
+                  )}
 
                   {/* One slide per account — its bank, its number and its own QR
                       stay together, so the number a guest copies always belongs
@@ -916,7 +929,7 @@ const generateICS = (event: any, loc?: any) => {
                                 fontSize: "20px",
                                 paddingBottom: "20px"
                             }}>
-                                Calendar
+                                {cardText.calendarTitle}
                             </h2>
 
                             {/* Dynamic event title from the Calendar sidebar. */}
@@ -1025,7 +1038,7 @@ const generateICS = (event: any, loc?: any) => {
                                 fontSize: "20px",
                                 paddingBottom: "20px"
                             }}>
-                                Location
+                                {cardText.locationTitle}
                             </h2>
 
                             <p style={{

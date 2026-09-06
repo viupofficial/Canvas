@@ -25,12 +25,21 @@ import {
   RSVP_DEFAULT_QUESTION,
   RSVP_DEFAULT_PAX_NOTE,
   RSVP_PAX_TOKEN,
+  CARD_TITLE_MAX_LENGTH,
+  GIFT_NOTE_MAX_LENGTH,
+  CONTACT_DEFAULT_TITLE,
+  GIFT_DEFAULT_TITLE,
+  GIFT_DEFAULT_NOTE,
+  LOCATION_DEFAULT_TITLE,
+  CALENDAR_DEFAULT_TITLE,
+  type CardTexts,
   type GiftAccount,
 } from '@/src/store/EventDataContext';
 import LivePreviewPanel from '@/src/components/canvas-editor/LivePreviewPanel';
 import MobileToolbar from '@/src/components/canvas-editor/mobile-toolbar';
 import { buildTemplatePages, getTemplateManifest, listTemplates } from "@/src/config/templateLoader";
 import { downscaleImageFile } from "@/src/lib/imageDownscale";
+import { getElementGraphics } from "@/src/config/elementGraphics";
 import Scrubbable from "@/src/components/canvas-editor/scrubbable";
 import GradientEditor, { FillTypeSelect } from "@/src/components/canvas-editor/GradientEditor";
 import {
@@ -596,6 +605,73 @@ function MusicTab({
   );
 }
 
+/**
+ * One box of host-written card wording — the heading on the Contact / Money
+ * Gift / Location / Calendar card, or the Money Gift note.
+ *
+ * Blank means "use the default", which is shown as the placeholder, so emptying
+ * the box is a safe way back to the original wording. Writes merge-patch into
+ * the `cardTexts` section, so each tab only ever touches its own field.
+ */
+/** The wording fields — every `cardTexts` member except the note's on/off flag,
+ *  which is a toggle rather than a text box. */
+type CardTextKey = Exclude<keyof NonNullable<CardTexts>, 'giftNoteEnabled'>;
+
+function CardTextField({
+  field,
+  label,
+  placeholder,
+  multiline = false,
+  maxLength = CARD_TITLE_MAX_LENGTH,
+}: {
+  field: CardTextKey;
+  // Omitted when the caller draws its own label row (the Money Gift note pairs
+  // its label with a toggle).
+  label?: string;
+  placeholder: string;
+  multiline?: boolean;
+  maxLength?: number;
+}) {
+  const { eventData, updateEventData } = useEventData();
+  // Keep the raw text locally (so a trailing space can be typed mid-sentence)
+  // but store it trimmed — a box holding only spaces must read as blank.
+  const [value, setValue] = useState(eventData.cardTexts?.[field] ?? '');
+
+  const change = (raw: string) => {
+    const next = raw.slice(0, maxLength);
+    setValue(next);
+    updateEventData('cardTexts', { [field]: next.trim() } as any);
+  };
+
+  return (
+    <div>
+      {label && <label className="text-xs text-gray-500">{label}</label>}
+      {multiline ? (
+        <textarea
+          value={value}
+          maxLength={maxLength}
+          rows={4}
+          onChange={(e) => change(e.target.value)}
+          placeholder={placeholder}
+          className="mt-1 w-full px-3 py-2 border rounded-md text-sm resize-none"
+        />
+      ) : (
+        <input
+          type="text"
+          value={value}
+          maxLength={maxLength}
+          onChange={(e) => change(e.target.value)}
+          placeholder={placeholder}
+          className="mt-1 w-full px-3 py-2 border rounded-md text-sm"
+        />
+      )}
+      <p className="mt-1 text-[11px] text-gray-400 leading-snug">
+        Leave blank to use the default wording. Max {maxLength} characters.
+      </p>
+    </div>
+  );
+}
+
 function ContactTab() {
   const { eventData, setSection } = useEventData();
   const [contacts, setLocalContacts] = useState(
@@ -635,6 +711,11 @@ function ContactTab() {
       <div className="text-[#191212] text-[17px] font-bold mb-1">Contact</div>
       <p className="text-[11px] text-[#7D5B5980] mb-4">Please do not use dashes (-) in the phone number.</p>
       <div className="flex flex-col gap-3">
+        <CardTextField
+          field="contactTitle"
+          label="Card Title"
+          placeholder={CONTACT_DEFAULT_TITLE}
+        />
         {contacts.map((c, i) => (
           <div
             key={i}
@@ -803,6 +884,11 @@ function LocationTab({
         )
       )}
       <div className="flex flex-col gap-3">
+        <CardTextField
+          field="locationTitle"
+          label="Card Title"
+          placeholder={LOCATION_DEFAULT_TITLE}
+        />
         <input
           value={address}
           onChange={(e) => handleChange(e.target.value)}
@@ -948,7 +1034,13 @@ function CalendarTab() {
       )}
 
       <div className="flex flex-col gap-3">
-        <label className="text-xs text-gray-600">Title</label>
+        <CardTextField
+          field="calendarTitle"
+          label="Card Title"
+          placeholder={CALENDAR_DEFAULT_TITLE}
+        />
+
+        <label className="text-xs text-gray-600">Event Title</label>
         <input
           type="text"
           value={title}
@@ -1746,6 +1838,9 @@ function MoneyGiftTab({ rules }: { rules: PackageRules }) {
   // untouched when it goes off, and come straight back when it is turned on
   // again.
   const [giftOn, setGiftOn] = useState(current?.enabled !== false);
+  // "Show Note" — the small print under the heading. Opt-in, so it starts OFF
+  // unless a design explicitly saved it ON. See CardTexts.giftNoteEnabled.
+  const [noteOn, setNoteOn] = useState(eventData.cardTexts?.giftNoteEnabled === true);
   // One entry per place guests can send a gift — bank, number, QR and that QR's
   // size travel together, in the order guests swipe through them. Always at
   // least one card on screen, even before anything is filled in.
@@ -1756,6 +1851,14 @@ function MoneyGiftTab({ rules }: { rules: PackageRules }) {
 
   const pushField = (patch: Partial<NonNullable<typeof current>>) => {
     updateEventData('moneyGift', patch as any);
+  };
+
+  const toggleNote = () => {
+    const next = !noteOn;
+    setNoteOn(next);
+    // Merge-patch into its own section — the note text itself is left alone, so
+    // it comes straight back when the toggle goes on again.
+    updateEventData('cardTexts', { giftNoteEnabled: next } as any);
   };
 
   const toggleGift = () => {
@@ -1870,6 +1973,47 @@ function MoneyGiftTab({ rules }: { rules: PackageRules }) {
       ) : null}
 
       <div className="flex flex-col gap-3">
+        <CardTextField
+          field="giftTitle"
+          label="Card Title"
+          placeholder={GIFT_DEFAULT_TITLE}
+        />
+        <div>
+          <div className="flex items-center justify-between">
+            <label className="text-xs text-gray-500">Note</label>
+            <button
+              type="button"
+              role="switch"
+              aria-checked={noteOn}
+              aria-label="Show Note"
+              title={noteOn ? 'Hide the note' : 'Show the note'}
+              onClick={toggleNote}
+              className={`relative inline-flex h-5 w-9 shrink-0 items-center rounded-full transition-colors ${
+                noteOn ? 'bg-[#8C6B6B]' : 'bg-gray-300'
+              }`}
+            >
+              <span
+                className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${
+                  noteOn ? 'translate-x-[18px]' : 'translate-x-[2px]'
+                }`}
+              />
+            </button>
+          </div>
+          {noteOn ? (
+            <CardTextField
+              field="giftNote"
+              placeholder={GIFT_DEFAULT_NOTE}
+              multiline
+              maxLength={GIFT_NOTE_MAX_LENGTH}
+            />
+          ) : (
+            <p className="mt-1 text-[11px] text-gray-400 leading-snug">
+              Turn this on to show a short line under the heading, above the
+              account details.
+            </p>
+          )}
+        </div>
+
         {accounts.length > 1 && (
           <p className="text-[11px] text-gray-500">
             Guests swipe between these in this order — use the arrows to reorder.
@@ -3392,8 +3536,40 @@ export default function Sidebar({
                   const key = cat as 'Graphics' | 'Stickers';
                   const assets = customAssets[key];
                   const noun = cat === 'Graphics' ? 'Graphic' : 'Sticker';
+                  // Ornaments taken from our own templates, grouped by look
+                  // (Classic / Royal). Resolved on every render rather than
+                  // memoised: the remote asset manifest warms up asynchronously,
+                  // so a url frozen on first paint could miss its exact spelling.
+                  const builtIn = cat === 'Graphics' ? getElementGraphics() : [];
                   return (
                     <div className="mt-2">
+                      {builtIn.map((group) => (
+                        <div key={group.name} className="mb-3">
+                          <div className="text-[#7D5B59] text-[12px] font-semibold mb-1.5">{group.name}</div>
+                          <div className="grid grid-cols-3 gap-2">
+                            {group.graphics.map((graphic) => (
+                              <img
+                                key={graphic.id}
+                                src={graphic.url}
+                                alt={graphic.label}
+                                draggable
+                                onClick={() => editorRef?.current?.addImageFromUrl?.(graphic.url)}
+                                onDragStart={(e) => {
+                                  // `center` asks the drop handler to put it in the
+                                  // middle of the page rather than under the cursor,
+                                  // so an ornament lands identically however it is
+                                  // added. Gallery photos send no flag and still
+                                  // land where they are dropped.
+                                  const payload = JSON.stringify({ type: 'image-url', url: graphic.url, center: true });
+                                  try { e.dataTransfer.setData('application/json', payload); e.dataTransfer.effectAllowed = 'copy'; } catch (err) { }
+                                }}
+                                title={`${graphic.label} — click to add to canvas · drag onto the page`}
+                                className="w-full h-20 object-contain rounded border bg-gray-50 p-1 cursor-pointer hover:opacity-80 transition"
+                              />
+                            ))}
+                          </div>
+                        </div>
+                      ))}
                       <button
                         type="button"
                         onClick={() => openElementUpload(key)}
@@ -3408,7 +3584,7 @@ export default function Sidebar({
                       ) : (
                         <>
                           <div className="text-[11px] text-gray-400 text-center mb-2">
-                            Double-click to add to canvas · drag onto the page.
+                            Click to add to canvas · drag onto the page.
                           </div>
                           <div className="grid grid-cols-3 gap-2">
                             {assets.map((src, i) => (
@@ -3417,12 +3593,12 @@ export default function Sidebar({
                                   src={src}
                                   alt={`${noun}-${i}`}
                                   draggable
-                                  onDoubleClick={() => editorRef?.current?.addImageFromUrl?.(src)}
+                                  onClick={() => editorRef?.current?.addImageFromUrl?.(src)}
                                   onDragStart={(e) => {
-                                    const payload = JSON.stringify({ type: 'image-url', url: src });
+                                    const payload = JSON.stringify({ type: 'image-url', url: src, center: true });
                                     try { e.dataTransfer.setData('application/json', payload); e.dataTransfer.effectAllowed = 'copy'; } catch (err) { }
                                   }}
-                                  title="Double-click to add to canvas · drag onto the page"
+                                  title="Click to add to canvas · drag onto the page"
                                   className="w-full h-20 object-contain rounded border bg-gray-50 p-1 cursor-pointer hover:opacity-80 transition"
                                 />
                                 <button

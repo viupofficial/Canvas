@@ -71,6 +71,7 @@ export default function PreviewLocalPage() {
         calendar: payload.calendar ?? null,
         location: payload.location ?? null,
         rsvpConfig: payload.rsvpConfig ?? null,
+        cardTexts: payload.cardTexts ?? null,
         userId: payload.userId ?? null,
         eventId: payload.eventId ?? null,
         packageId: payload.packageId ?? null,
