@@ -346,7 +346,7 @@ function orderElements(elements: TemplateElement[]): TemplateElement[] {
 export function createPageJson(
   page: TemplatePage | TemplateBlock,
   ctx: AssetContext,
-  defaults?: { background?: string; version?: string },
+  defaults?: { background?: string; version?: string; width?: number; height?: number },
 ): FabricPageJson {
   const objects: FabricObject[] = [];
   for (const el of orderElements(page.elements ?? [])) {
@@ -357,6 +357,84 @@ export function createPageJson(
     background: page.background ?? defaults?.background ?? "#ffffff",
     objects,
   };
-  if (page.backgroundImage !== undefined) out.backgroundImage = page.backgroundImage;
+  // An explicit backgroundImage wins — it is already a finished Fabric object.
+  if (page.backgroundImage !== undefined) {
+    out.backgroundImage = page.backgroundImage;
+  } else if (page.backgroundAsset) {
+    const bg = buildBackgroundImage(
+      page.backgroundAsset,
+      ctx,
+      defaults?.width ?? TEMPLATE_ARTBOARD.width,
+      defaults?.height ?? TEMPLATE_ARTBOARD.height,
+    );
+    if (bg) out.backgroundImage = bg;
+  }
+  return out;
+}
+
+/** Artboard the templates in this repo are authored against. Only a fallback:
+ *  createPageJson prefers the owning template's own canvas size. */
+const TEMPLATE_ARTBOARD = { width: 396, height: 704 } as const;
+
+/**
+ * Turn a template's `backgroundAsset` into the exact Fabric backgroundImage
+ * shape CanvasEditor.setBackgroundImage produces, so the Background panel reads
+ * it back as a normal picture background (fit/scale/offset all editable) rather
+ * than as something it does not recognise.
+ *
+ * The geometry mirrors that function deliberately: centre origin at the page
+ * centre, and a base scale from the chosen fit. `bgMeta` is what getBackground
+ * reads to recover the panel-facing settings — the raw transform alone cannot
+ * say which fit produced it.
+ */
+function buildBackgroundImage(
+  bg: NonNullable<TemplatePage["backgroundAsset"]>,
+  ctx: AssetContext,
+  w: number,
+  h: number,
+): FabricObject | null {
+  const src = bg.src
+    ? bg.src
+    : resolveElementSource(ctx, { type: "image", asset: bg.asset } as TemplateImageElement);
+  if (!src) return null;
+
+  const natW = bg.naturalWidth > 0 ? bg.naturalWidth : w;
+  const natH = bg.naturalHeight > 0 ? bg.naturalHeight : h;
+  const fit = bg.fit ?? "cover";
+  let scaleX: number;
+  let scaleY: number;
+  if (fit === "stretch") {
+    scaleX = w / natW;
+    scaleY = h / natH;
+  } else {
+    const s = fit === "contain"
+      ? Math.min(w / natW, h / natH)
+      : Math.max(w / natW, h / natH);
+    scaleX = s;
+    scaleY = s;
+  }
+
+  const opacity = bg.opacity ?? 1;
+  const out: FabricObject = { type: "image" };
+  put(out, "src", src);
+  put(out, "crossOrigin", crossOriginFor(src));
+  put(out, "originX", "center");
+  put(out, "originY", "center");
+  put(out, "left", w / 2);
+  put(out, "top", h / 2);
+  put(out, "scaleX", scaleX);
+  put(out, "scaleY", scaleY);
+  put(out, "opacity", opacity);
+  put(out, "bgMeta", {
+    fit,
+    tile: false,
+    scaleX: 1,
+    scaleY: 1,
+    offsetX: 0,
+    offsetY: 0,
+    opacity,
+    flipX: false,
+    flipY: false,
+  });
   return out;
 }

@@ -861,6 +861,7 @@ const CanvasEditor = forwardRef<
       title?: string;
       question?: string;
       paxNote?: string;
+      paxNoteEnabled?: boolean;
       // Solid CSS color or gradient descriptor (src/lib/gradient.ts).
       navColor: string | GradientDescriptor;
       navOpacity: number;

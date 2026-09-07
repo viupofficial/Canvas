@@ -2,7 +2,7 @@
 
 'use client';
 
-import { Upload, LogIn, Link2, FileText, Check, Loader2, Gift, Plus, Trash2, AlertTriangle } from 'lucide-react';
+import { Upload, LogIn, Link2, FileText, Check, Loader2, Gift, Plus, Trash2, AlertTriangle, X } from 'lucide-react';
 import { RefObject, useState, useRef, useEffect } from "react";
 import { useRouter, usePathname } from "next/navigation"; // ✅ ADD THIS
 import { EditorHandle } from "@/src/components/CanvasEditor";
@@ -15,6 +15,20 @@ import {
 import { publishAndSyncCanvas } from "@/src/lib/publishEvent";
 import { eventSlug } from "@/src/lib/slug";
 import PdfExportModal from "@/src/components/canvas-editor/PdfExportModal";
+
+// The phone hamburger opens the SAME menu as vi-up.com's own mobile nav, so a
+// customer who steps out of the canvas lands exactly where that menu would have
+// taken them. Mirrors the <ul> in the PHP header (nav#navMenu.mobile-nav):
+// same items, same order, same destinations — the logged-in (_login) variants,
+// because the canvas is only ever reached from a signed-in session. "Packages"
+// is deliberately absent: it is commented out / display:none over there too, so
+// adding it here would create a link the main site does not offer.
+const MAIN_NAV_LINKS: { label: string; href: string }[] = [
+  { label: "Home", href: "https://vi-up.com/index_login" },
+  { label: "Digital Cards", href: "https://vi-up.com/Digital-Cards-login" },
+  { label: "FAQ", href: "https://vi-up.com/FAQ_login" },
+  { label: "Contact Us", href: "https://vi-up.com/contact_login" },
+];
 
 /**
  * EditorHeader component
@@ -159,6 +173,14 @@ export default function EditorHeader(props: {
   // hosted /e/{slug} page; "Local" previews in-place without uploading.
   const [previewOpen, setPreviewOpen] = useState(false);
   const previewRef = useRef<HTMLDivElement>(null);
+  // The phone's preview trigger and its dropdown live in two OTHER places in
+  // this header (the Mobile Right Section, and the end of <header>), so neither
+  // is inside previewRef. They need their own refs: without them the outside-
+  // click listener below treats a tap on the mobile menu as "outside", closes
+  // the menu on mousedown, and the item unmounts before its click can fire —
+  // which reads to the user as the menu doing nothing at all.
+  const previewMobileBtnRef = useRef<HTMLButtonElement>(null);
+  const previewMobileMenuRef = useRef<HTMLElement>(null);
   // "live" while the publish + sync is in flight — same duplicate-click guard as
   // Share Link, since Live Preview now runs the identical publish flow.
   const [previewStatus, setPreviewStatus] = useState<"idle" | "live">("idle");
@@ -168,6 +190,24 @@ export default function EditorHeader(props: {
   // arms itself first and only deletes on the second tap.
   const [moreOpen, setMoreOpen] = useState(false);
   const moreRef = useRef<HTMLDivElement>(null);
+
+  // ── PHONE HAMBURGER (main-site nav) ────────────────────────────────────────
+  // Closed by its own backdrop and X rather than the shared mousedown listener
+  // below: that listener keys off refs and would fight the panel's links.
+  const [navOpen, setNavOpen] = useState(false);
+  useEffect(() => {
+    if (!navOpen) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "Escape") return;
+      // The canvas claims Escape while a draw tool is armed or a path is in
+      // point editing; ownsEscapeKey() exists so panels don't close on the same
+      // keypress the canvas is already handling.
+      if (props.editorRef?.current?.ownsEscapeKey?.()) return;
+      setNavOpen(false);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [navOpen]);
   const [deleteArmed, setDeleteArmed] = useState(false);
 
   // Close dropdowns when clicking outside
@@ -179,7 +219,14 @@ export default function EditorHeader(props: {
       if (shareRef.current && !shareRef.current.contains(e.target as Node)) {
         setShareOpen(false);
       }
-      if (previewRef.current && !previewRef.current.contains(e.target as Node)) {
+      // Preview lives in three nodes (desktop wrapper + mobile button + mobile
+      // menu); only close when the tap is outside every one of them.
+      const target = e.target as Node;
+      const inPreview =
+        !!previewRef.current?.contains(target) ||
+        !!previewMobileBtnRef.current?.contains(target) ||
+        !!previewMobileMenuRef.current?.contains(target);
+      if (!inPreview) {
         setPreviewOpen(false);
       }
       if (moreRef.current && !moreRef.current.contains(e.target as Node)) {
@@ -438,8 +485,14 @@ export default function EditorHeader(props: {
           </a>
         )}
 
-        {/* Hamburger Menu - Mobile Only */}
-        <button className="pc:hidden p-1.5 hover:bg-[#D4C9C4] rounded-lg transition-colors">
+        {/* Hamburger Menu - Mobile Only. Opens the vi-up.com main nav (below). */}
+        <button
+          onClick={() => setNavOpen(true)}
+          aria-label="Open menu"
+          aria-haspopup="menu"
+          aria-expanded={navOpen}
+          aria-controls="canvas-main-nav"
+          className="pc:hidden p-1.5 hover:bg-[#D4C9C4] rounded-lg transition-colors">
           <svg className="w-5 h-5 text-[#7D5B59]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
           </svg>
@@ -809,7 +862,10 @@ export default function EditorHeader(props: {
       {/* Mobile Right Section */}
       <div className="flex pc:hidden items-center justify-end gap-0.5">
         <button
+          ref={previewMobileBtnRef}
           onClick={() => setPreviewOpen((o) => !o)}
+          aria-haspopup="menu"
+          aria-expanded={previewOpen}
           className="p-1.5 hover:bg-[#D4C9C4] rounded-lg transition-colors"
           title="Preview"
           data-tutorial="preview"
@@ -896,7 +952,11 @@ export default function EditorHeader(props: {
 
       {/* Mobile Preview Dropdown */}
       {previewOpen && (
-        <nav className="pc:hidden absolute right-2 top-[calc(100%+8px)] min-w-[200px] bg-white rounded-[15px] shadow-lg p-2 z-[1000]">
+        <nav
+          ref={previewMobileMenuRef}
+          role="menu"
+          className="pc:hidden absolute right-2 top-[calc(100%+8px)] min-w-[200px] bg-white rounded-[15px] shadow-lg p-2 z-[1000]"
+        >
           <button
             type="button"
             role="menuitem"
@@ -922,6 +982,50 @@ export default function EditorHeader(props: {
           </button>
         </nav>
       )}
+
+      {/* Phone hamburger menu — the vi-up.com main nav, rebuilt here so leaving
+          the canvas lands on the same pages the main site's menu offers. Kept
+          mounted (not conditionally rendered) so it can slide rather than pop. */}
+      <div
+        className={`pc:hidden fixed inset-0 z-[1100] ${navOpen ? "" : "pointer-events-none"}`}
+        aria-hidden={!navOpen}
+      >
+        <div
+          className={`absolute inset-0 bg-black/40 transition-opacity duration-200 ${
+            navOpen ? "opacity-100" : "opacity-0"
+          }`}
+          onClick={() => setNavOpen(false)}
+        />
+        <nav
+          id="canvas-main-nav"
+          aria-label="Vi-Up menu"
+          className={`absolute left-0 top-0 h-full w-[72%] max-w-[300px] bg-white shadow-[4px_0_24px_rgba(0,0,0,0.18)] transition-transform duration-200 ease-out ${
+            navOpen ? "translate-x-0" : "-translate-x-full"
+          }`}
+        >
+          <button
+            type="button"
+            onClick={() => setNavOpen(false)}
+            aria-label="Close menu"
+            className="p-4 text-[#7D5B59] hover:bg-[#f7f2f1] rounded-lg m-1"
+          >
+            <X className="w-6 h-6" />
+          </button>
+          <ul className="list-none m-0 p-0">
+            {MAIN_NAV_LINKS.map((link) => (
+              <li key={link.href} className="border-b border-[#d9bfbf]">
+                {/* Full navigation to a different origin — never router.push. */}
+                <a
+                  href={link.href}
+                  className="block px-6 py-4 text-[16px] text-[#7D5B59] font-semibold font-[Montserrat] no-underline hover:bg-[#f7f2f1]"
+                >
+                  {link.label}
+                </a>
+              </li>
+            ))}
+          </ul>
+        </nav>
+      </div>
 
       {/* PDF export panel — preview + paper/fit/margin/page options. */}
       {pdfOpen && (

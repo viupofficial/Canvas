@@ -274,7 +274,33 @@ export type TemplatePage = {
   background?: string;
   /** Passed straight to Fabric's `backgroundImage` (with its bgMeta, if any). */
   backgroundImage?: unknown;
+  /** Page background PICTURE, authored the way an `image` element is: a
+   *  template-relative asset resolved through the same AssetContext. The
+   *  factory turns it into the Fabric backgroundImage the Background panel
+   *  reads back, so a background a template ships behaves exactly like one the
+   *  host applied by hand — it can be adjusted, swapped or removed there, and
+   *  "Apply to all pages" spreads it. Ignored when `backgroundImage` is set. */
+  backgroundAsset?: TemplateBackgroundAsset;
   elements: TemplateElement[];
+};
+
+/** A page background picture declared by a template. */
+export type TemplateBackgroundAsset = {
+  /** Same asset string an `image` element takes (resolved against the source). */
+  asset?: string;
+  /** A literal url used verbatim — a data: URI, or an absolute address. Wins
+   *  over `asset`. This is how a template ships a background it DRAWS (an inline
+   *  SVG) rather than one it loads from the host. */
+  src?: string;
+  /** Natural pixel size of the file. Required because the page JSON is written
+   *  before any image is loaded, so the cover/contain scale has to be computed
+   *  statically rather than read off the decoded bitmap. */
+  naturalWidth: number;
+  naturalHeight: number;
+  /** Defaults to "cover" — the Background panel's own default. */
+  fit?: "cover" | "contain" | "stretch";
+  /** 0..1, defaults to 1. */
+  opacity?: number;
 };
 
 /**

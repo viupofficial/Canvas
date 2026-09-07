@@ -5,8 +5,8 @@
 //
 // PaymentUpgradeModal drives the package-upgrade flow from the canvas:
 //   1. User picks a higher package (Basic → Standard/Premium, Standard → Premium).
-//   2. User picks a payment method (decorative — Stripe Checkout presents the
-//      actual payment options on its own page).
+//   2. User confirms the payment method (card only, and decorative — Stripe
+//      Checkout presents the actual payment options on its own page).
 //   3. On "Checkout" we POST a hidden HTML form to create_upgrade_checkout.php
 //      (the same endpoint the MyEvent.php upgrade modal uses), which creates a
 //      Stripe Checkout Session with metadata flow=upgrade. The Stripe webhook
@@ -55,12 +55,19 @@ const PACKAGES: PackageOption[] = [
   { id: 3, label: "Premium", price: 130, blurb: "Everything, unlimited." },
 ];
 
-type PaymentMethod = "card" | "fpx" | "ewallet";
+// Card only. FPX and E-Wallet were removed from this list deliberately.
+//
+// WARNING: this list is COSMETIC — `method` below is never submitted (see
+// handleCheckout: it posts event_id / target_package_id / source / return_to and
+// nothing else). Stripe decides what a customer can actually pay with from the
+// Checkout Session, so hiding a row here does NOT switch that method off. To
+// genuinely restrict upgrades to cards, set payment_method_types to ["card"]
+// where create_upgrade_checkout.php builds the session. Until that happens this
+// list only sets the expectation the Stripe page then has to honour.
+type PaymentMethod = "card";
 
 const PAYMENT_METHODS: { id: PaymentMethod; label: string; hint: string }[] = [
   { id: "card", label: "Credit / Debit Card", hint: "Visa, Mastercard" },
-  { id: "fpx", label: "FPX Online Banking", hint: "Malaysian banks" },
-  { id: "ewallet", label: "E-Wallet", hint: "Touch 'n Go, GrabPay" },
 ];
 
 // Steps shown in the right-side decorative progress rail.

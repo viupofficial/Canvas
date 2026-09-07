@@ -267,13 +267,18 @@ export const RSVP_DEFAULT_PAX_NOTE =
  *  back to the original wording, so designs saved before the texts became
  *  editable read exactly as they were published. */
 export function rsvpTexts(
-  rsvp?: { title?: string; question?: string; paxNote?: string } | null,
+  rsvp?: { title?: string; question?: string; paxNote?: string; paxNoteEnabled?: boolean } | null,
   maxPax: number = 3,
-): { title: string; question: string; paxNote: string } {
+): { title: string; question: string; paxNote: string; paxNoteEnabled: boolean } {
   return {
     title: rsvp?.title?.trim() || RSVP_DEFAULT_TITLE,
     question: rsvp?.question?.trim() || RSVP_DEFAULT_QUESTION,
     paxNote: (rsvp?.paxNote?.trim() || RSVP_DEFAULT_PAX_NOTE).split(RSVP_PAX_TOKEN).join(String(maxPax)),
+    // Opt-OUT, and so the exact opposite of every `*NoteEnabled` flag on
+    // CardTexts: the pax note has rendered on every invitation ever published,
+    // so `undefined` MUST keep meaning "shown" or already-live designs would
+    // silently lose it on their next publish. Read it as `!== false`.
+    paxNoteEnabled: rsvp?.paxNoteEnabled !== false,
   };
 }
 
@@ -410,6 +415,10 @@ export type RSVPConfig = {
   title?: string;
   question?: string;
   paxNote?: string;
+  /** False ⇒ hide the note (and its ⓘ) beside the pax dropdown entirely,
+   *  whatever `paxNote` holds, so the wording survives being switched off and
+   *  comes straight back. Absent ⇒ shown; see rsvpTexts(). */
+  paxNoteEnabled?: boolean;
   // Nav bar / circle colors accept a solid CSS color string or a gradient
   // descriptor (see src/lib/gradient.ts); consumers render via cssBackground().
   navColor?: string | GradientDescriptor;

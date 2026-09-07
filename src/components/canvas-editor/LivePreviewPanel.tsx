@@ -265,6 +265,7 @@ function RSVPCard({
     title?: string;
     question?: string;
     paxNote?: string;
+    paxNoteEnabled?: boolean;
     navColor?: string | GradientDescriptor;
     navOpacity?: number;
     textColor?: string;
@@ -357,13 +358,16 @@ function RSVPCard({
       <div className="text-[10px]" style={{ color: textColor, opacity: textOpacity }}>
         Max guests: <span className="font-semibold">{maxGuest}</span>
       </div>
-      {/* The note an accepting guest sees beside the pax dropdown. */}
-      <p
-        className="text-[10px] leading-snug mt-1"
-        style={{ color: textColor, opacity: textOpacity }}
-      >
-        {rsvpText.paxNote}
-      </p>
+      {/* The note an accepting guest sees beside the pax dropdown — hidden when
+          the host switched it off, so the preview matches the invitation. */}
+      {rsvpText.paxNoteEnabled && (
+        <p
+          className="text-[10px] leading-snug mt-1"
+          style={{ color: textColor, opacity: textOpacity }}
+        >
+          {rsvpText.paxNote}
+        </p>
+      )}
     </CardFrame>
   );
 }

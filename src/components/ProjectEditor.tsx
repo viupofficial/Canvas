@@ -228,6 +228,9 @@ function ProjectEditorInner({
 
   const { eventData } = useEventData();
 
+  // Is this canvas bound to a single DB event/design?
+  const isEventMode = !!mode && mode !== "designer" && designId != null && eventId != null;
+
   // ── Package gating ─────────────────────────────────────────────────────────
   // All package feature rules (RSVP/Money-Gift visibility, gallery/location/
   // music limits) come from the shared helper so every surface stays consistent.
@@ -244,6 +247,12 @@ function ProjectEditorInner({
   // events); Canvas never writes events.package_id itself. Opening the modal is
   // gated so Premium events (nothing left to buy) just get a toast instead.
   const [upgradeOpen, setUpgradeOpen] = useState(false);
+  // Whether an upgrade is actually possible here. This is the SAME condition the
+  // modal mounts on further down, and every Upgrade affordance is wired off it —
+  // when the two drifted apart, a click on a non-event canvas flipped
+  // `upgradeOpen` with no modal in the tree and the button looked dead.
+  const canUpgradePackage =
+    isEventMode && eventId != null && canManageEvent && !rules.isPremiumPackage;
   const openUpgrade = useCallback(() => {
     // Billing belongs to the event owner. A collaborator can edit the canvas
     // but must not be able to buy a package against someone else's event.
@@ -255,8 +264,16 @@ function ProjectEditorInner({
       showPackageToast("You already have Premium.");
       return;
     }
+    // No event behind this canvas (plain /editor, legacy project-id): there is
+    // no event_id to send to create_upgrade_checkout.php and the modal is not
+    // mounted, so say so rather than setting state that renders nothing. Teaser
+    // is excluded — its button is a signup CTA, see the TODO by the modal below.
+    if (!teaser && !(isEventMode && eventId != null)) {
+      showPackageToast("Open this design from My Event to upgrade its package.", "warn");
+      return;
+    }
     setUpgradeOpen(true);
-  }, [rules.isPremiumPackage, canManageEvent]);
+  }, [rules.isPremiumPackage, canManageEvent, isEventMode, eventId, teaser]);
 
   // Handle the return from Stripe (create_upgrade_checkout.php). The actual
   // package update happens server-side in the Stripe webhook — we never trust
@@ -355,9 +372,6 @@ function ProjectEditorInner({
   const [featureUsage, setFeatureUsage] = useState<FeatureUsage>(() =>
     readFeatureUsage(initialDesignJson),
   );
-
-  // Is this canvas bound to a single DB event/design?
-  const isEventMode = !!mode && mode !== "designer" && designId != null && eventId != null;
 
   const initialEventName =
     (isEventMode
@@ -960,9 +974,12 @@ function ProjectEditorInner({
           }}
           // Hidden entirely by not wiring a handler (EditorHeader only renders
           // the button when one is present) for Premium, the highest tier with
-          // no upgrade path, and for any actor who cannot manage the event —
-          // billing belongs to the owner.
-          onUpgrade={rules.isPremiumPackage || !canManageEvent ? undefined : openUpgrade}
+          // no upgrade path, for any actor who cannot manage the event (billing
+          // belongs to the owner), and for canvases with no event behind them —
+          // there is nothing to upgrade and the modal cannot mount, so showing
+          // the button there just gives the user a button that does nothing.
+          // Teaser keeps its button as a signup CTA (see the TODO by the modal).
+          onUpgrade={teaser || canUpgradePackage ? openUpgrade : undefined}
           onPreview={async () => {
             // Music still transferring? Publishing now would bake a design with
             // no track into the blob /e/[slug] reads — wait for it to finish.
@@ -1109,7 +1126,7 @@ function ProjectEditorInner({
 
       {/* Stripe upgrade — form-POSTs to create_upgrade_checkout.php, never writes
           package_id from here. Only meaningful for event-bound canvases. */}
-      {isEventMode && eventId != null && canManageEvent && (
+      {canUpgradePackage && eventId != null && (
         <PaymentUpgradeModal
           isOpen={upgradeOpen}
           onClose={() => setUpgradeOpen(false)}

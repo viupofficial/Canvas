@@ -205,6 +205,9 @@ export function buildTemplatePages(id: string | null | undefined): FabricPageJso
   const defaults = {
     background: template.canvas?.background,
     version: template.canvas?.version,
+    // Needed by createPageJson to scale a `backgroundAsset` to the page.
+    width: template.canvas?.width,
+    height: template.canvas?.height,
   };
   return sortPages(resolved).map((page) => createPageJson(page, template, defaults));
 }

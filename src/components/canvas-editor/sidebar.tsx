@@ -1278,6 +1278,9 @@ function RSVPTab() {
   const [rsvpTitle, setRsvpTitle] = useState(current?.title ?? '');
   const [rsvpQuestion, setRsvpQuestion] = useState(current?.question ?? '');
   const [rsvpPaxNote, setRsvpPaxNote] = useState(current?.paxNote ?? '');
+  // Opt-OUT (see rsvpTexts): absent means the note is showing, which is what
+  // every design saved before this switch existed expects.
+  const [rsvpPaxNoteOn, setRsvpPaxNoteOn] = useState(current?.paxNoteEnabled !== false);
   // navColor / circleColor accept a solid hex string OR a gradient descriptor
   // (rendered via cssBackground in the footer). textColor stays solid-only —
   // it feeds CSS `color` and currentColor icon masks, which can't take a gradient.
@@ -1449,6 +1452,7 @@ function RSVPTab() {
       title: rsvpTitle.trim(),
       question: rsvpQuestion.trim(),
       paxNote: rsvpPaxNote.trim(),
+      paxNoteEnabled: rsvpPaxNoteOn,
       navColor, navOpacity, textColor, textOpacity, circleColor, circleOpacity,
     });
   };
@@ -1673,15 +1677,47 @@ function RSVPTab() {
             />
           </div>
           <div>
-            <label className="text-xs text-gray-500">Pax Note</label>
-            <textarea
-              value={rsvpPaxNote}
-              maxLength={RSVP_TEXT_MAX_LENGTH}
-              rows={2}
-              onChange={(e) => changeRsvpText('paxNote', e.target.value, setRsvpPaxNote)}
-              placeholder={RSVP_DEFAULT_PAX_NOTE}
-              className="mt-1 w-full px-3 py-2 border rounded-md text-sm resize-none"
-            />
+            <div className="flex items-center justify-between">
+              <label className="text-xs text-gray-500">Pax Note</label>
+              {/* Switching this off hides the ⓘ line under the Number of Pax
+                  dropdown on the invitation. The wording is left untouched, so
+                  it returns exactly as written when switched back on. */}
+              <button
+                type="button"
+                role="switch"
+                aria-checked={rsvpPaxNoteOn}
+                aria-label="Show Pax Note"
+                title={rsvpPaxNoteOn ? 'Hide the pax note' : 'Show the pax note'}
+                onClick={() => {
+                  const next = !rsvpPaxNoteOn;
+                  setRsvpPaxNoteOn(next);
+                  pushField('paxNoteEnabled', next);
+                }}
+                className={`relative inline-flex h-5 w-9 shrink-0 items-center rounded-full transition-colors ${
+                  rsvpPaxNoteOn ? 'bg-[#8C6B6B]' : 'bg-gray-300'
+                }`}
+              >
+                <span
+                  className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${
+                    rsvpPaxNoteOn ? 'translate-x-[18px]' : 'translate-x-[2px]'
+                  }`}
+                />
+              </button>
+            </div>
+            {rsvpPaxNoteOn ? (
+              <textarea
+                value={rsvpPaxNote}
+                maxLength={RSVP_TEXT_MAX_LENGTH}
+                rows={2}
+                onChange={(e) => changeRsvpText('paxNote', e.target.value, setRsvpPaxNote)}
+                placeholder={RSVP_DEFAULT_PAX_NOTE}
+                className="mt-1 w-full px-3 py-2 border rounded-md text-sm resize-none"
+              />
+            ) : (
+              <p className="mt-1 text-[11px] text-gray-400 leading-snug">
+                Guests see the Number of Pax dropdown with no note under it.
+              </p>
+            )}
           </div>
           <p className="text-[11px] text-gray-400 leading-snug">
             Leave blank to use the default wording. Type{' '}

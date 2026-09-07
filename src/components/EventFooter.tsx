@@ -82,6 +82,7 @@ export default function EventFooter({
     title?: string;
     question?: string;
     paxNote?: string;
+    paxNoteEnabled?: boolean;
     // Solid CSS color or gradient descriptor (src/lib/gradient.ts).
     navColor?: string | GradientDescriptor;
     navOpacity?: number;
@@ -732,10 +733,14 @@ const generateICS = (event: any, loc?: any) => {
                                         <label>Number of Pax</label>
                                     </div>
 
-                                    <p className="info-line">
-                                        <span className="material-symbols-outlined">info</span>
-                                        {rsvpText.paxNote}
-                                    </p>
+                                    {/* Host can switch the note off entirely (RSVP tab);
+                                        rsvpText.paxNoteEnabled defaults to true. */}
+                                    {rsvpText.paxNoteEnabled && (
+                                        <p className="info-line">
+                                            <span className="material-symbols-outlined">info</span>
+                                            {rsvpText.paxNote}
+                                        </p>
+                                    )}
                                 </>
                             )}
 

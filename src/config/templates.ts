@@ -70,6 +70,7 @@
 // ═════════════════════════════════════════════════════════════════════════════
 
 import type {
+  TemplateBackgroundAsset,
   TemplateBlock,
   TemplateDefinition,
   TemplateElement,
@@ -466,13 +467,23 @@ const cvFullBleed = (
   }) as TemplateElement;
 
 /**
+ * The same velvet, but as the page BACKGROUND rather than a locked object.
+ *
  * The velvet sheet every content page sits on: the template's own full-page
- * texture, dropped in full-bleed and locked like the other templates' sheets.
- * Also what the page `background` colour underneath it is set to, so a slow or
- * failed load shows crimson rather than a flash of bare cream.
+ * 1080x1920 texture. It used to be a locked full-bleed OBJECT; it is the page
+ * background now so it behaves like a background the host applied by hand: the Background panel reads it back with
+ * its fit intact, it can be adjusted, swapped or removed there, and "Apply to
+ * all pages" spreads it. The gold hairline stays vector on top (cvBorderFrame),
+ * which keeps it crisp at every zoom and in PDF export.
+ *
+ * `background: CV.crimson` underneath is still what shows during a slow load.
  */
-const cvVelvetSheet = (): TemplateElement =>
-  cvFullBleed("velvet", "Crimson Velvet.png", { selectable: false, locked: true });
+const cvVelvetBackground = (): TemplateBackgroundAsset => ({
+  asset: "Crimson Velvet.png",
+  // 1080x1920 — the frame every remote template is authored on.
+  naturalWidth: 1080,
+  naturalHeight: 1920,
+});
 
 /**
  * The double gold hairline over the velvet, drawn as two nested rects rather
@@ -874,6 +885,37 @@ const plFullBleed = (
  * the last 60px of the artboard, so a frame drawn to the true edge would have
  * its bottom rule hidden behind it.
  */
+/**
+ * The same double hairline, composited with the page ground into ONE background
+ * picture — this design has no sheet of its own, so the ground colour IS its
+ * sheet and the two together are the whole look.
+ *
+ * Drawn as an inline SVG data URI rather than a raster, so it stays vector-crisp
+ * at every zoom and in PDF export exactly as the rects did. Unlike the
+ * template's own Bordeline.svg (viewBox-only, which is why plBorderFrame exists
+ * at all) this one declares width AND height, so it scales properly instead of
+ * rendering as a stretched top-left crop.
+ *
+ * The geometry is plBorderFrame()'s, converted from centre-origin to SVG's
+ * top-left: outer 356x596 centred at (198,314) => x20 y16; inner 344x584 => x26
+ * y22. Keep the two in step if either moves.
+ */
+const plFrameBackground = (): TemplateBackgroundAsset => {
+  const svg =
+    `<svg xmlns="http://www.w3.org/2000/svg" width="396" height="704" viewBox="0 0 396 704">` +
+    `<rect width="396" height="704" fill="${PL_.ground}"/>` +
+    `<rect x="20" y="16" width="356" height="596" fill="none" stroke="${PL_.ink}" stroke-width="1"/>` +
+    `<rect x="26" y="22" width="344" height="584" fill="none" stroke="${PL_.ink}" stroke-width="1"/>` +
+    `</svg>`;
+  return {
+    src: `data:image/svg+xml,${encodeURIComponent(svg)}`,
+    naturalWidth: 396,
+    naturalHeight: 704,
+    // Authored at artboard size, so stretch is an exact 1:1 placement.
+    fit: "stretch",
+  };
+};
+
 const plBorderFrame = (): TemplateElement[] =>
   [
     { outer: true, width: 356, height: 596 },
@@ -2550,8 +2592,8 @@ export const templates: Record<string, TemplateDefinition> = {
         id: "invitation",
         name: "Invitation",
         background: CV.crimson,
+        backgroundAsset: cvVelvetBackground(),
         elements: [
-          cvVelvetSheet(),
           ...cvBorderFrame(),
           {
             type: "text",
@@ -2633,8 +2675,8 @@ export const templates: Record<string, TemplateDefinition> = {
         id: "parents",
         name: "Hosts",
         background: CV.crimson,
+        backgroundAsset: cvVelvetBackground(),
         elements: [
-          cvVelvetSheet(),
           ...cvBorderFrame(),
           {
             type: "image",
@@ -2723,8 +2765,8 @@ export const templates: Record<string, TemplateDefinition> = {
         id: "eventDetails",
         name: "Event Details",
         background: CV.crimson,
+        backgroundAsset: cvVelvetBackground(),
         elements: [
-          cvVelvetSheet(),
           ...cvBorderFrame(),
           cvHeading("DATE", 150),
           cvBody("26 June 2026", 172),
@@ -2746,8 +2788,8 @@ export const templates: Record<string, TemplateDefinition> = {
         id: "itinerary",
         name: "Itinerary",
         background: CV.crimson,
+        backgroundAsset: cvVelvetBackground(),
         elements: [
-          cvVelvetSheet(),
           ...cvBorderFrame(),
           {
             type: "text",
@@ -2778,8 +2820,8 @@ export const templates: Record<string, TemplateDefinition> = {
         id: "countdown",
         name: "Counting Days",
         background: CV.crimson,
+        backgroundAsset: cvVelvetBackground(),
         elements: [
-          cvVelvetSheet(),
           ...cvBorderFrame(),
           {
             type: "text",
@@ -2870,8 +2912,8 @@ export const templates: Record<string, TemplateDefinition> = {
         id: "gallery",
         name: "Gallery",
         background: CV.crimson,
+        backgroundAsset: cvVelvetBackground(),
         elements: [
-          cvVelvetSheet(),
           ...cvBorderFrame(),
           {
             type: "text",
@@ -2923,11 +2965,11 @@ export const templates: Record<string, TemplateDefinition> = {
         id: "guestbook",
         name: "Guestbook",
         background: CV.crimson,
+        // The velvet, like every other page. The template also ships a cream
+        // PAPER.png wash for this page, but on a crimson design it reads as a
+        // sheet of paper dropped over the invitation, so it is left out.
+        backgroundAsset: cvVelvetBackground(),
         elements: [
-          // The velvet, like every other page. The template also ships a cream
-          // PAPER.png wash for this page, but on a crimson design it reads as a
-          // sheet of paper dropped over the invitation, so it is left out.
-          cvVelvetSheet(),
           ...cvBorderFrame(),
           {
             type: "text",
@@ -2981,8 +3023,8 @@ export const templates: Record<string, TemplateDefinition> = {
         id: "prayer",
         name: "Prayer",
         background: CV.crimson,
+        backgroundAsset: cvVelvetBackground(),
         elements: [
-          cvVelvetSheet(),
           ...cvBorderFrame(),
           {
             type: "text",
@@ -4657,8 +4699,8 @@ export const templates: Record<string, TemplateDefinition> = {
         id: "invitation",
         name: "Invitation",
         background: PL_.ground,
+        backgroundAsset: plFrameBackground(),
         elements: [
-          ...plBorderFrame(),
           {
             type: "image",
             key: "monogram",
@@ -4745,8 +4787,8 @@ export const templates: Record<string, TemplateDefinition> = {
         id: "parents",
         name: "Hosts",
         background: PL_.ground,
+        backgroundAsset: plFrameBackground(),
         elements: [
-          ...plBorderFrame(),
           {
             type: "text",
             key: "greeting",
@@ -4869,8 +4911,8 @@ export const templates: Record<string, TemplateDefinition> = {
         id: "eventDetails",
         name: "Event Details",
         background: PL_.ground,
+        backgroundAsset: plFrameBackground(),
         elements: [
-          ...plBorderFrame(),
           plHeading("Date", 110),
           plBody("26 April 2026", 138),
           plHeading("Time", 200),
@@ -4893,8 +4935,8 @@ export const templates: Record<string, TemplateDefinition> = {
         id: "itinerary",
         name: "Itinerary",
         background: PL_.ground,
+        backgroundAsset: plFrameBackground(),
         elements: [
-          ...plBorderFrame(),
           {
             type: "text",
             key: "title",
@@ -4940,8 +4982,8 @@ export const templates: Record<string, TemplateDefinition> = {
         id: "countdown",
         name: "Counting Days",
         background: PL_.ground,
+        backgroundAsset: plFrameBackground(),
         elements: [
-          ...plBorderFrame(),
           {
             type: "text",
             key: "title",
@@ -5025,8 +5067,8 @@ export const templates: Record<string, TemplateDefinition> = {
         id: "gallery",
         name: "Gallery",
         background: PL_.ground,
+        backgroundAsset: plFrameBackground(),
         elements: [
-          ...plBorderFrame(),
           {
             type: "text",
             key: "title",
@@ -5081,8 +5123,8 @@ export const templates: Record<string, TemplateDefinition> = {
         id: "guestbook",
         name: "Guestbook",
         background: PL_.ground,
+        backgroundAsset: plFrameBackground(),
         elements: [
-          ...plBorderFrame(),
           {
             type: "text",
             key: "title",
@@ -5135,8 +5177,8 @@ export const templates: Record<string, TemplateDefinition> = {
         id: "prayer",
         name: "Prayer",
         background: PL_.ground,
+        backgroundAsset: plFrameBackground(),
         elements: [
-          ...plBorderFrame(),
           {
             type: "text",
             key: "title",
