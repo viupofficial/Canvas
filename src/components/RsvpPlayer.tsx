@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { collectFontFamilies, preloadFonts } from "@/src/lib/fonts";
+import { collectFontFamilies, preloadFonts, remeasureTextForFonts } from "@/src/lib/fonts";
 import { createGifOverlay } from "@/src/lib/gifOverlay";
 import { loadPageResilient } from "@/src/lib/templateAssetLoading";
 import MusicPlayer from "@/src/components/MusicPlayer";
@@ -991,30 +991,14 @@ export default function RsvpPlayer({
             startCountdown(rc);
             const relayoutGuestbook = startGuestbook(rc);
             rc.requestRenderAll();
-            // Webfonts used by this page may not be ready at first paint; load
-            // them, then repaint so text renders with the correct family. A
-            // plain repaint isn't enough: fabric caches per-character widths
-            // measured with whatever font was active at first paint, so the
-            // cache must be cleared and every text object re-measured or line
-            // wrapping stays computed against the fallback serif.
+            // Webfonts used by this page are rarely ready at first paint, so
+            // this text has just been measured against the fallback serif. A
+            // plain repaint won't undo that — see remeasureTextForFonts.
             const families = collectFontFamilies(pageData);
             if (families.length) {
-              const refreshText = (obj: any) => {
-                const t = String(obj?.type ?? "").toLowerCase();
-                if (t === "textbox" || t === "text" || t === "i-text") {
-                  obj.initDimensions?.();
-                  obj.setCoords?.();
-                }
-                (obj?._objects ?? []).forEach(refreshText);
-              };
               const repaintWithFonts = () => {
                 if (cancelled) return;
-                for (const f of families) {
-                  // v6/7 exposes cache.clearFontCache; v5 used util.clearFabricFontCache.
-                  try { fabric.cache?.clearFontCache?.(f); } catch {}
-                  try { fabric.util?.clearFabricFontCache?.(f); } catch {}
-                }
-                rc.forEachObject(refreshText);
+                remeasureTextForFonts(fabric, rc, families);
                 // The guestbook's spacing was computed against the fallback
                 // serif; now that the real faces are measured, re-flow it so the
                 // message still clears the title and the ← → buttons.

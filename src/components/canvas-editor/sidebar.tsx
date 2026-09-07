@@ -26,12 +26,15 @@ import {
   RSVP_DEFAULT_PAX_NOTE,
   RSVP_PAX_TOKEN,
   CARD_TITLE_MAX_LENGTH,
-  GIFT_NOTE_MAX_LENGTH,
+  CARD_NOTE_MAX_LENGTH,
   CONTACT_DEFAULT_TITLE,
+  CONTACT_DEFAULT_NOTE,
   GIFT_DEFAULT_TITLE,
   GIFT_DEFAULT_NOTE,
   LOCATION_DEFAULT_TITLE,
+  LOCATION_DEFAULT_NOTE,
   CALENDAR_DEFAULT_TITLE,
+  CALENDAR_DEFAULT_NOTE,
   type CardTexts,
   type GiftAccount,
 } from '@/src/store/EventDataContext';
@@ -653,9 +656,11 @@ function MusicTab({
  * the box is a safe way back to the original wording. Writes merge-patch into
  * the `cardTexts` section, so each tab only ever touches its own field.
  */
-/** The wording fields — every `cardTexts` member except the note's on/off flag,
- *  which is a toggle rather than a text box. */
-type CardTextKey = Exclude<keyof NonNullable<CardTexts>, 'giftNoteEnabled'>;
+/** The wording fields — every `cardTexts` member except the notes' on/off flags,
+ *  which are toggles rather than text boxes. */
+type CardTextKey = Exclude<keyof NonNullable<CardTexts>, `${string}NoteEnabled`>;
+/** The on/off flag beside each note. */
+type CardNoteEnabledKey = Extract<keyof NonNullable<CardTexts>, `${string}NoteEnabled`>;
 
 function CardTextField({
   field,
@@ -712,6 +717,73 @@ function CardTextField({
   );
 }
 
+/**
+ * The optional small print under a card's heading — a labelled row with an
+ * on/off switch, and the note's own text box while it is on.
+ *
+ * The switch is opt-in (`*NoteEnabled` is only ever `true` when a host turned it
+ * on), so invitations saved before notes existed show no note at all. Turning it
+ * off leaves the wording untouched, so it comes straight back when switched on
+ * again.
+ */
+function CardNoteField({
+  noteField,
+  enabledField,
+  placeholder,
+  offHint,
+  label = 'Note',
+}: {
+  noteField: CardTextKey;
+  enabledField: CardNoteEnabledKey;
+  placeholder: string;
+  // What the note is for, shown in place of the box while the switch is off.
+  offHint: string;
+  label?: string;
+}) {
+  const { eventData, updateEventData } = useEventData();
+  const on = eventData.cardTexts?.[enabledField] === true;
+
+  const toggle = () => {
+    // Merge-patch into its own section — the note text itself is left alone.
+    updateEventData('cardTexts', { [enabledField]: !on } as any);
+  };
+
+  return (
+    <div>
+      <div className="flex items-center justify-between">
+        <label className="text-xs text-gray-500">{label}</label>
+        <button
+          type="button"
+          role="switch"
+          aria-checked={on}
+          aria-label={`Show ${label}`}
+          title={on ? `Hide the ${label.toLowerCase()}` : `Show the ${label.toLowerCase()}`}
+          onClick={toggle}
+          className={`relative inline-flex h-5 w-9 shrink-0 items-center rounded-full transition-colors ${
+            on ? 'bg-[#8C6B6B]' : 'bg-gray-300'
+          }`}
+        >
+          <span
+            className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${
+              on ? 'translate-x-[18px]' : 'translate-x-[2px]'
+            }`}
+          />
+        </button>
+      </div>
+      {on ? (
+        <CardTextField
+          field={noteField}
+          placeholder={placeholder}
+          multiline
+          maxLength={CARD_NOTE_MAX_LENGTH}
+        />
+      ) : (
+        <p className="mt-1 text-[11px] text-gray-400 leading-snug">{offHint}</p>
+      )}
+    </div>
+  );
+}
+
 function ContactTab() {
   const { eventData, setSection } = useEventData();
   const [contacts, setLocalContacts] = useState(
@@ -755,6 +827,12 @@ function ContactTab() {
           field="contactTitle"
           label="Card Title"
           placeholder={CONTACT_DEFAULT_TITLE}
+        />
+        <CardNoteField
+          noteField="contactNote"
+          enabledField="contactNoteEnabled"
+          placeholder={CONTACT_DEFAULT_NOTE}
+          offHint="Turn this on to show a short line under the heading, above the contacts."
         />
         {contacts.map((c, i) => (
           <div
@@ -929,6 +1007,12 @@ function LocationTab({
           label="Card Title"
           placeholder={LOCATION_DEFAULT_TITLE}
         />
+        <CardNoteField
+          noteField="locationNote"
+          enabledField="locationNoteEnabled"
+          placeholder={LOCATION_DEFAULT_NOTE}
+          offHint="Turn this on to show a short line under the heading, above the address."
+        />
         <input
           value={address}
           onChange={(e) => handleChange(e.target.value)}
@@ -1078,6 +1162,12 @@ function CalendarTab() {
           field="calendarTitle"
           label="Card Title"
           placeholder={CALENDAR_DEFAULT_TITLE}
+        />
+        <CardNoteField
+          noteField="calendarNote"
+          enabledField="calendarNoteEnabled"
+          placeholder={CALENDAR_DEFAULT_NOTE}
+          offHint="Turn this on to show a short line under the heading, above the date."
         />
 
         <label className="text-xs text-gray-600">Event Title</label>
@@ -1878,9 +1968,6 @@ function MoneyGiftTab({ rules }: { rules: PackageRules }) {
   // untouched when it goes off, and come straight back when it is turned on
   // again.
   const [giftOn, setGiftOn] = useState(current?.enabled !== false);
-  // "Show Note" — the small print under the heading. Opt-in, so it starts OFF
-  // unless a design explicitly saved it ON. See CardTexts.giftNoteEnabled.
-  const [noteOn, setNoteOn] = useState(eventData.cardTexts?.giftNoteEnabled === true);
   // One entry per place guests can send a gift — bank, number, QR and that QR's
   // size travel together, in the order guests swipe through them. Always at
   // least one card on screen, even before anything is filled in.
@@ -1891,14 +1978,6 @@ function MoneyGiftTab({ rules }: { rules: PackageRules }) {
 
   const pushField = (patch: Partial<NonNullable<typeof current>>) => {
     updateEventData('moneyGift', patch as any);
-  };
-
-  const toggleNote = () => {
-    const next = !noteOn;
-    setNoteOn(next);
-    // Merge-patch into its own section — the note text itself is left alone, so
-    // it comes straight back when the toggle goes on again.
-    updateEventData('cardTexts', { giftNoteEnabled: next } as any);
   };
 
   const toggleGift = () => {
@@ -2018,41 +2097,12 @@ function MoneyGiftTab({ rules }: { rules: PackageRules }) {
           label="Card Title"
           placeholder={GIFT_DEFAULT_TITLE}
         />
-        <div>
-          <div className="flex items-center justify-between">
-            <label className="text-xs text-gray-500">Note</label>
-            <button
-              type="button"
-              role="switch"
-              aria-checked={noteOn}
-              aria-label="Show Note"
-              title={noteOn ? 'Hide the note' : 'Show the note'}
-              onClick={toggleNote}
-              className={`relative inline-flex h-5 w-9 shrink-0 items-center rounded-full transition-colors ${
-                noteOn ? 'bg-[#8C6B6B]' : 'bg-gray-300'
-              }`}
-            >
-              <span
-                className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${
-                  noteOn ? 'translate-x-[18px]' : 'translate-x-[2px]'
-                }`}
-              />
-            </button>
-          </div>
-          {noteOn ? (
-            <CardTextField
-              field="giftNote"
-              placeholder={GIFT_DEFAULT_NOTE}
-              multiline
-              maxLength={GIFT_NOTE_MAX_LENGTH}
-            />
-          ) : (
-            <p className="mt-1 text-[11px] text-gray-400 leading-snug">
-              Turn this on to show a short line under the heading, above the
-              account details.
-            </p>
-          )}
-        </div>
+        <CardNoteField
+          noteField="giftNote"
+          enabledField="giftNoteEnabled"
+          placeholder={GIFT_DEFAULT_NOTE}
+          offHint="Turn this on to show a short line under the heading, above the account details."
+        />
 
         {accounts.length > 1 && (
           <p className="text-[11px] text-gray-500">

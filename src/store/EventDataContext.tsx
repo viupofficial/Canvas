@@ -293,40 +293,65 @@ export function rsvpTexts(
 /** Longest heading the sidebar accepts — long enough for a phrase in any
  *  language, short enough to stay on one line of the card. */
 export const CARD_TITLE_MAX_LENGTH = 60;
-/** The Money Gift note is a sentence or two, so it gets its own, larger cap. */
-export const GIFT_NOTE_MAX_LENGTH = 300;
+/** A card note is a sentence or two, so it gets its own, larger cap. Shared by
+ *  the Contact / Location / Calendar / Money Gift notes. */
+export const CARD_NOTE_MAX_LENGTH = 300;
+/** Kept under its original name for the Money Gift note's existing callers. */
+export const GIFT_NOTE_MAX_LENGTH = CARD_NOTE_MAX_LENGTH;
 
 export const CONTACT_DEFAULT_TITLE = "Contact";
+export const CONTACT_DEFAULT_NOTE =
+  "For any enquiries regarding the celebration, kindly reach out to your host.";
 export const GIFT_DEFAULT_TITLE = "Money Gift";
 export const GIFT_DEFAULT_NOTE =
   "Your presence is the greatest gift of all. However, should you wish to honour us with a gift, a small contribution towards our future together would be sincerely appreciated.";
 export const LOCATION_DEFAULT_TITLE = "Location";
+export const LOCATION_DEFAULT_NOTE =
+  "Kindly tap the map below for directions to the venue.";
 export const CALENDAR_DEFAULT_TITLE = "Calendar";
+export const CALENDAR_DEFAULT_NOTE =
+  "Kindly save the date and add it to your calendar.";
 
 /** Host-written wording. Every field is optional and a blank one means "use the
  *  default", which is what invitations saved before this existed do for all of
  *  them. */
 export type CardTexts = {
   contactTitle?: string;
+  contactNote?: string;
+  contactNoteEnabled?: boolean;
   giftTitle?: string;
   giftNote?: string;
   // Whether the note is shown under the Money Gift heading. Opt-in, so it is
   // OFF when undefined — invitations saved before it existed (and every new one
   // until the host turns it on) show the accounts alone, exactly as before.
-  // Read it as `=== true`, never `!== false`.
+  // Read it as `=== true`, never `!== false`. Every other `*NoteEnabled` flag
+  // below works the same way.
   giftNoteEnabled?: boolean;
   locationTitle?: string;
+  locationNote?: string;
+  locationNoteEnabled?: boolean;
   calendarTitle?: string;
+  calendarNote?: string;
+  calendarNoteEnabled?: boolean;
 } | null;
 
 export type ResolvedCardTexts = {
   contactTitle: string;
+  contactNote: string;
+  /** False ⇒ don't render the note at all, whatever `contactNote` holds. */
+  contactNoteEnabled: boolean;
   giftTitle: string;
   giftNote: string;
   /** False ⇒ don't render the note at all, whatever `giftNote` holds. */
   giftNoteEnabled: boolean;
   locationTitle: string;
+  locationNote: string;
+  /** False ⇒ don't render the note at all, whatever `locationNote` holds. */
+  locationNoteEnabled: boolean;
   calendarTitle: string;
+  calendarNote: string;
+  /** False ⇒ don't render the note at all, whatever `calendarNote` holds. */
+  calendarNoteEnabled: boolean;
 };
 
 /** The wording to render, in one reader for every surface (public footer, live
@@ -334,11 +359,17 @@ export type ResolvedCardTexts = {
 export function resolveCardTexts(texts?: CardTexts): ResolvedCardTexts {
   return {
     contactTitle: texts?.contactTitle?.trim() || CONTACT_DEFAULT_TITLE,
+    contactNote: texts?.contactNote?.trim() || CONTACT_DEFAULT_NOTE,
+    contactNoteEnabled: texts?.contactNoteEnabled === true,
     giftTitle: texts?.giftTitle?.trim() || GIFT_DEFAULT_TITLE,
     giftNote: texts?.giftNote?.trim() || GIFT_DEFAULT_NOTE,
     giftNoteEnabled: texts?.giftNoteEnabled === true,
     locationTitle: texts?.locationTitle?.trim() || LOCATION_DEFAULT_TITLE,
+    locationNote: texts?.locationNote?.trim() || LOCATION_DEFAULT_NOTE,
+    locationNoteEnabled: texts?.locationNoteEnabled === true,
     calendarTitle: texts?.calendarTitle?.trim() || CALENDAR_DEFAULT_TITLE,
+    calendarNote: texts?.calendarNote?.trim() || CALENDAR_DEFAULT_NOTE,
+    calendarNoteEnabled: texts?.calendarNoteEnabled === true,
   };
 }
 

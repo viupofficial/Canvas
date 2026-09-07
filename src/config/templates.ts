@@ -33,7 +33,7 @@
 // template resolves its own assets against that template's remote folder
 // (block "gallery" would look for aiCouple-1.png on vi-up.com). Blocks with no
 // images — countdown — are safe to reuse anywhere; for the rest, spell the page
-// out inline, as the Tunku Ismail x Farah Elise template below does.
+// out inline, as the Eloise template below does.
 //
 // ── POSITIONS ARE CENTRES, NOT CORNERS ───────────────────────────────
 // Objects default to a CENTRE origin, so an element's left/top is the middle of
@@ -54,7 +54,7 @@
 //   ✗ <svg viewBox="0 0 764.4 435.84">                     renders cropped
 // So: check the file before using an SVG, and prefer the PNG if there is one.
 // (This is why Crimson Velvet uses BG_Monogram.png rather than its B&G.svg
-// wordmark, and skips Bordeline.svg entirely.)
+// wordmark, and draws its Bordeline.svg frame as two rects — cvBorderFrame.)
 //
 // ── WHAT MUST NOT CHANGE ────────────────────────────────────────────────────
 // Some `name` values are FUNCTIONAL, not decoration. The editor and the
@@ -180,15 +180,253 @@ const namePairSection = (
   },
 ];
 
-// ── Crimson Velvet palette + row helpers ────────────────────────────────────
-// Its content pages sit inside a floral frame, and the CLEAR opening is a good
-// deal smaller than the artwork's bounding box: rasterizing Border Flower/7.png
-// at 396x704 and scanning each row for its widest unbroken run of cream gives
-// x 88..316, y 180..530 (the narrowest row, y=300, clears only x 84..320, and
-// the top cluster hangs down the middle to y~180). Everything below is
-// therefore centred at x=200, held to a 210px column and kept inside that band
-// — otherwise the text runs under the flowers, which is exactly what the first
-// pass at this template did.
+/** The two golds the source uses, plus the page colour behind the panel. */
+const EL_ = {
+  /** `.location`, `.parent-top`, the couple — the source's #8B6914. */
+  gold: "#8B6914",
+  /** Section titles and the prayer — the source's darker #755811. */
+  deep: "#755811",
+  paper: "#f7f2ea",
+} as const;
+
+/**
+ * One "Putera/Puteri kepada" set on the Hosts page: the label, a parent, the
+ * ampersand, the other parent. `top` is the label's centre; the block runs
+ * about 84px from there.
+ */
+const elParentBlock = (
+  key: string,
+  label: string,
+  first: string,
+  second: string,
+  top: number,
+): TemplateElement[] => [
+  {
+    type: "text",
+    key: `${key}-label`,
+    text: label,
+    left: 196,
+    top,
+    originX: "center",
+    width: 300,
+    fontFamily: "Cormorant Garamond",
+    fontSize: 11,
+    textAlign: "center",
+    fill: EL_.gold,
+  },
+  {
+    type: "text",
+    key: `${key}-parent-1`,
+    text: first,
+    left: 196,
+    top: top + 22,
+    originX: "center",
+    width: 320,
+    fontFamily: "Cormorant Garamond",
+    fontSize: 13,
+    textAlign: "center",
+    fill: EL_.gold,
+  },
+  {
+    type: "text",
+    key: `${key}-parent-amp`,
+    text: "&",
+    left: 196,
+    top: top + 44,
+    originX: "center",
+    width: 300,
+    fontFamily: "Cormorant Garamond",
+    fontSize: 16,
+    textAlign: "center",
+    fill: EL_.gold,
+  },
+  {
+    type: "text",
+    key: `${key}-parent-2`,
+    text: second,
+    left: 196,
+    top: top + 66,
+    originX: "center",
+    width: 320,
+    fontFamily: "Cormorant Garamond",
+    fontSize: 13,
+    textAlign: "center",
+    fill: EL_.gold,
+  },
+];
+
+/** One `.event-block` — bold heading over its value. `top` is the heading. */
+const elEventBlock = (heading: string, value: string, top: number): TemplateElement[] => [
+  {
+    type: "text",
+    text: heading,
+    left: 196,
+    top,
+    originX: "center",
+    width: 280,
+    fontFamily: "Cormorant Garamond",
+    fontSize: 16,
+    fontWeight: "bold",
+    textAlign: "center",
+    fill: EL_.deep,
+  },
+  {
+    type: "text",
+    text: value,
+    left: 196,
+    top: top + 23,
+    originX: "center",
+    width: 280,
+    fontFamily: "Cormorant Garamond",
+    fontSize: 12,
+    textAlign: "center",
+    fill: EL_.gold,
+  },
+];
+
+/**
+ * One `.itinerary-item`. The source STACKS these — what happens, then the time
+ * under it, both centred — rather than laying them out in two columns.
+ */
+const elItineraryRow = (description: string, time: string, top: number): TemplateElement[] => [
+  {
+    type: "text",
+    text: description,
+    left: 196,
+    top,
+    originX: "center",
+    width: 280,
+    fontFamily: "Cormorant Garamond",
+    fontSize: 14,
+    fontStyle: "italic",
+    textAlign: "center",
+    fill: EL_.deep,
+  },
+  {
+    type: "text",
+    text: time,
+    left: 196,
+    top: top + 19,
+    originX: "center",
+    width: 280,
+    fontFamily: "Cormorant Garamond",
+    fontSize: 11,
+    textAlign: "center",
+    fill: EL_.gold,
+  },
+];
+
+/**
+ * One countdown tile in the template's own colours — a warm chip rather than
+ * the stock grey. `left` is the column centre; all four share one row.
+ */
+const elCountdownBox = (key: string, label: string, left: number): TemplateElement[] => [
+  {
+    type: "countdownBox",
+    key,
+    label,
+    value: "00",
+    top: 340,
+    left,
+    width: 56,
+    height: 74,
+    box: { originX: "center", fill: "#efe6d8", rx: 8, ry: 8 },
+    labelStyle: { width: 56, fontSize: 11, fill: EL_.deep, fontFamily: "Cormorant Garamond" },
+    valueStyle: { width: 56, fontSize: 20, fill: EL_.gold, fontFamily: "Cormorant Garamond" },
+  } as TemplateElement,
+];
+
+// ── Eloise: the carved panel behind every content page ─────────────────────
+// concept2.png (853x1844) is the template's real background — the source HTML
+// paints it through `.floral-border-overlay`, a fixed layer that is
+// `background-size: contain` AND carries a per-page `transform: scale(...)`.
+//
+// Two things come out of that, and both matter:
+//
+//   1. The panel FILLS the artboard. Reproducing `contain` literally draws
+//      358.2 x 774.4 and leaves ~19px of bare page colour down each side; a
+//      carved panel with a visible border should meet the edge. So it is
+//      full-bleed like every other template's sheet — 396x704 from the same
+//      independent x/y scales spFullBleed and cvFullBleed use. The 21%
+//      horizontal stretch is invisible on a tone-on-tone emboss, and it pulls
+//      the medallion (a tall oval in the file) into a circle on the page.
+//
+//   2. The ZOOM is per page, and it is what frames each page's content: 1.2 on
+//      the invitation, event details and itinerary, 1.6 on the hosts page
+//      (whose ring runs off both sides), 1.3 x 1.4 on countdown, gallery and
+//      prayer. Passing it here keeps the medallion sized to what sits inside
+//      it, exactly as the source does.
+//
+// The panel is on every screen EXCEPT the guestbook, where the source fades it
+// out (`.floral-border-overlay.fade-out`) and slides its paper wash up, and
+// the envelope, which is its own full-page cover art.
+const elConceptPanel = (zoomX = 1, zoomY = zoomX): TemplateElement =>
+  ({
+    type: "image",
+    key: "panel",
+    name: "background panel",
+    asset: "/uploads/user_event/21/concept2.png",
+    // Root-relative INSIDE a remote template means "elsewhere on vi-up.com" —
+    // this file is a site-scope upload the manifest reports as
+    // /uploads/user_event/21/concept2.png, not a file in the template folder.
+    // See resolveRemote() in templateAssetResolver.ts.
+    left: 198,
+    top: 352,
+    originX: "center",
+    originY: "center",
+    scaleX: (396 / 853) * zoomX,
+    scaleY: (704 / 1844) * zoomY,
+    selectable: false,
+    locked: true,
+  }) as TemplateElement;
+
+/**
+ * The medallion in the panel, at the page's own zoom — measured off the
+ * artwork rather than guessed.
+ *
+ * Scanning outward from the centre of concept2.png for where the emboss stops
+ * being flat puts the clear oval at x 126..720, y 537..1267 in source pixels.
+ * Through the full-bleed mapping that is centre (196.4, 344.3) with radii
+ * 137.9 x 139.3 — the two scales differ by exactly enough to square the oval
+ * up, so on the page it is a circle. Zooming scales that about the artboard
+ * centre, the same point the panel scales about, so ring and artwork stay
+ * locked together.
+ *
+ * Drawn as a hairline in the template's gold — the `color: #8B6914` its unused
+ * `.ornament` rule asks for — so it reads as a fine ring on the emboss and can
+ * be restyled, moved or hidden from the Layers panel.
+ */
+const EL_MEDALLION = { cx: 196.4, cy: 344.3, rx: 137.9, ry: 139.3 } as const;
+
+const elOrnamentRing = (zoomX = 1, zoomY = zoomX): TemplateElement =>
+  ({
+    type: "shape",
+    shape: "ellipse",
+    key: "ornament",
+    name: "ornament layer",
+    left: 198 + (EL_MEDALLION.cx - 198) * zoomX,
+    top: 352 + (EL_MEDALLION.cy - 352) * zoomY,
+    originX: "center",
+    originY: "center",
+    rx: EL_MEDALLION.rx * zoomX,
+    ry: EL_MEDALLION.ry * zoomY,
+    fill: "transparent",
+    stroke: EL_.gold,
+    strokeWidth: 1,
+  }) as TemplateElement;
+
+// ── Crimson Velvet palette + row helpers ─────────────────────────────────────
+// Its content pages sit on the template's OWN velvet sheet — Crimson Velvet.png,
+// a 1080x1920 full-page texture — with the double gold hairline the source
+// draws over it. That is the whole frame: this template carries no floral
+// wreath. Border Flower/7.png belongs to the lighter designs, and an earlier
+// pass at this one borrowed it, which is why these pages used to come up cream
+// and flowered instead of crimson.
+//
+// A hairline rectangle leaves the whole page usable, so unlike a wreath's
+// narrow opening the only constraint is the inner rule itself: x 26..370,
+// y 16..612 (see cvBorderFrame). Content is centred at x=198 in a 284px column,
+// the same measure the other framed templates use.
 //
 // Note while reading the numbers: on Fabric v7 `originX`/`originY` DEFAULT TO
 // "center" (they were "left"/"top" up to v5), so every `left`/`top` here is the
@@ -199,6 +437,11 @@ const CV = {
   crimson: "#4e0c0a",
   cream: "#f4efe9",
   gold: "#b8892f",
+  /** The envelope's own gold — the one that stays legible ON the velvet. */
+  goldLight: "#e8cf9a",
+  /** Secondary copy on the velvet: cream pulled back rather than darkened. */
+  creamMuted: "#d9c7bf",
+  /** Dark ink and its muted tone — for the cream chips, not the velvet. */
   ink: "#3a2a24",
   muted: "#6b5a52",
 } as const;
@@ -222,59 +465,112 @@ const cvFullBleed = (
     ...extra,
   }) as TemplateElement;
 
+/**
+ * The velvet sheet every content page sits on: the template's own full-page
+ * texture, dropped in full-bleed and locked like the other templates' sheets.
+ * Also what the page `background` colour underneath it is set to, so a slow or
+ * failed load shows crimson rather than a flash of bare cream.
+ */
+const cvVelvetSheet = (): TemplateElement =>
+  cvFullBleed("velvet", "Crimson Velvet.png", { selectable: false, locked: true });
+
+/**
+ * The double gold hairline over the velvet, drawn as two nested rects rather
+ * than loading the template's Bordeline.svg.
+ *
+ * The SVG is one of the viewBox-only files described in this file's header, so
+ * it would render as a stretched top-left crop. It is also nothing but two
+ * concentric stroked rectangles, which the generic `shape` element draws
+ * natively — crisper at every zoom, exportable, and editable.
+ *
+ * Kept clear of the bottom edge: the floating event footer sits over roughly
+ * the last 60px of the artboard, so a frame drawn to the true edge would have
+ * its bottom rule hidden behind it. Inner rule: x 26..370, y 16..612.
+ */
+const cvBorderFrame = (): TemplateElement[] =>
+  [
+    { outer: true, width: 356, height: 596 },
+    { outer: false, width: 344, height: 584 },
+  ].map(
+    ({ outer, width, height }) =>
+      ({
+        type: "shape",
+        shape: "rect",
+        key: outer ? "frame-outer" : "frame-inner",
+        left: 198,
+        top: 314,
+        originX: "center",
+        originY: "center",
+        width,
+        height,
+        fill: "transparent",
+        stroke: CV.gold,
+        strokeWidth: 1,
+        // Decoration, like the full-bleed sheet it sits on.
+        selectable: false,
+        locked: true,
+      }) as TemplateElement,
+  );
+
 /** Small gold label above a value, on the Event Details page. */
 const cvHeading = (text: string, top: number): TemplateElement => ({
   type: "text",
   text,
-  left: 200,
+  left: 198,
   top,
   originX: "center",
-  width: 210,
+  width: 284,
   fontFamily: "Montserrat",
   fontSize: 11,
   charSpacing: 220,
   textAlign: "center",
-  fill: CV.gold,
+  fill: CV.goldLight,
 });
 
 const cvBody = (text: string, top: number, fontSize = 15): TemplateElement => ({
   type: "text",
   text,
-  left: 200,
+  left: 198,
   top,
   originX: "center",
-  width: 210,
+  width: 284,
   fontFamily: "Alegreya",
   fontSize,
   lineHeight: 1.5,
   textAlign: "center",
-  fill: CV.ink,
+  fill: CV.cream,
 });
 
-/** One "time — what happens" line on the Crimson Velvet itinerary. */
+/**
+ * One "time — what happens" line on the Crimson Velvet itinerary.
+ *
+ * Placed by MIDPOINT (see the centre-origin note in this file's header): the
+ * time spans 56-134 and the description 145-335, the full width the hairline
+ * frame allows.
+ */
 const cvItineraryRow = (time: string, description: string, top: number): TemplateElement[] => [
   {
     type: "text",
     text: time,
-    left: 122,
+    left: 95,
     top,
-    width: 60,
+    width: 78,
     fontFamily: "Montserrat",
     fontSize: 10,
     charSpacing: 80,
     textAlign: "left",
-    fill: CV.gold,
+    fill: CV.goldLight,
   },
   {
     type: "text",
     text: description,
-    left: 232,
+    left: 240,
     top: top - 2,
-    width: 150,
+    width: 190,
     fontFamily: "Alegreya",
     fontSize: 13,
     textAlign: "left",
-    fill: CV.ink,
+    fill: CV.cream,
   },
 ];
 
@@ -421,6 +717,46 @@ const spFullBleed = (
     scaleY: 704 / 1920,
     ...extra,
   }) as TemplateElement;
+
+/**
+ * The rule this template draws over the kraft, as two nested rects rather than
+ * loading its `ornament border1.svg`.
+ *
+ * The SVG is one of the viewBox-only files described in this file's header, so
+ * it renders as a stretched top-left crop — which is why it was left out
+ * entirely and these pages had no frame at all. Rects give the border back:
+ * crisp at every zoom, exportable, and editable. #b87f27 is the colour the
+ * source's own `.borderline` rule names (it ships commented out, so the design
+ * as published has no visible frame either).
+ *
+ * Kept clear of the bottom edge: the floating event footer sits over roughly
+ * the last 60px of the artboard, so a frame drawn to the true edge would have
+ * its bottom rule hidden behind it.
+ */
+const spBorderFrame = (): TemplateElement[] =>
+  [
+    { outer: true, width: 356, height: 596 },
+    { outer: false, width: 344, height: 584 },
+  ].map(
+    ({ outer, width, height }) =>
+      ({
+        type: "shape",
+        shape: "rect",
+        key: outer ? "frame-outer" : "frame-inner",
+        left: 198,
+        top: 314,
+        originX: "center",
+        originY: "center",
+        width,
+        height,
+        fill: "transparent",
+        stroke: SP_.gold,
+        strokeWidth: 1,
+        // Decoration, like the kraft sheet it sits on.
+        selectable: false,
+        locked: true,
+      }) as TemplateElement,
+  );
 
 /** Event Details label — the source's bold Alice `.event-heading`. */
 const spHeading = (text: string, top: number): TemplateElement => ({
@@ -1394,7 +1730,7 @@ export const templates: Record<string, TemplateDefinition> = {
   },
 
   // ═══════════════════════════════════════════════════════════════════════
-  // Tunku Ismail x Farah Elise — the FIRST iFastNet-hosted template.
+  // Eloise — the FIRST iFastNet-hosted template.
   //
   // Its media is NOT in this repository and is never copied here: every image
   // below is a bare filename, and the resolver turns it into a url on
@@ -1414,12 +1750,12 @@ export const templates: Record<string, TemplateDefinition> = {
   // like a local template. The manifest supplies files, never layout, and the
   // template's own HTML is never fetched, parsed or executed by this app.
   // ═══════════════════════════════════════════════════════════════════════
-  tunkuIsmailFarahElise: {
-    id: "tunku-ismail-farah-elise",
-    name: "Tunku Ismail x Farah Elise",
-    slug: "tunku-ismail-farah-elise",
+  eloise: {
+    id: "eloise",
+    name: "Eloise",
+    slug: "eloise",
     description:
-      "Nine-page Malay wedding invitation with an ivory envelope, monogram crest, itinerary, gallery and guestbook. Media is hosted on vi-up.com.",
+      "Nine-page Malay wedding invitation on a carved ivory panel: an openable envelope, hosts and their parents, event details, itinerary, countdown, gallery, guestbook and closing prayer. Media is hosted on vi-up.com.",
     category: "wedding",
     version: "1.0.0",
     assetProvider: "ifastnet",
@@ -1427,7 +1763,7 @@ export const templates: Record<string, TemplateDefinition> = {
     canvas: {
       width: 396,
       height: 704,
-      background: "#f7f2ea",
+      background: EL_.paper,
     },
     features: {
       rsvp: true,
@@ -1445,12 +1781,12 @@ export const templates: Record<string, TemplateDefinition> = {
       // The three `envelope-*` names are what make this the openable cover —
       // see the note at the top of this file. Geometry mirrors the shared
       // envelope block (identical 4626x4205 head and 4500x5147 body art, so
-      // the same 0.1 scale); only the seal differs (1254px here vs 1000px),
-      // scaled to match on screen.
+      // the same 0.1 scale); only the seal differs (1254px here vs 1000px), and
+      // it is scaled to a fixed 150x150 on screen rather than by a raw factor.
       {
         id: "envelope",
         name: "Envelope",
-        background: "#f7f2ea",
+        background: EL_.paper,
         elements: [
           {
             type: "image",
@@ -1486,17 +1822,26 @@ export const templates: Record<string, TemplateDefinition> = {
             fontSize: 11,
             charSpacing: 300,
             textAlign: "center",
-            fill: "#8B6914",
+            fill: EL_.gold,
           },
+          // The cover's couple line as EDITABLE text, not the template's
+          // baked-in z&z.svg wordmark. That file is artwork spelling out one
+          // particular couple's names — which no one using this template can
+          // retype, and the first thing they will want to. Same anchor and
+          // visual weight the wordmark had.
           {
-            type: "image",
-            key: "monogram",
-            asset: "z&z.svg",
+            type: "text",
+            key: "couple",
+            text: "Bride & Groom",
             left: 198,
             top: 120,
             originX: "center",
-            scaleX: 0.9,
-            scaleY: 0.9,
+            width: 320,
+            fontFamily: "Great Vibes",
+            fontSize: 34,
+            lineHeight: 1.3,
+            textAlign: "center",
+            fill: EL_.gold,
           },
           {
             type: "image",
@@ -1504,10 +1849,11 @@ export const templates: Record<string, TemplateDefinition> = {
             name: "envelope-seal",
             asset: "Envelope Intro (2)/Envelope Intro/seal.png",
             left: 190,
-            top: 390,
+            top: 372,
             originX: "center",
-            scaleX: 0.08,
-            scaleY: 0.08,
+            // 1254px square down to 150x150.
+            scaleX: 150 / 1254,
+            scaleY: 150 / 1254,
           },
           {
             type: "text",
@@ -1520,23 +1866,165 @@ export const templates: Record<string, TemplateDefinition> = {
             fontFamily: "Cormorant Garamond",
             fontSize: 20,
             textAlign: "center",
-            fill: "#8B6914",
+            fill: EL_.gold,
           },
         ],
       },
 
       // ── 2. Invitation ───────────────────────────────────────────────────
+      // The source's `.invitation-wrapper.opening-card`, in its order:
+      // eyebrow, couple, date plate, venue, hashtag, rule, dress code, rule,
+      // note. The bismillah does NOT belong here — it opens the hosts page.
       {
         id: "invitation",
         name: "Invitation",
         elements: [
+          elConceptPanel(1.2),
+          elOrnamentRing(1.2),
+          {
+            type: "text",
+            key: "eyebrow",
+            text: "THE INTIMATE WEDDING OF",
+            left: 196,
+            top: 200,
+            originX: "center",
+            width: 300,
+            fontFamily: "Cormorant Garamond",
+            fontSize: 12,
+            charSpacing: 160,
+            textAlign: "center",
+            fill: EL_.gold,
+          },
+          // Editable, and held to 260px so it wraps inside the medallion
+          // (x 58..334) rather than running out over the carving.
+          {
+            type: "text",
+            key: "couple",
+            text: "Bride & Groom",
+            left: 196,
+            top: 248,
+            originX: "center",
+            width: 260,
+            fontFamily: "Cormorant Garamond",
+            fontSize: 34,
+            lineHeight: 1.3,
+            textAlign: "center",
+            fill: EL_.gold,
+          },
+          {
+            type: "image",
+            key: "date-plate",
+            asset: "date.png",
+            // 696x324 down to 195x91 — the modest plate the source shows,
+            // sitting in the medallion's lower half.
+            left: 196,
+            top: 332,
+            originX: "center",
+            originY: "center",
+            scaleX: 195 / 696,
+            scaleY: 91 / 324,
+          },
+          {
+            type: "text",
+            key: "venue",
+            text: "WILLOW HALL, FOREST VALLEY",
+            left: 196,
+            top: 400,
+            originX: "center",
+            width: 300,
+            fontFamily: "Montserrat",
+            fontSize: 9,
+            charSpacing: 180,
+            textAlign: "center",
+            fill: EL_.gold,
+          },
+          {
+            type: "text",
+            key: "hashtag",
+            text: "#WhenAMMetPM",
+            left: 196,
+            top: 424,
+            originX: "center",
+            width: 300,
+            fontFamily: "Cormorant Garamond",
+            fontSize: 14,
+            fontStyle: "italic",
+            textAlign: "center",
+            fill: EL_.gold,
+          },
+          {
+            type: "image",
+            key: "rule-dress",
+            asset: "line1.png",
+            left: 196,
+            top: 452,
+            originX: "center",
+            originY: "center",
+            scaleX: 0.45,
+            scaleY: 0.45,
+          },
+          {
+            type: "text",
+            key: "dress-code",
+            text: "Tema Pakaian: Traditional / Formal Attire\nLelaki: Baju Melayu atau Sut Formal\nPerempuan: Busana Tradisional atau Gaun Labuh",
+            left: 196,
+            top: 496,
+            originX: "center",
+            width: 300,
+            fontFamily: "Cormorant Garamond",
+            fontSize: 11,
+            lineHeight: 1.4,
+            textAlign: "center",
+            fill: EL_.gold,
+          },
+          {
+            type: "image",
+            key: "rule-note",
+            asset: "line2.png",
+            left: 196,
+            top: 538,
+            originX: "center",
+            originY: "center",
+            scaleX: 0.7,
+            scaleY: 0.7,
+          },
+          {
+            type: "text",
+            key: "note",
+            text: "Note: Mohon kerjasama tetamu untuk tidak mengenakan\npakaian kasual seperti T-shirt dan seluar jeans bagi\nmenghormati majlis.",
+            left: 196,
+            top: 574,
+            originX: "center",
+            width: 320,
+            fontFamily: "Cormorant Garamond",
+            fontSize: 8,
+            lineHeight: 1.45,
+            textAlign: "center",
+            fill: EL_.gold,
+          },
+        ],
+      },
+
+      // ── 3. Hosts ────────────────────────────────────────────────────────
+      // The source's `.parents-card`: bismillah, the basmalah line, the couple,
+      // then each set of parents under its own "Putera/Puteri kepada" label,
+      // closing on the formal invitation paragraph. Every PERSON is a
+      // placeholder — the Malay labels and the closing paragraph are template
+      // copy and stay verbatim.
+      {
+        id: "parents",
+        name: "Hosts",
+        elements: [
+          elConceptPanel(1.6),
+          elOrnamentRing(1.6),
           {
             type: "image",
             key: "bismillah",
             asset: "Bismillah z&z.svg",
             left: 198,
-            top: 70,
+            top: 80,
             originX: "center",
+            originY: "center",
             scaleX: 1.1,
             scaleY: 1.1,
           },
@@ -1545,382 +2033,243 @@ export const templates: Record<string, TemplateDefinition> = {
             key: "basmalah",
             text: "Dengan nama Allah Yang Maha Pengasih\nlagi Maha Penyayang",
             left: 198,
-            top: 120,
+            top: 130,
             originX: "center",
             width: 320,
-            fontFamily: "Cormorant Garamond",
-            fontSize: 14,
-            lineHeight: 1.5,
-            textAlign: "center",
-            fill: "#8B6914",
-          },
-          {
-            type: "image",
-            key: "rule-top",
-            asset: "line1.png",
-            left: 198,
-            top: 175,
-            originX: "center",
-            scaleX: 0.55,
-            scaleY: 0.55,
-          },
-          {
-            type: "text",
-            key: "groom",
-            text: "YM Capt Tunku Ismail\nBin Tunku Yahaya",
-            left: 198,
-            top: 210,
-            originX: "center",
-            width: 320,
-            fontFamily: "Cormorant Garamond",
-            fontSize: 22,
-            lineHeight: 1.3,
-            textAlign: "center",
-            fill: "#8B6914",
-          },
-          {
-            type: "text",
-            key: "amp",
-            text: "&",
-            left: 198,
-            top: 272,
-            originX: "center",
-            width: 320,
-            fontFamily: "Great Vibes",
-            fontSize: 30,
-            textAlign: "center",
-            fill: "#8B6914",
-          },
-          {
-            type: "text",
-            key: "bride",
-            text: "Nurul Faraliza Binti Md Yusof\n(Farah Elise)",
-            left: 198,
-            top: 312,
-            originX: "center",
-            width: 320,
-            fontFamily: "Cormorant Garamond",
-            fontSize: 22,
-            lineHeight: 1.3,
-            textAlign: "center",
-            fill: "#8B6914",
-          },
-          {
-            type: "image",
-            key: "date-plate",
-            asset: "date.png",
-            left: 198,
-            top: 420,
-            originX: "center",
-            scaleX: 0.38,
-            scaleY: 0.38,
-          },
-          {
-            type: "image",
-            key: "rule-bottom",
-            asset: "line2.png",
-            left: 198,
-            top: 495,
-            originX: "center",
-            scaleX: 0.9,
-            scaleY: 0.9,
-          },
-          {
-            type: "text",
-            key: "venue",
-            text: "WILLOW HALL, FOREST VALLEY",
-            left: 198,
-            top: 525,
-            originX: "center",
-            width: 340,
-            fontFamily: "Montserrat",
-            fontSize: 11,
-            charSpacing: 200,
-            textAlign: "center",
-            fill: "#8B6914",
-          },
-          {
-            type: "text",
-            key: "hashtag",
-            text: "#WhenAMMetPM",
-            left: 198,
-            top: 560,
-            originX: "center",
-            width: 320,
-            fontFamily: "Great Vibes",
-            fontSize: 20,
-            textAlign: "center",
-            fill: "#8B6914",
-          },
-        ],
-      },
-
-      // ── 3. Hosts / parents ──────────────────────────────────────────────
-      {
-        id: "parents",
-        name: "Hosts",
-        elements: [
-          {
-            type: "text",
-            key: "intro",
-            text: "Dengan penuh kesyukuran, kami mempersilakan Y.Bhg\nTan Sri / Puan Sri / Datuk Seri / Dato Seri / Datin Seri /\nDatuk / Dato / Datin / Encik / Puan / Cik hadir ke majlis\nperkahwinan putera dan puteri kesayangan kami",
-            left: 198,
-            top: 70,
-            originX: "center",
-            width: 330,
             fontFamily: "Cormorant Garamond",
             fontSize: 13,
-            lineHeight: 1.6,
+            lineHeight: 1.35,
             textAlign: "center",
-            fill: "#8B6914",
+            fill: EL_.gold,
           },
           {
             type: "text",
-            key: "groom-parents-label",
-            text: "Putera kepada",
-            left: 198,
-            top: 210,
+            key: "couple-1",
+            text: "Groom",
+            left: 196,
+            top: 176,
             originX: "center",
-            width: 320,
-            fontFamily: "Montserrat",
-            fontSize: 11,
-            charSpacing: 200,
-            textAlign: "center",
-            fill: "#8B6914",
-          },
-          {
-            type: "text",
-            key: "groom-parents",
-            text: "Almarhum Tunku Yahaya\nBin Tunku Tan Sri Ismail\n&\nPuan Salma Binti Mohamed Ibrahim",
-            left: 198,
-            top: 245,
-            originX: "center",
-            width: 330,
+            width: 300,
             fontFamily: "Cormorant Garamond",
             fontSize: 17,
-            lineHeight: 1.5,
+            fontWeight: "bold",
             textAlign: "center",
-            fill: "#8B6914",
-          },
-          {
-            type: "image",
-            key: "divider",
-            asset: "line2.png",
-            left: 198,
-            top: 380,
-            originX: "center",
-            scaleX: 0.9,
-            scaleY: 0.9,
+            fill: EL_.gold,
           },
           {
             type: "text",
-            key: "bride-parents-label",
-            text: "Puteri kepada",
-            left: 198,
-            top: 415,
+            key: "couple-amp",
+            text: "&",
+            left: 196,
+            top: 201,
             originX: "center",
-            width: 320,
-            fontFamily: "Montserrat",
-            fontSize: 11,
-            charSpacing: 200,
+            width: 300,
+            fontFamily: "Cormorant Garamond",
+            fontSize: 22,
+            fontWeight: "bold",
             textAlign: "center",
-            fill: "#8B6914",
+            fill: EL_.gold,
           },
           {
             type: "text",
-            key: "bride-parents",
-            text: "Md Yusof Bin Harun\n&\nAzizah Binti Ab Rahim",
-            left: 198,
-            top: 450,
+            key: "couple-2",
+            text: "Bride",
+            left: 196,
+            top: 226,
             originX: "center",
-            width: 330,
+            width: 300,
             fontFamily: "Cormorant Garamond",
             fontSize: 17,
-            lineHeight: 1.5,
+            fontWeight: "bold",
             textAlign: "center",
-            fill: "#8B6914",
+            fill: EL_.gold,
+          },
+          ...elParentBlock("groom", "Putera kepada", "Groom’s Father", "Groom’s Mother", 262),
+          ...elParentBlock("bride", "Puteri kepada", "Bride’s Father", "Bride’s Mother", 358),
+          {
+            type: "text",
+            key: "invite-text",
+            text: "Dengan penuh kesyukuran, kami mempersilakan Y.Bhg\nTan Sri/ Puan Sri/ Datuk Seri/ Dato’ Seri/ Datin Seri/\nDatuk/ Dato’/ Datin/ Encik/ Puan/ Cik hadir ke majlis\nperkahwinan putera dan puteri kesayangan kami",
+            left: 198,
+            top: 486,
+            originX: "center",
+            width: 340,
+            fontFamily: "Cormorant Garamond",
+            fontSize: 10.5,
+            lineHeight: 1.4,
+            textAlign: "center",
+            fill: EL_.gold,
           },
         ],
       },
 
       // ── 4. Event details ────────────────────────────────────────────────
+      // FOUR blocks and nothing else, as the source's `.event-details-wrapper`
+      // has them. The dress code and its note live on the invitation page —
+      // carrying them here as well was what used to make this page overflow
+      // and collide with itself.
       {
         id: "eventDetails",
         name: "Event Details",
         elements: [
-          {
-            type: "image",
-            key: "crest",
-            asset: "TEFI.png",
-            left: 198,
-            top: 60,
-            originX: "center",
-            scaleX: 0.28,
-            scaleY: 0.28,
-          },
-          detailHeading("Tarikh", 140),
-          detailBody("15 August 2026", 168),
-          detailHeading("Hari", 210),
-          detailBody("Sabtu", 238),
-          detailHeading("Waktu", 280),
-          detailBody("8.30 PM - 10.30 PM", 308),
-          detailHeading("Tempat", 350),
-          detailBody("Willow Hall, Forest Valley", 378),
-          detailHeading("Tema Pakaian", 425),
-          detailBody(
-            "Traditional / Formal Attire\nLelaki: Baju Melayu atau Sut Formal\nPerempuan: Busana Tradisional atau Gaun Labuh",
-            455,
-          ),
-          {
-            type: "text",
-            key: "dress-note",
-            text: "Nota: Mohon kerjasama tetamu untuk tidak mengenakan pakaian kasual seperti T-shirt dan seluar jeans bagi menghormati majlis.",
-            left: 198,
-            top: 545,
-            originX: "center",
-            width: 320,
-            fontFamily: "Cormorant Garamond",
-            fontSize: 12,
-            lineHeight: 1.5,
-            textAlign: "center",
-            fill: "#8B6914",
-          },
+          elConceptPanel(1.2),
+          elOrnamentRing(1.2),
+          ...elEventBlock("Tarikh", "15 August 2026", 225),
+          ...elEventBlock("Hari", "Sabtu", 288),
+          ...elEventBlock("Waktu", "8.30 PM - 10.30 PM", 351),
+          ...elEventBlock("Tempat", "Willow Hall, Forest Valley", 414),
         ],
       },
 
       // ── 5. Itinerary ────────────────────────────────────────────────────
+      // The source stacks each item CENTRED — what happens above the time —
+      // rather than in two columns, and closes on a note.
       {
         id: "itinerary",
         name: "Itinerary",
         elements: [
+          elConceptPanel(1.2),
+          elOrnamentRing(1.2),
           {
             type: "text",
             key: "title",
             text: "Atur Cara Majlis",
-            left: 198,
-            top: 60,
+            left: 196,
+            top: 210,
             originX: "center",
-            width: 340,
+            width: 300,
             fontFamily: "Cormorant Garamond",
-            fontSize: 26,
+            fontSize: 22,
+            fontWeight: "bold",
             textAlign: "center",
-            fill: "#8B6914",
+            fill: EL_.deep,
           },
-          {
-            type: "image",
-            key: "rule",
-            asset: "line2.png",
-            left: 198,
-            top: 105,
-            originX: "center",
-            scaleX: 0.9,
-            scaleY: 0.9,
-          },
-          ...itineraryRow("8.00 PM", "Kehadiran Tetamu", 150),
-          ...itineraryRow("8.30 PM", "Ketibaan Pengantin", 190),
-          ...itineraryRow("9.00 PM", "Jamuan Makan", 230),
-          ...itineraryRow("10.30 PM", "Majlis Berakhir", 270),
+          ...elItineraryRow("Kehadiran Tetamu", "8.00 PM", 255),
+          ...elItineraryRow("Ketibaan Pengantin", "8.30 PM", 303),
+          ...elItineraryRow("Jamuan Makan", "9.00 PM", 351),
+          ...elItineraryRow("Majlis Berakhir", "10.30 PM", 399),
           {
             type: "text",
             key: "note",
-            text: "Nota: Kehadiran sepenuhnya sebelum ketibaan pengantin pada pukul 8.30 PM. Pendaftaran bermula pada pukul 7pm sehingga 8pm. Tetamu tidak dibenarkan keluar masuk sehingga majlis selesai bagi menghormati aturcara dan sesi rakaman.",
-            left: 198,
-            top: 350,
+            text: "Nota: Kehadiran sepenuhnya sebelum ketibaan\npengantin pada pukul 8.30 PM. Pendaftaran bermula\npada pukul 7pm sehingga 8pm. Tetamu tidak\ndibenarkan keluar masuk sehingga majlis selesai bagi\nmenghormati aturcara dan sesi rakaman.",
+            left: 196,
+            top: 470,
             originX: "center",
             width: 320,
             fontFamily: "Cormorant Garamond",
-            fontSize: 12,
-            lineHeight: 1.6,
+            fontSize: 8,
+            lineHeight: 1.45,
             textAlign: "center",
-            fill: "#8B6914",
+            fill: EL_.gold,
           },
         ],
       },
 
       // ── 6. Counting Days ────────────────────────────────────────────────
-      // The countdownBox element emits `countdownUnit`, which is what the
-      // ticker in the editor AND in the published invitation rewrites every
-      // second — no template-specific wiring.
+      // countdownBox emits `countdownUnit`, which the per-second ticker in the
+      // editor and in the published invitation rewrites. Labels are the
+      // source's Malay ones; the tiles are held inside the medallion.
       {
         id: "countdown",
         name: "Counting Days",
         elements: [
+          elConceptPanel(1.3, 1.4),
+          elOrnamentRing(1.3, 1.4),
           {
             type: "text",
             key: "title",
             text: "Menanti Hari",
-            left: 198,
-            top: 60,
+            left: 196,
+            top: 250,
             originX: "center",
-            width: 340,
+            width: 300,
             fontFamily: "Cormorant Garamond",
-            fontSize: 26,
+            fontSize: 22,
+            fontWeight: "bold",
             textAlign: "center",
-            fill: "#8B6914",
+            fill: EL_.deep,
           },
-          { type: "countdownBox", key: "day", label: "Hari", value: "00", left: 74 },
-          { type: "countdownBox", key: "hour", label: "Jam", value: "00", left: 152 },
-          { type: "countdownBox", key: "minute", label: "Minit", value: "00", left: 232 },
-          { type: "countdownBox", key: "second", label: "Saat", value: "00", left: 314 },
+          ...elCountdownBox("day", "Hari", 90),
+          ...elCountdownBox("hour", "Jam", 162),
+          ...elCountdownBox("minute", "Minit", 234),
+          ...elCountdownBox("second", "Saat", 306),
         ],
       },
 
       // ── 7. Gallery ──────────────────────────────────────────────────────
-      // TWO starter photos, matching the shared gallery block, because the
-      // package photo counter discounts a FIXED number of starters
-      // (GALLERY_STARTER_COUNT in CanvasEditor, derived from that block).
-      // Shipping more here would eat into the customer's own photo budget.
-      // img3-img8 are in the manifest and can be added from the Photos panel.
+      // TWO starter photos, like every other template: the package photo
+      // counter discounts a FIXED starter count (GALLERY_STARTER_COUNT in
+      // CanvasEditor, derived from the shared gallery block), so shipping more
+      // would eat into the customer's own photo budget. img3-img8 are in the
+      // manifest and can be added from the Photos panel.
       {
         id: "gallery",
         name: "Gallery",
         elements: [
+          elConceptPanel(1.3, 1.4),
+          elOrnamentRing(1.3, 1.4),
           {
             type: "text",
             key: "title",
             text: "Galeri",
-            left: 198,
-            top: 60,
+            left: 196,
+            top: 200,
             originX: "center",
-            width: 340,
+            width: 300,
             fontFamily: "Cormorant Garamond",
-            fontSize: 26,
+            fontSize: 24,
+            fontWeight: "bold",
             textAlign: "center",
-            fill: "#8B6914",
+            fill: EL_.deep,
           },
           {
             type: "gallerySlot",
             key: "photo-1",
             index: 1,
             asset: "ImageGallery/img1.png",
-            left: 190,
-            top: 320,
+            // 720x1080 into the 180x270 frame the source shows — a portrait
+            // card inside the medallion, not a full-page photo.
+            left: 196,
+            top: 345,
             originX: "center",
             originY: "center",
-            // Source 720x1080 into the standard 292x443 frame.
-            scaleX: 292 / 720,
-            scaleY: 443 / 1080,
+            scaleX: 180 / 720,
+            scaleY: 270 / 1080,
           },
           {
             type: "gallerySlot",
             key: "photo-2",
             index: 2,
             asset: "ImageGallery/img2.png",
-            left: 190,
-            top: 320,
+            left: 196,
+            top: 345,
             originX: "center",
             originY: "center",
-            scaleX: 292 / 720,
-            scaleY: 443 / 1080,
+            scaleX: 180 / 720,
+            scaleY: 270 / 1080,
             // Hidden initially — the slideshow reveals one photo at a time.
             visible: false,
+          },
+          {
+            type: "image",
+            key: "monogram",
+            asset: "TEFI.png",
+            // The source closes the gallery on the monogram, under the photo.
+            left: 196,
+            top: 520,
+            originX: "center",
+            originY: "center",
+            scaleX: 0.16,
+            scaleY: 0.16,
           },
         ],
       },
 
       // ── 8. Guestbook ────────────────────────────────────────────────────
-      // Visual only: startGuestbook() fills guestMessage / guestSender with the
-      // real wishes on the published invitation.
+      // The one page with NO carved panel: the source fades the overlay out
+      // here (`.floral-border-overlay.fade-out`) and slides its PAPER.png wash
+      // up instead. Visual only — startGuestbook() fills guestMessage /
+      // guestSender with the real wishes on the published invitation.
       {
         id: "guestbook",
         name: "Guestbook",
@@ -1939,46 +2288,47 @@ export const templates: Record<string, TemplateDefinition> = {
             type: "text",
             key: "title",
             text: "Guestbook",
-            left: 195,
-            top: 60,
+            left: 196,
+            top: 200,
             originX: "center",
-            width: 340,
+            width: 300,
             fontFamily: "Cormorant Garamond",
-            fontSize: 26,
+            fontSize: 24,
+            fontWeight: "bold",
             textAlign: "center",
-            fill: "#8B6914",
+            fill: EL_.deep,
           },
           {
             type: "text",
             key: "message",
             name: "guestMessage",
             text: "“Your wishes will appear here...”",
-            left: 195,
-            top: 150,
+            left: 196,
+            top: 270,
             originX: "center",
             width: 300,
             fontFamily: "Cormorant Garamond",
-            fontSize: 16,
+            fontSize: 18,
+            fontStyle: "italic",
             textAlign: "center",
-            fill: "#8B6914",
+            fill: EL_.gold,
           },
           {
             type: "text",
             key: "sender",
             name: "guestSender",
             text: "- Guest Name",
-            left: 195,
-            top: 220,
+            left: 196,
+            top: 330,
             originX: "center",
             width: 300,
             fontFamily: "Cormorant Garamond",
-            fontSize: 14,
-            fontStyle: "italic",
+            fontSize: 13,
             textAlign: "center",
-            fill: "#8B6914",
+            fill: EL_.gold,
           },
-          { type: "guestbookNav", key: "prev", direction: "prev", left: 168, top: 262 },
-          { type: "guestbookNav", key: "next", direction: "next", left: 222, top: 262 },
+          { type: "guestbookNav", key: "prev", direction: "prev", left: 169, top: 380 },
+          { type: "guestbookNav", key: "next", direction: "next", left: 223, top: 380 },
         ],
       },
 
@@ -1987,68 +2337,74 @@ export const templates: Record<string, TemplateDefinition> = {
         id: "prayer",
         name: "Prayer",
         elements: [
+          elConceptPanel(1.3, 1.4),
+          elOrnamentRing(1.3, 1.4),
           {
             type: "text",
             key: "title",
             text: "Doa",
-            left: 198,
-            top: 70,
+            left: 196,
+            top: 225,
             originX: "center",
-            width: 320,
+            width: 300,
             fontFamily: "Cormorant Garamond",
-            fontSize: 40,
+            fontSize: 26,
+            fontWeight: "bold",
             textAlign: "center",
-            fill: "#8B6914",
+            fill: EL_.deep,
           },
           {
             type: "text",
             key: "body",
-            text: "Ya Allah, kami panjatkan doa agar majlis ini\ndipayungi rahmat-Mu,\ndilimpahi keberkatan,\ndan menjadi permulaan bagi satu ikatan yang\nabadi serta diredhai sampai ke syurga.",
-            left: 198,
-            top: 160,
+            text: "Ya Allah, kami panjatkan doa agar majlis ini\ndipayungi rahmat-Mu, dilimpahi keberkatan,\ndan menjadi permulaan bagi satu ikatan yang\nabadi serta diredhai sampai ke syurga.",
+            left: 196,
+            top: 300,
             originX: "center",
-            width: 330,
+            width: 320,
             fontFamily: "Cormorant Garamond",
-            fontSize: 16,
-            lineHeight: 1.7,
+            fontSize: 12,
+            lineHeight: 1.6,
             textAlign: "center",
-            fill: "#8B6914",
+            fill: EL_.deep,
           },
           {
             type: "text",
             key: "hashtag",
             text: "#WhenAMMetPM",
-            left: 198,
-            top: 400,
+            left: 196,
+            top: 390,
             originX: "center",
-            width: 320,
-            fontFamily: "Great Vibes",
-            fontSize: 22,
+            width: 300,
+            fontFamily: "Cormorant Garamond",
+            fontSize: 14,
+            fontStyle: "italic",
             textAlign: "center",
-            fill: "#8B6914",
+            fill: EL_.gold,
           },
           {
             type: "text",
             key: "credit",
             text: "Made for your special day by",
-            left: 198,
-            top: 470,
+            left: 196,
+            top: 440,
             originX: "center",
             width: 300,
-            fontFamily: "Montserrat",
+            fontFamily: "Cormorant Garamond",
             fontSize: 10,
             textAlign: "center",
-            fill: "#8B6914",
+            fill: EL_.deep,
           },
           {
             type: "image",
             key: "submark",
             asset: "Logo/Vi-Up Submark.png",
-            left: 198,
-            top: 510,
+            // 1296x1115 at the 31px the source's inline style renders it.
+            left: 196,
+            top: 472,
             originX: "center",
-            scaleX: 0.035,
-            scaleY: 0.035,
+            originY: "center",
+            scaleX: 31 / 1296,
+            scaleY: 31 / 1296,
           },
         ],
       },
@@ -2076,17 +2432,23 @@ export const templates: Record<string, TemplateDefinition> = {
   // The art is authored as full-page 1080x1920 layers at exactly the artboard's
   // 9:16 ratio, so they drop in full-bleed at 396/1080 (see cvFullBleed).
   //
+  // Every content page is the velvet sheet plus the source's own double gold
+  // rule — cvVelvetSheet() + cvBorderFrame(). Border Flower/7.png, the floral
+  // wreath, belongs to the lighter templates and is NOT part of this design.
+  //
   // NOT USED, because the manifest reports them missing on disk — referencing
   // one would only produce a "[TemplateAsset] Unable to load" warning:
-  //   Border Flower/PAPER.png (the top-level PAPER.png below is present),
-  //   waze_btn.png, YOUR_FLORAL_IMAGE.png, fonts/Alice-{regular,bold}.otf.
+  //   Border Flower/PAPER.png, waze_btn.png, YOUR_FLORAL_IMAGE.png,
+  //   fonts/Alice-{regular,bold}.otf.
+  // NOT USED by choice: PAPER.png (present, but a cream wash on a crimson
+  // design) and Bordeline.svg (drawn as rects instead — see cvBorderFrame).
   // ═══════════════════════════════════════════════════════════════════════
   crimsonVelvet: {
     id: "crimson-velvet",
     name: "Crimson Velvet",
     slug: "crimson-velvet",
     description:
-      "Nine-page invitation in deep crimson velvet and gold: a wax-sealed envelope, floral-framed pages, itinerary, gallery and guestbook. Media is hosted on vi-up.com.",
+      "Nine-page invitation in deep crimson velvet and gold: a wax-sealed envelope, gold-ruled pages on the velvet sheet, itinerary, gallery and guestbook. Media is hosted on vi-up.com.",
     category: "wedding",
     version: "1.0.0",
     assetProvider: "ifastnet",
@@ -2097,7 +2459,7 @@ export const templates: Record<string, TemplateDefinition> = {
     canvas: {
       width: 396,
       height: 704,
-      background: CV.cream,
+      background: CV.crimson,
     },
     // Descriptive only — the footer features are event-data driven and wired
     // globally, not per template. See TemplateFeatureHints.
@@ -2163,9 +2525,9 @@ export const templates: Record<string, TemplateDefinition> = {
             top: 365,
             originX: "center",
             originY: "center",
-            // 1254px square down to 100px.
-            scaleX: 0.08,
-            scaleY: 0.08,
+            // 1254px square down to 120x120.
+            scaleX: 120 / 1254,
+            scaleY: 120 / 1254,
           },
           {
             type: "text",
@@ -2187,22 +2549,23 @@ export const templates: Record<string, TemplateDefinition> = {
       {
         id: "invitation",
         name: "Invitation",
-        background: CV.cream,
+        background: CV.crimson,
         elements: [
-          cvFullBleed("frame", "Border Flower/7.png", { selectable: false, locked: true }),
+          cvVelvetSheet(),
+          ...cvBorderFrame(),
           {
             type: "text",
             key: "intro",
             text: "With hearts full of gratitude,\nwe invite you to celebrate our wedding",
-            left: 200,
-            top: 200,
+            left: 198,
+            top: 170,
             originX: "center",
-            width: 210,
+            width: 284,
             fontFamily: "Alegreya",
             fontSize: 13,
             lineHeight: 1.5,
             textAlign: "center",
-            fill: CV.muted,
+            fill: CV.creamMuted,
           },
           // The couple's names as EDITABLE text rather than the template's
           // baked-in "B&G.svg" wordmark — the first thing anyone using this
@@ -2212,55 +2575,55 @@ export const templates: Record<string, TemplateDefinition> = {
             type: "text",
             key: "couple",
             text: "Bride & Groom",
-            left: 200,
-            top: 268,
+            left: 198,
+            top: 250,
             originX: "center",
-            width: 220,
+            width: 284,
             fontFamily: "Great Vibes",
             fontSize: 34,
             lineHeight: 1.2,
             textAlign: "center",
-            fill: CV.gold,
+            fill: CV.goldLight,
           },
           {
             type: "text",
             key: "date",
             text: "26 June 2026  |  Sunday",
-            left: 200,
-            top: 348,
+            left: 198,
+            top: 336,
             originX: "center",
-            width: 210,
+            width: 284,
             fontFamily: "Montserrat",
             fontSize: 10,
             charSpacing: 120,
             textAlign: "center",
-            fill: CV.gold,
+            fill: CV.goldLight,
           },
           {
             type: "text",
             key: "venue",
             text: "Neverleave Island Resort",
-            left: 200,
-            top: 378,
+            left: 198,
+            top: 366,
             originX: "center",
-            width: 210,
+            width: 284,
             fontFamily: "Alegreya",
             fontSize: 15,
             textAlign: "center",
-            fill: CV.ink,
+            fill: CV.cream,
           },
           {
             type: "text",
             key: "hashtag",
             text: "#SendItOut",
-            left: 200,
+            left: 198,
             top: 470,
             originX: "center",
-            width: 210,
+            width: 284,
             fontFamily: "Alex Brush",
             fontSize: 22,
             textAlign: "center",
-            fill: CV.gold,
+            fill: CV.goldLight,
           },
         ],
       },
@@ -2269,15 +2632,16 @@ export const templates: Record<string, TemplateDefinition> = {
       {
         id: "parents",
         name: "Hosts",
-        background: CV.cream,
+        background: CV.crimson,
         elements: [
-          cvFullBleed("frame", "Border Flower/7.png", { selectable: false, locked: true }),
+          cvVelvetSheet(),
+          ...cvBorderFrame(),
           {
             type: "image",
             key: "monogram",
             asset: "BG_Monogram.png",
-            left: 200,
-            top: 232,
+            left: 198,
+            top: 158,
             originX: "center",
             originY: "center",
             // 9386x14880 down to roughly 56x89.
@@ -2288,68 +2652,68 @@ export const templates: Record<string, TemplateDefinition> = {
             type: "text",
             key: "greeting",
             text: "With Love and Gratitude",
-            left: 200,
-            top: 292,
+            left: 198,
+            top: 228,
             originX: "center",
-            width: 210,
+            width: 284,
             fontFamily: "Montserrat",
             fontSize: 10,
             charSpacing: 140,
             textAlign: "center",
-            fill: CV.gold,
+            fill: CV.goldLight,
           },
           {
             type: "text",
             key: "host-1",
             text: "Bride",
-            left: 200,
-            top: 318,
+            left: 198,
+            top: 258,
             originX: "center",
-            width: 210,
+            width: 284,
             fontFamily: "Playfair Display",
             fontSize: 18,
             textAlign: "center",
-            fill: CV.ink,
+            fill: CV.cream,
           },
           {
             type: "text",
             key: "amp",
             text: "&",
-            left: 200,
-            top: 348,
+            left: 198,
+            top: 292,
             originX: "center",
-            width: 210,
+            width: 284,
             fontFamily: "Great Vibes",
             fontSize: 24,
             textAlign: "center",
-            fill: CV.gold,
+            fill: CV.goldLight,
           },
           {
             type: "text",
             key: "host-2",
             text: "Groom",
-            left: 200,
-            top: 384,
+            left: 198,
+            top: 328,
             originX: "center",
-            width: 210,
+            width: 284,
             fontFamily: "Playfair Display",
             fontSize: 18,
             textAlign: "center",
-            fill: CV.ink,
+            fill: CV.cream,
           },
           {
             type: "text",
             key: "invite-text",
             text: "“Together with their families, we warmly invite you to join us in celebrating the wedding of our beloved couple. Your presence would bring joy and meaning to this special day.”",
-            left: 200,
-            top: 448,
+            left: 198,
+            top: 420,
             originX: "center",
-            width: 210,
+            width: 284,
             fontFamily: "Alegreya",
             fontSize: 12,
             lineHeight: 1.5,
             textAlign: "center",
-            fill: CV.muted,
+            fill: CV.creamMuted,
           },
         ],
       },
@@ -2358,19 +2722,20 @@ export const templates: Record<string, TemplateDefinition> = {
       {
         id: "eventDetails",
         name: "Event Details",
-        background: CV.cream,
+        background: CV.crimson,
         elements: [
-          cvFullBleed("frame", "Border Flower/7.png", { selectable: false, locked: true }),
-          cvHeading("DATE", 192),
-          cvBody("26 June 2026", 212),
-          cvHeading("TIME", 254),
-          cvBody("9.00 AM – 2.00 PM", 274),
-          cvHeading("VENUE", 316),
-          cvBody("Neverleave Island Resort", 336),
-          cvHeading("DRESS CODE", 380),
+          cvVelvetSheet(),
+          ...cvBorderFrame(),
+          cvHeading("DATE", 150),
+          cvBody("26 June 2026", 172),
+          cvHeading("TIME", 218),
+          cvBody("9.00 AM – 2.00 PM", 240),
+          cvHeading("VENUE", 286),
+          cvBody("Neverleave Island Resort", 308),
+          cvHeading("DRESS CODE", 356),
           cvBody(
             "Wear something nice, comfy, and wedding-photo approved. No pressure, but the camera will remember everything.",
-            430,
+            406,
             12,
           ),
         ],
@@ -2380,28 +2745,29 @@ export const templates: Record<string, TemplateDefinition> = {
       {
         id: "itinerary",
         name: "Itinerary",
-        background: CV.cream,
+        background: CV.crimson,
         elements: [
-          cvFullBleed("frame", "Border Flower/7.png", { selectable: false, locked: true }),
+          cvVelvetSheet(),
+          ...cvBorderFrame(),
           {
             type: "text",
             key: "title",
             text: "Itinerary",
-            left: 200,
-            top: 196,
+            left: 198,
+            top: 150,
             originX: "center",
-            width: 210,
+            width: 284,
             fontFamily: "Playfair Display",
             fontSize: 22,
             textAlign: "center",
-            fill: CV.crimson,
+            fill: CV.goldLight,
           },
-          ...cvItineraryRow("9.00 AM", "Guest arrival", 248),
-          ...cvItineraryRow("9.30 AM", "Wedding ceremony", 288),
-          ...cvItineraryRow("10.00 AM", "Light refreshments", 328),
-          ...cvItineraryRow("11.30 AM", "Couple’s entrance", 368),
-          ...cvItineraryRow("12.00 PM", "Lunch begins", 408),
-          ...cvItineraryRow("2.00 PM", "Event concludes", 448),
+          ...cvItineraryRow("9.00 AM", "Guest arrival", 214),
+          ...cvItineraryRow("9.30 AM", "Wedding ceremony", 262),
+          ...cvItineraryRow("10.00 AM", "Light refreshments", 310),
+          ...cvItineraryRow("11.30 AM", "Couple’s entrance", 358),
+          ...cvItineraryRow("12.00 PM", "Lunch begins", 406),
+          ...cvItineraryRow("2.00 PM", "Event concludes", 454),
         ],
       },
 
@@ -2411,21 +2777,22 @@ export const templates: Record<string, TemplateDefinition> = {
       {
         id: "countdown",
         name: "Counting Days",
-        background: CV.cream,
+        background: CV.crimson,
         elements: [
-          cvFullBleed("frame", "Border Flower/7.png", { selectable: false, locked: true }),
+          cvVelvetSheet(),
+          ...cvBorderFrame(),
           {
             type: "text",
             key: "title",
             text: "Counting Days",
-            left: 200,
-            top: 200,
+            left: 198,
+            top: 250,
             originX: "center",
-            width: 210,
+            width: 284,
             fontFamily: "Playfair Display",
             fontSize: 22,
             textAlign: "center",
-            fill: CV.crimson,
+            fill: CV.goldLight,
           },
           {
             type: "countdownBox",
@@ -2433,12 +2800,12 @@ export const templates: Record<string, TemplateDefinition> = {
             label: "Day",
             value: "00",
             // `top` shifts the whole box; the stock parts keep their offsets.
-            top: 296,
+            top: 360,
             left: 120,
             width: 46,
             height: 70,
             // originX centre on the box makes it share the label's and value's
-            // anchor, so all three line up inside the narrow floral opening.
+            // anchor, so all three line up across the row.
             box: { originX: "center", fill: "#ece2d8", rx: 8, ry: 8 },
             labelStyle: { width: 46, fontSize: 10, fill: CV.muted, fontFamily: "Montserrat" },
             valueStyle: { width: 46, fontSize: 18, fill: CV.crimson, fontFamily: "Playfair Display" },
@@ -2449,12 +2816,12 @@ export const templates: Record<string, TemplateDefinition> = {
             label: "Hour",
             value: "00",
             // `top` shifts the whole box; the stock parts keep their offsets.
-            top: 296,
+            top: 360,
             left: 172,
             width: 46,
             height: 70,
             // originX centre on the box makes it share the label's and value's
-            // anchor, so all three line up inside the narrow floral opening.
+            // anchor, so all three line up across the row.
             box: { originX: "center", fill: "#ece2d8", rx: 8, ry: 8 },
             labelStyle: { width: 46, fontSize: 10, fill: CV.muted, fontFamily: "Montserrat" },
             valueStyle: { width: 46, fontSize: 18, fill: CV.crimson, fontFamily: "Playfair Display" },
@@ -2465,12 +2832,12 @@ export const templates: Record<string, TemplateDefinition> = {
             label: "Minute",
             value: "00",
             // `top` shifts the whole box; the stock parts keep their offsets.
-            top: 296,
+            top: 360,
             left: 224,
             width: 46,
             height: 70,
             // originX centre on the box makes it share the label's and value's
-            // anchor, so all three line up inside the narrow floral opening.
+            // anchor, so all three line up across the row.
             box: { originX: "center", fill: "#ece2d8", rx: 8, ry: 8 },
             labelStyle: { width: 46, fontSize: 10, fill: CV.muted, fontFamily: "Montserrat" },
             valueStyle: { width: 46, fontSize: 18, fill: CV.crimson, fontFamily: "Playfair Display" },
@@ -2481,12 +2848,12 @@ export const templates: Record<string, TemplateDefinition> = {
             label: "Second",
             value: "00",
             // `top` shifts the whole box; the stock parts keep their offsets.
-            top: 296,
+            top: 360,
             left: 276,
             width: 46,
             height: 70,
             // originX centre on the box makes it share the label's and value's
-            // anchor, so all three line up inside the narrow floral opening.
+            // anchor, so all three line up across the row.
             box: { originX: "center", fill: "#ece2d8", rx: 8, ry: 8 },
             labelStyle: { width: 46, fontSize: 10, fill: CV.muted, fontFamily: "Montserrat" },
             valueStyle: { width: 46, fontSize: 18, fill: CV.crimson, fontFamily: "Playfair Display" },
@@ -2502,8 +2869,10 @@ export const templates: Record<string, TemplateDefinition> = {
       {
         id: "gallery",
         name: "Gallery",
-        background: CV.cream,
+        background: CV.crimson,
         elements: [
+          cvVelvetSheet(),
+          ...cvBorderFrame(),
           {
             type: "text",
             key: "title",
@@ -2515,7 +2884,7 @@ export const templates: Record<string, TemplateDefinition> = {
             fontFamily: "Playfair Display",
             fontSize: 24,
             textAlign: "center",
-            fill: CV.crimson,
+            fill: CV.goldLight,
           },
           {
             type: "gallerySlot",
@@ -2553,51 +2922,46 @@ export const templates: Record<string, TemplateDefinition> = {
       {
         id: "guestbook",
         name: "Guestbook",
-        background: CV.cream,
+        background: CV.crimson,
         elements: [
-          {
-            type: "image",
-            key: "paper",
-            asset: "PAPER.png",
-            left: 450,
-            top: 312,
-            originX: "center",
-            scaleX: 0.3,
-            scaleY: 0.3,
-          },
+          // The velvet, like every other page. The template also ships a cream
+          // PAPER.png wash for this page, but on a crimson design it reads as a
+          // sheet of paper dropped over the invitation, so it is left out.
+          cvVelvetSheet(),
+          ...cvBorderFrame(),
           {
             type: "text",
             key: "title",
             text: "Guestbook",
-            left: 195,
+            left: 198,
             top: 60,
             originX: "center",
             width: 290,
             fontFamily: "Playfair Display",
             fontSize: 24,
             textAlign: "center",
-            fill: CV.crimson,
+            fill: CV.goldLight,
           },
           {
             type: "text",
             key: "message",
             name: "guestMessage",
             text: "“Your wishes will appear here...”",
-            left: 195,
+            left: 198,
             top: 150,
             originX: "center",
             width: 300,
             fontFamily: "Alegreya",
             fontSize: 16,
             textAlign: "center",
-            fill: CV.ink,
+            fill: CV.cream,
           },
           {
             type: "text",
             key: "sender",
             name: "guestSender",
             text: "- Guest Name",
-            left: 195,
+            left: 198,
             top: 220,
             originX: "center",
             width: 300,
@@ -2605,10 +2969,10 @@ export const templates: Record<string, TemplateDefinition> = {
             fontSize: 14,
             fontStyle: "italic",
             textAlign: "center",
-            fill: CV.muted,
+            fill: CV.creamMuted,
           },
-          { type: "guestbookNav", key: "prev", direction: "prev", left: 168, top: 262 },
-          { type: "guestbookNav", key: "next", direction: "next", left: 222, top: 262 },
+          { type: "guestbookNav", key: "prev", direction: "prev", left: 171, top: 262 },
+          { type: "guestbookNav", key: "next", direction: "next", left: 225, top: 262 },
         ],
       },
 
@@ -2616,67 +2980,68 @@ export const templates: Record<string, TemplateDefinition> = {
       {
         id: "prayer",
         name: "Prayer",
-        background: CV.cream,
+        background: CV.crimson,
         elements: [
-          cvFullBleed("frame", "Border Flower/7.png", { selectable: false, locked: true }),
+          cvVelvetSheet(),
+          ...cvBorderFrame(),
           {
             type: "text",
             key: "title",
             text: "Prayer",
-            left: 200,
-            top: 196,
+            left: 198,
+            top: 168,
             originX: "center",
-            width: 210,
+            width: 284,
             fontFamily: "Playfair Display",
             fontSize: 26,
             textAlign: "center",
-            fill: CV.crimson,
+            fill: CV.goldLight,
           },
           {
             type: "text",
             key: "body",
             text: "Semoga Allah melimpahkan\nkeberkahan kepadamu dan\nkeberkahan atas pernikahanmu,\nserta mengumpulkan kalian\nberdua dalam kebaikan",
-            left: 200,
-            top: 290,
+            left: 198,
+            top: 268,
             originX: "center",
-            width: 210,
+            width: 284,
             fontFamily: "Alegreya",
             fontSize: 14,
             lineHeight: 1.6,
             textAlign: "center",
-            fill: CV.ink,
+            fill: CV.cream,
           },
           {
             type: "text",
             key: "hashtag",
             text: "#SendItOut",
-            left: 200,
+            left: 198,
             top: 396,
             originX: "center",
-            width: 210,
+            width: 284,
             fontFamily: "Alex Brush",
             fontSize: 22,
             textAlign: "center",
-            fill: CV.gold,
+            fill: CV.goldLight,
           },
           {
             type: "text",
             key: "credit",
             text: "Made for your special day by",
-            left: 200,
+            left: 198,
             top: 452,
             originX: "center",
-            width: 210,
+            width: 284,
             fontFamily: "Montserrat",
             fontSize: 9,
             textAlign: "center",
-            fill: CV.muted,
+            fill: CV.creamMuted,
           },
           {
             type: "image",
             key: "submark",
             asset: "Logo/Vi-Up Submark.png",
-            left: 200,
+            left: 198,
             top: 478,
             originX: "center",
             scaleX: 0.03,
@@ -3404,7 +3769,8 @@ export const templates: Record<string, TemplateDefinition> = {
   //   Alice, which the app loads from Google Fonts, so those cost nothing.
   // NOT USED for the SVG reason in this file's header: B&G.svg (the source's
   //   couple wordmark), ornament border1.svg and bismillah.svg all declare only
-  //   a viewBox and would render as a stretched top-left crop. The wordmark is
+  //   a viewBox and would render as a stretched top-left crop. The border that
+  //   ornament SVG carries is drawn as rects instead — see spBorderFrame(). The wordmark is
   //   authored as editable Alex Brush text instead, which is better anyway —
   //   the customer can type their own names. Text-Logo/Da_intial_small.svg DOES
   //   carry width/height (23x26) and is used, at the 23px the source renders it.
@@ -3416,7 +3782,7 @@ export const templates: Record<string, TemplateDefinition> = {
     name: "Sepia Paper",
     slug: "sepia-paper",
     description:
-      "Nine-page invitation on warm sepia kraft paper: a classic wax-sealed envelope, script date line, hosts, itinerary, countdown, gallery and guestbook. Media is hosted on vi-up.com.",
+      "Nine-page invitation on warm sepia kraft paper inside a double gold rule: a classic wax-sealed envelope, script date line, hosts, itinerary, countdown, gallery and guestbook. Media is hosted on vi-up.com.",
     category: "wedding",
     version: "1.0.0",
     assetProvider: "ifastnet",
@@ -3548,6 +3914,7 @@ export const templates: Record<string, TemplateDefinition> = {
         background: SP_.paper,
         elements: [
           spFullBleed("paper", "HD_Classic Paper.png", { selectable: false, locked: true }),
+          ...spBorderFrame(),
           {
             type: "text",
             key: "couple",
@@ -3640,6 +4007,7 @@ export const templates: Record<string, TemplateDefinition> = {
         background: SP_.paper,
         elements: [
           spFullBleed("paper", "HD_Classic Paper.png", { selectable: false, locked: true }),
+          ...spBorderFrame(),
           {
             type: "text",
             key: "greeting",
@@ -3762,6 +4130,7 @@ export const templates: Record<string, TemplateDefinition> = {
         background: SP_.paper,
         elements: [
           spFullBleed("paper", "HD_Classic Paper.png", { selectable: false, locked: true }),
+          ...spBorderFrame(),
           spHeading("Date", 120),
           spBody("26 April 2026", 148),
           spHeading("Time", 210),
@@ -3786,6 +4155,7 @@ export const templates: Record<string, TemplateDefinition> = {
         background: SP_.paper,
         elements: [
           spFullBleed("paper", "HD_Classic Paper.png", { selectable: false, locked: true }),
+          ...spBorderFrame(),
           {
             type: "text",
             key: "title",
@@ -3833,6 +4203,7 @@ export const templates: Record<string, TemplateDefinition> = {
         background: SP_.paper,
         elements: [
           spFullBleed("paper", "HD_Classic Paper.png", { selectable: false, locked: true }),
+          ...spBorderFrame(),
           {
             type: "text",
             key: "title",
@@ -3915,6 +4286,8 @@ export const templates: Record<string, TemplateDefinition> = {
         name: "Gallery",
         background: SP_.paper,
         elements: [
+          spFullBleed("paper", "HD_Classic Paper.png", { selectable: false, locked: true }),
+          ...spBorderFrame(),
           {
             type: "text",
             key: "title",
@@ -3979,6 +4352,7 @@ export const templates: Record<string, TemplateDefinition> = {
             scaleX: 0.3,
             scaleY: 0.3,
           },
+          ...spBorderFrame(),
           {
             type: "text",
             key: "title",
@@ -4027,16 +4401,16 @@ export const templates: Record<string, TemplateDefinition> = {
       },
 
       // ── 9. Prayer / closing ─────────────────────────────────────────────
-      // The one page that uses Border Flower/7.png — the floral sheet the
-      // source's stylesheet pulls in as a background — instead of the plain
-      // kraft paper, to close the invitation on the template's one piece of
-      // colour. Same 1080x1920 frame, so the same full-bleed scale.
+      // The same kraft sheet and rule as every other page. It used to be the
+      // odd one out, closing the invitation on Border Flower/7.png — the floral
+      // sheet from the lighter templates — which broke the run.
       {
         id: "prayer",
         name: "Prayer",
         background: SP_.paper,
         elements: [
-          spFullBleed("frame", "Border Flower/7.png", { selectable: false, locked: true }),
+          spFullBleed("paper", "HD_Classic Paper.png", { selectable: false, locked: true }),
+          ...spBorderFrame(),
           {
             type: "text",
             key: "title",

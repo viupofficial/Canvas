@@ -403,6 +403,12 @@ const generateICS = (event: any, loc?: any) => {
                 <div className={`contact-card contact-popup ${fadeCls}`}>
                     <h3 className="center">{cardText.contactTitle}</h3>
 
+                    {/* Small print under the heading — off unless the host turns
+                        it on, then their wording or the default sentence. */}
+                    {cardText.contactNoteEnabled && (
+                      <p className="card-note">{cardText.contactNote}</p>
+                    )}
+
                     {contacts.length > 0 ? (
   contacts.map((c, i) => (
     <div key={i} className="contact-person">
@@ -932,6 +938,10 @@ const generateICS = (event: any, loc?: any) => {
                                 {cardText.calendarTitle}
                             </h2>
 
+                            {cardText.calendarNoteEnabled && (
+                              <p className="card-note">{cardText.calendarNote}</p>
+                            )}
+
                             {/* Dynamic event title from the Calendar sidebar. */}
                             {calendar?.title?.trim() && (
                               <p style={{
@@ -1040,6 +1050,10 @@ const generateICS = (event: any, loc?: any) => {
                             }}>
                                 {cardText.locationTitle}
                             </h2>
+
+                            {cardText.locationNoteEnabled && (
+                              <p className="card-note">{cardText.locationNote}</p>
+                            )}
 
                             <p style={{
                                 textAlign: "center",

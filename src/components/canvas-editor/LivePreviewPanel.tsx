@@ -47,9 +47,27 @@ export default function LivePreviewPanel({ activeTab }: { activeTab: PreviewTab 
         }`}
         style={{ minHeight: 220 }}
       >
-        {activeTab === "contact" && <ContactCard contacts={contacts} title={cardText.contactTitle} />}
-        {activeTab === "location" && <LocationCard location={location} title={cardText.locationTitle} />}
-        {activeTab === "calendar" && <CalendarCard calendar={calendar} title={cardText.calendarTitle} />}
+        {activeTab === "contact" && (
+          <ContactCard
+            contacts={contacts}
+            title={cardText.contactTitle}
+            note={cardText.contactNoteEnabled ? cardText.contactNote : null}
+          />
+        )}
+        {activeTab === "location" && (
+          <LocationCard
+            location={location}
+            title={cardText.locationTitle}
+            note={cardText.locationNoteEnabled ? cardText.locationNote : null}
+          />
+        )}
+        {activeTab === "calendar" && (
+          <CalendarCard
+            calendar={calendar}
+            title={cardText.calendarTitle}
+            note={cardText.calendarNoteEnabled ? cardText.calendarNote : null}
+          />
+        )}
         {activeTab === "money" && <GiftCard moneyGift={moneyGift} cardText={cardText} />}
         {activeTab === "rsvp" && <RSVPCard rsvpConfig={rsvpConfig} />}
       </div>
@@ -57,13 +75,25 @@ export default function LivePreviewPanel({ activeTab }: { activeTab: PreviewTab 
   );
 }
 
-function CardFrame({ title, children }: { title: string; children: React.ReactNode }) {
+function CardFrame({
+  title,
+  note,
+  children,
+}: {
+  title: string;
+  // The host's small print, already gated on its toggle — null ⇒ no note.
+  note?: string | null;
+  children: React.ReactNode;
+}) {
   return (
     <div
       className="bg-white rounded-[14px] p-3 shadow-sm"
       style={{ fontFamily: "Montserrat, sans-serif" }}
     >
       <h4 className="text-[13px] font-bold text-center text-[#191212] mb-2">{title}</h4>
+      {note && (
+        <p className="text-[9px] italic leading-snug text-center text-[#7D5B59] mb-2">{note}</p>
+      )}
       {children}
     </div>
   );
@@ -72,13 +102,15 @@ function CardFrame({ title, children }: { title: string; children: React.ReactNo
 function ContactCard({
   contacts,
   title,
+  note,
 }: {
   contacts: { name: string; phone: string }[];
   title: string;
+  note?: string | null;
 }) {
   const list = contacts.length ? contacts : [{ name: "—", phone: "" }];
   return (
-    <CardFrame title={title}>
+    <CardFrame title={title} note={note}>
       <div className="flex flex-col gap-2">
         {list.map((c, i) => (
           <div
@@ -99,13 +131,21 @@ function ContactCard({
   );
 }
 
-function LocationCard({ location, title }: { location: LocationData; title: string }) {
+function LocationCard({
+  location,
+  title,
+  note,
+}: {
+  location: LocationData;
+  title: string;
+  note?: string | null;
+}) {
   const address = location?.address || "Enter a location";
   const mapSrc = location?.address
     ? `https://www.google.com/maps?q=${encodeURIComponent(location.address)}&output=embed`
     : "";
   return (
-    <CardFrame title={title}>
+    <CardFrame title={title} note={note}>
       <p className="text-[11px] text-center text-[#191212] mb-2 break-words">{address}</p>
       {mapSrc ? (
         <iframe
@@ -123,9 +163,17 @@ function LocationCard({ location, title }: { location: LocationData; title: stri
   );
 }
 
-function CalendarCard({ calendar, title }: { calendar: CalendarData; title: string }) {
+function CalendarCard({
+  calendar,
+  title,
+  note,
+}: {
+  calendar: CalendarData;
+  title: string;
+  note?: string | null;
+}) {
   return (
-    <CardFrame title={title}>
+    <CardFrame title={title} note={note}>
       <p className="text-[11px] text-center text-[#191212] font-semibold mb-1">
         {calendar?.date ? formatDate(calendar.date) : "Select a date"}
       </p>
@@ -192,12 +240,10 @@ function GiftCard({
     ),
   );
   return (
-    <CardFrame title={cardText.giftTitle}>
-      {cardText.giftNoteEnabled && (
-        <p className="text-[9px] italic leading-snug text-center text-[#7D5B59] mb-2">
-          {cardText.giftNote}
-        </p>
-      )}
+    <CardFrame
+      title={cardText.giftTitle}
+      note={cardText.giftNoteEnabled ? cardText.giftNote : null}
+    >
       {/* Same swipeable gallery as the invitation footer, at panel scale. */}
       <GiftCarousel slides={slides} itemLabel="account" />
     </CardFrame>

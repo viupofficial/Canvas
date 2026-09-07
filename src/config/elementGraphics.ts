@@ -48,7 +48,7 @@ export type ElementGraphicGroupName = "Classic" | "Royal" | "Floral" | "Backgrou
 const CLASSIC_SOURCE: TemplateAssetContext = "/";
 
 /**
- * The Tunku Ismail x Farah Elise media folder on vi-up.com. Spelled here rather
+ * The Eloise media folder on vi-up.com. Spelled here rather
  * than imported from `templates` so the Elements panel does not pull the whole
  * template registry in; it must stay in step with that template's
  * assetProvider/remoteTemplateId.

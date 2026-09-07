@@ -35,7 +35,7 @@ import {
 const GALLERY_STARTER_COUNT = getGalleryStarterCount();
 import { useEventDataOptional, type MaxPaxComboKey } from "@/src/store/EventDataContext";
 import { useFabricEventSync } from "@/src/hooks/useFabricEventSync";
-import { FONT_GROUPS, loadGoogleFont, collectFontFamilies, preloadFonts } from "@/src/lib/fonts";
+import { FONT_GROUPS, loadGoogleFont, collectFontFamilies, preloadFonts, remeasureTextForFonts } from "@/src/lib/fonts";
 import { downscaleImageFile } from "@/src/lib/imageDownscale";
 // Cheap to import: the MP3 encoder itself sits behind a dynamic import *inside*
 // optimizeAudioFile, so it only downloads when a music file is actually picked.
@@ -1244,13 +1244,22 @@ const [currentPage, setCurrentPage] = useState(0);
       // Same triggers let page-scoped panels (e.g. Background) re-read state.
       onContentReplacedRef.current?.();
       onDone?.();
-      // Webfonts referenced by the loaded design may not be ready yet; once they
-      // are, repaint so text is measured/rendered against the real face.
+      // Webfonts referenced by the loaded design are usually NOT ready when the
+      // page is first painted (a reload starts with an empty font cache), so
+      // this text has just been measured against the fallback serif. A plain
+      // repaint does not undo that: Fabric keeps the fallback's character widths
+      // and the fallback's line breaks, which is how a name the host had sitting
+      // on one line comes back wrapped onto two after a refresh. Re-measure
+      // properly once the real faces land.
       const families = collectFontFamilies(json);
       if (families.length) {
-        preloadFonts(families).then(() => {
-          fabricRef.current?.requestRenderAll();
-        });
+        const repaint = () =>
+          remeasureTextForFonts(fabricModuleRef.current, fabricRef.current, families);
+        preloadFonts(families).then(repaint);
+        // Safety net: faces we did not explicitly ask for (extra weights) can
+        // land after preloadFonts resolves — re-measure once more when the
+        // document's font loading has fully settled.
+        (document as any).fonts?.ready?.then?.(repaint);
       }
     };
 
@@ -1775,28 +1784,14 @@ const [currentPage, setCurrentPage] = useState(0);
       if (props.fontFamily && !isMulti) active.dirty = true;
       canvas.requestRenderAll();
       // A font-family change needs the webfont loaded, then a re-measure so the
-      // text box reflows against the real glyphs (Inspector path). Reflow every
-      // affected object — the single selection or each child of a multi-select.
+      // text reflows against the real glyphs (Inspector path). The family's
+      // cached character widths have to go first: if anything had already been
+      // measured in this family while the face was still loading, a bare
+      // initDimensions() would only re-use the fallback's numbers.
       if (props.fontFamily) {
-        loadGoogleFont(props.fontFamily).then(() => {
-          const reflow = (o: any) => {
-            if (o && o.fontFamily === props.fontFamily) {
-              // Chromium caches font resolution per 2D context and font string:
-              // a cache canvas that painted the fallback while the webfont was
-              // still in flight keeps resolving to the fallback forever. Drop
-              // the cache canvas so fabric creates a fresh context that picks
-              // up the now-loaded face.
-              o._cacheCanvas = undefined;
-              o._cacheContext = undefined;
-              o.initDimensions?.();
-              o.dirty = true;
-              o.setCoords?.();
-            }
-          };
-          const cur = canvas.getActiveObject() as any;
-          if (cur?.type === 'activeselection') (cur.getObjects?.() ?? []).forEach(reflow);
-          else reflow(cur);
-          canvas.requestRenderAll();
+        const family = props.fontFamily;
+        loadGoogleFont(family).then(() => {
+          remeasureTextForFonts(fabricModuleRef.current, canvas, [family]);
         });
       }
       pushSnapshot();
@@ -4128,15 +4123,11 @@ const [currentPage, setCurrentPage] = useState(0);
     c.requestRenderAll();
     setOverlay((prev) => (prev ? { ...prev, fontFamily: font } : prev));
     // Re-measure/repaint once the webfont is actually ready (Fabric otherwise
-    // lays the text out against the fallback face).
+    // lays the text out against the fallback face, and keeps those measurements
+    // cached under the family name until they are explicitly cleared).
     loadGoogleFont(font).then(() => {
-      const obj = c.getActiveObject();
-      if (obj && (obj as any).fontFamily === font) {
-        (obj as any).initDimensions?.();
-        obj.setCoords?.();
-        c.requestRenderAll();
-        updateOverlayFromActive();
-      }
+      remeasureTextForFonts(fabricModuleRef.current, c, [font]);
+      updateOverlayFromActive();
     });
     pushSnapshot();
     saveCurrentPage(currentPageRef.current);
@@ -4829,7 +4820,16 @@ const [currentPage, setCurrentPage] = useState(0);
       // Pages the user hasn't visited this session may reference fonts that were
       // never loaded; wait for them so offscreen text renders with the real face.
       const families = collectFontFamilies(wanted.map((i) => allPages[i]));
-      if (families.length) await preloadFonts(families);
+      if (families.length) {
+        await preloadFonts(families);
+        // Drop any character widths cached while those faces were still loading,
+        // or the offscreen pages are laid out — and exported — with the
+        // fallback's line breaks baked in.
+        for (const family of families) {
+          try { fabric?.cache?.clearFontCache?.(family); } catch {}
+          try { fabric?.util?.clearFabricFontCache?.(family); } catch {}
+        }
+      }
 
       // multiplier 2 keeps text crisp when the PDF page is viewed at full size.
       const multiplier = opts?.multiplier ?? 2;

@@ -219,6 +219,48 @@ export function collectFontFamilies(pageOrPages: any): string[] {
   return [...families];
 }
 
+/**
+ * Re-measure canvas text once its webfonts have arrived.
+ *
+ * Fabric caches per-character widths under the font-family NAME, so text that
+ * was measured while its webfont was still in flight is measured against the
+ * fallback face — and those numbers are what every later layout re-uses. The
+ * fallback's line breaks therefore survive the real font's arrival: a name the
+ * host sized to one line comes back wrapped onto two, and a plain repaint will
+ * not undo it. Fabric's own remedy (see cache.clearFontCache) is to drop the
+ * cache and call initDimensions(); the per-object cache canvas has to go with
+ * it, because Chromium resolves a font string once per 2D context and a canvas
+ * that painted the fallback keeps painting the fallback.
+ *
+ * `fabric` is the imported module namespace, `canvas` any Fabric canvas.
+ * Idempotent — call it as often as fonts settle.
+ */
+export function remeasureTextForFonts(
+  fabric: any,
+  canvas: { forEachObject: (cb: (obj: any) => void) => void; requestRenderAll: () => void } | null | undefined,
+  families: string[],
+): void {
+  if (!canvas || !families.length) return;
+  for (const family of families) {
+    // v6/7 expose cache.clearFontCache; v5 used util.clearFabricFontCache.
+    try { fabric?.cache?.clearFontCache?.(family); } catch {}
+    try { fabric?.util?.clearFabricFontCache?.(family); } catch {}
+  }
+  const refresh = (obj: any) => {
+    const type = String(obj?.type ?? "").toLowerCase();
+    if (type === "textbox" || type === "text" || type === "i-text") {
+      obj._cacheCanvas = undefined;
+      obj._cacheContext = undefined;
+      obj.initDimensions?.();
+      obj.dirty = true;
+      obj.setCoords?.();
+    }
+    (obj?._objects ?? []).forEach(refresh);
+  };
+  canvas.forEachObject(refresh);
+  canvas.requestRenderAll();
+}
+
 // Preload all fonts used by a design. Resolves when they're ready (or skipped).
 export function preloadFonts(families: string[]): Promise<void> {
   return Promise.all(families.map((f) => loadGoogleFont(f))).then(() => undefined);
