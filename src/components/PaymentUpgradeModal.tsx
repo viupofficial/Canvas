@@ -50,10 +50,19 @@ type PackageOption = {
 };
 
 const PACKAGES: PackageOption[] = [
-  { id: 1, label: "Basic", price: 35, blurb: "Essential invitation tools." },
-  { id: 2, label: "Standard", price: 70, blurb: "RSVP + a larger gallery." },
-  { id: 3, label: "Premium", price: 130, blurb: "Everything, unlimited." },
+  { id: 1, label: "Basic", price: 0, blurb: "Essential invitation tools." },
+  { id: 2, label: "Standard", price: 85, blurb: "RSVP + a larger gallery." },
+  { id: 3, label: "Premium", price: 200, blurb: "Everything, unlimited." },
 ];
+
+// WARNING: `price` is COSMETIC, exactly like PAYMENT_METHODS below. Nothing
+// here reaches Stripe — handleCheckout posts event_id / target_package_id /
+// source / return_to and nothing else, and create_upgrade_checkout.php prices
+// the session from target_package_id on its own. So these numbers set the
+// customer's expectation that the Stripe page then has to honour: if PHP still
+// charges the old amount, the customer sees one figure here and another at
+// checkout. Change both together.
+const formatPrice = (rm: number): string => (rm === 0 ? "Free" : `RM${rm}`);
 
 // Card only. FPX and E-Wallet were removed from this list deliberately.
 //
@@ -304,7 +313,7 @@ export default function PaymentUpgradeModal({
                               </span>
                             </span>
                             <span className="shrink-0 text-[15px] font-extrabold" style={{ color: BRAND }}>
-                              RM{pkg.price}
+                              {formatPrice(pkg.price)}
                             </span>
                           </button>
                         );
@@ -361,7 +370,7 @@ export default function PaymentUpgradeModal({
                     Total
                   </span>
                   <span className="text-[20px] font-extrabold" style={{ color: BRAND }}>
-                    RM{total}
+                    {formatPrice(total)}
                   </span>
                 </div>
 
@@ -395,7 +404,7 @@ export default function PaymentUpgradeModal({
                       className="flex-1 rounded-full px-5 py-2.5 text-[14px] font-bold text-white disabled:opacity-45 disabled:cursor-not-allowed"
                       style={{ backgroundColor: BRAND }}
                     >
-                      Checkout · RM{total}
+                      Checkout · {formatPrice(total)}
                     </button>
                   )}
                 </div>

@@ -107,7 +107,9 @@ export default function MobileToolbar({
 
         {/* Icon rail — every tool lives here; the row scrolls sideways rather
             than hiding the last few behind an overflow menu. */}
-        <div className="bg-white border-t border-[#EDE2DE] h-[var(--mobile-rail-h)]">
+        {/* --mobile-rail-h includes the bottom safe-area inset; padding keeps
+            the icons above it (iOS home indicator) instead of under it. */}
+        <div className="bg-white border-t border-[#EDE2DE] h-[var(--mobile-rail-h)] pb-[env(safe-area-inset-bottom,0px)]">
           <div
             className="flex items-center gap-0.5 p-2 h-full overflow-x-auto scroll-smooth"
             ref={scrollContainerRef}

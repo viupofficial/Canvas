@@ -956,7 +956,15 @@ function ProjectEditorInner({
     isEventMode || projectId ? (initialCanvasJson?.presentationMode ?? null) : null;
 
   return (
-    <main className="h-screen overflow-hidden bg-brand-cream">
+    // 100dvh, not 100vh (h-screen): on mobile Safari/Chrome the collapsible URL
+    // bar makes vh taller than what is actually on screen, so a 100vh shell puts
+    // its own bottom edge — and with it the artboard's event footer — below the
+    // visible area, while the phone tool rail stays pinned to the visible bottom
+    // and lands on top of the footer. dvh tracks the visible height, so the space
+    // the workspace reserves for the rail is the space the rail actually takes.
+    // h-screen stays as the fallback for browsers without dvh (the inline style
+    // is simply dropped there).
+    <main className="h-screen overflow-hidden bg-brand-cream" style={{ height: "100dvh" }}>
       <div className="w-full max-w-full mx-auto h-full flex flex-col">
         <EditorHeader
           editorRef={editorRef as React.RefObject<EditorHandle>}

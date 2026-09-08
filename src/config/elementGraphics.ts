@@ -160,6 +160,94 @@ const GRAPHIC_GROUPS: { name: ElementGraphicGroupName; items: ElementGraphicDef[
 ];
 
 /**
+ * Full-page sheets offered as ready-made BACKGROUNDS (Background tab →
+ * Picture), as opposed to the loose ornaments above. Same files, different job:
+ * the Elements tab drops one as a movable image OBJECT, while the Background
+ * tab sets it as the page background — behind everything, not selectable, and
+ * not nudgeable by accident.
+ *
+ * Kept as its own list rather than reusing the "Backgrounds" group above so the
+ * two panels can offer different sets without one quietly changing the other.
+ */
+type BackgroundPresetDef = ElementGraphicDef & {
+  /**
+   * How the Background tab should place it. Omitted means "cover", which is
+   * right for a full-page sheet authored on the artboard's own frame. A file
+   * with a different aspect ratio needs "contain", or covering would crop the
+   * parts that make it worth having.
+   */
+  fit?: "cover" | "contain" | "stretch";
+};
+
+const BACKGROUND_PRESETS: BackgroundPresetDef[] = [
+  // Ivory Decree's page sheet. Authored on the same 1080x1920 frame as the
+  // artboard, so it covers a page edge-to-edge with nothing cropped.
+  {
+    id: "bg-preset-ivory-damask",
+    label: "Ivory Damask",
+    asset: "HD_Vintage Floral.png",
+    source: IVORY_SOURCE,
+    cover: true,
+  },
+  // Crimson Velvet's page sheet WITH its gold frame burnt in — the one entry
+  // here that is not a file a template already ships, because no single remote
+  // file is this picture. A page has one background slot, so the velvet
+  // (Crimson Velvet.png) and the frame (the template's Bordeline.svg, which is
+  // a transparent outline) cannot both occupy it; this composites them at the
+  // sheet's native 1080x1920 instead. Generated from those two sources with
+  // cvBorderFrame()'s own geometry — see the note beside that helper in
+  // src/config/templates.ts if the frame ever has to be regenerated.
+  //
+  // JPEG, not PNG: nothing here needs alpha, and it costs 366KB against 3.5MB
+  // for the same picture losslessly.
+  {
+    id: "bg-preset-crimson-velvet",
+    label: "Crimson Velvet",
+    asset: "crimson-velvet-frame.jpg",
+    source: CLASSIC_SOURCE,
+    // 1080x1920 — the artboard's own aspect ratio, so cover crops nothing.
+    cover: true,
+  },
+  // Sepia Paper's kraft sheet with its own ornament corners composited in —
+  // same story as Crimson Velvet above. Here the source file is a viewBox-only
+  // SVG (ornament border1.svg) that Fabric would render as a stretched crop, so
+  // compositing it in a browser is what makes the real border usable at all.
+  {
+    id: "bg-preset-sepia-ornament",
+    label: "Sepia Paper",
+    asset: "sepia-paper-ornament.jpg",
+    source: CLASSIC_SOURCE,
+    cover: true,
+  },
+  // Eloise's carved panel — concept2.png, whose clear medallion is part of the
+  // artwork rather than a separate layer, so panel and circle are already one
+  // picture. Flattened here at the 1.2 page zoom elConceptPanel uses on most of
+  // its pages (see the note beside that helper in src/config/templates.ts),
+  // which is also the framing the medallion is sized against.
+  {
+    id: "bg-preset-eloise-panel",
+    label: "Eloise Panel",
+    asset: "eloise-panel.jpg",
+    source: CLASSIC_SOURCE,
+    cover: true,
+  },
+];
+
+/**
+ * The Background tab's picture presets, resolved to loadable urls. Resolution
+ * happens per call, not at import, for the same reason as getElementGraphics():
+ * the remote manifest warms up asynchronously.
+ */
+export type BackgroundPreset = ElementGraphic & { fit?: "cover" | "contain" | "stretch" };
+
+export function getBackgroundPresets(): BackgroundPreset[] {
+  return BACKGROUND_PRESETS.map(({ source, ...rest }) => ({
+    ...rest,
+    url: resolveTemplateAsset(source, rest.asset),
+  })).filter((preset) => preset.url !== "");
+}
+
+/**
  * The library with every asset resolved to a url the browser can load. Entries
  * that resolve to nothing are dropped rather than rendered as a broken tile.
  */

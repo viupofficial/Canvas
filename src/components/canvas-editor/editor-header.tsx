@@ -2,7 +2,7 @@
 
 'use client';
 
-import { Upload, LogIn, Link2, FileText, Check, Loader2, Gift, Plus, Trash2, AlertTriangle, X } from 'lucide-react';
+import { Upload, LogIn, Link2, FileText, Check, Loader2, Gift, Plus, Trash2, AlertTriangle, X, ArrowUp } from 'lucide-react';
 import { RefObject, useState, useRef, useEffect } from "react";
 import { useRouter, usePathname } from "next/navigation"; // ✅ ADD THIS
 import { EditorHandle } from "@/src/components/CanvasEditor";
@@ -121,7 +121,7 @@ export default function EditorHeader(props: {
   /**
    * Page state, mirrored from the editor. Only the phone ⋮ menu uses it — that
    * menu is the phone's page control, since the desktop page bar under the
-   * canvas is hidden below 500px.
+   * canvas is hidden below the `pc:` breakpoint (see editorBreakpoint.ts).
    */
   pageCount?: number;
   currentPageIndex?: number;
@@ -861,6 +861,22 @@ export default function EditorHeader(props: {
 
       {/* Mobile Right Section */}
       <div className="flex pc:hidden items-center justify-end gap-0.5">
+        {/* Upgrade Package — the phone's counterpart to the desktop button, and
+            gated on the same wired handler so it appears in exactly the same
+            cases. Icon only: the header row has no width for a label here, so
+            the arrow carries the meaning and the accessible name is on the
+            button itself. */}
+        {props.onUpgrade && (
+          <button
+            onClick={handleUpgradeClick}
+            aria-label="Upgrade Package"
+            title="Upgrade Package"
+            className="grid place-items-center h-8 w-8 shrink-0 rounded-full border border-[#7D5B59]/30 bg-[#FBF1EF] text-[#7D5B59] hover:bg-[#F4E4E1] transition-colors"
+          >
+            <ArrowUp className="w-4 h-4" strokeWidth={2.5} />
+          </button>
+        )}
+
         <button
           ref={previewMobileBtnRef}
           onClick={() => setPreviewOpen((o) => !o)}

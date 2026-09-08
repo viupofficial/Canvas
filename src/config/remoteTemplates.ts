@@ -40,10 +40,44 @@ export const REMOTE_ASSET_ORIGIN = trimTrailingSlash(
   process.env.NEXT_PUBLIC_VIUP_ASSET_ORIGIN || "https://vi-up.com",
 );
 
-/** The template asset manifest endpoint. */
-export const TEMPLATE_MANIFEST_ENDPOINT =
+/**
+ * The manifest endpoint ON THE ASSET HOST. Always absolute, and always the real
+ * PHP endpoint — the dev proxy below fetches exactly this.
+ */
+export const REMOTE_TEMPLATE_MANIFEST_ENDPOINT =
   process.env.NEXT_PUBLIC_TEMPLATE_MANIFEST_ENDPOINT ||
   `${REMOTE_ASSET_ORIGIN}/api/template-assets.php`;
+
+/** Our own same-origin route that relays the manifest (dev only — see below). */
+export const TEMPLATE_MANIFEST_PROXY_PATH = "/api/template-assets";
+
+/**
+ * Where the BROWSER asks for a manifest.
+ *
+ * Production goes straight to iFastNet: the deployed canvas origins are in the
+ * PHP CORS allowlist, so the reply is readable and no serverless hop is
+ * involved.
+ *
+ * Development goes through TEMPLATE_MANIFEST_PROXY_PATH instead. The PHP
+ * allowlist names `http://localhost:3000` and nothing else local, so a dev
+ * server reached by any OTHER origin — a LAN IP for testing on a real phone,
+ * 127.0.0.1, a tunnel — gets a 200 with no Access-Control-Allow-Origin header
+ * and the browser discards it, which surfaces as "The template library could
+ * not be reached". Same-origin has no CORS story at all, so the proxy works
+ * from every dev origin without anyone editing the PHP allowlist.
+ *
+ * Only the small JSON manifest is proxied. The media itself is served with
+ * `Access-Control-Allow-Origin: *` and always loads directly from the host, so
+ * the "no proxy in the asset path" rule at the top of this file still holds.
+ *
+ * Setting NEXT_PUBLIC_TEMPLATE_MANIFEST_ENDPOINT pins both to that URL, so an
+ * explicit override still bypasses the proxy exactly as it used to.
+ */
+export const TEMPLATE_MANIFEST_ENDPOINT =
+  process.env.NEXT_PUBLIC_TEMPLATE_MANIFEST_ENDPOINT ||
+  (process.env.NODE_ENV === "production"
+    ? REMOTE_TEMPLATE_MANIFEST_ENDPOINT
+    : TEMPLATE_MANIFEST_PROXY_PATH);
 
 /** Query parameter the endpoint keys on. */
 export const TEMPLATE_MANIFEST_PARAM = "template_id";
@@ -63,9 +97,14 @@ export const REMOTE_IMAGE_TIMEOUT_MS = Number(
   process.env.NEXT_PUBLIC_TEMPLATE_IMAGE_TIMEOUT_MS || 15000,
 );
 
-/** `https://vi-up.com/api/template-assets.php?template_id=11` */
+/**
+ * `https://vi-up.com/api/template-assets.php?template_id=11`, or the same query
+ * against the dev proxy. The endpoint may be a bare path, so it is resolved
+ * against the page's own origin; an absolute endpoint ignores that base.
+ */
 export function templateManifestUrl(remoteTemplateId: string | number): string {
-  const url = new URL(TEMPLATE_MANIFEST_ENDPOINT);
+  const base = typeof window !== "undefined" ? window.location.origin : REMOTE_ASSET_ORIGIN;
+  const url = new URL(TEMPLATE_MANIFEST_ENDPOINT, base);
   url.searchParams.set(TEMPLATE_MANIFEST_PARAM, String(remoteTemplateId));
   return url.toString();
 }

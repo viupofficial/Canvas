@@ -47,7 +47,7 @@ import {
   type InteractiveElementKind,
 } from "@/src/config/templateLoader";
 import { downscaleImageFile } from "@/src/lib/imageDownscale";
-import { getElementGraphics } from "@/src/config/elementGraphics";
+import { getElementGraphics, getBackgroundPresets } from "@/src/config/elementGraphics";
 import Scrubbable from "@/src/components/canvas-editor/scrubbable";
 import GradientEditor, { FillTypeSelect } from "@/src/components/canvas-editor/GradientEditor";
 import {
@@ -2780,6 +2780,9 @@ function BackgroundTab({
   const applyToAll = () => {
     if (fillType === 'picture' && src) {
       editorRef?.current?.setBackgroundImage?.(src, buildOpts(), 'all');
+      // Same de-duplication as startNewPicture, now that every page carries
+      // this picture as its background.
+      editorRef?.current?.removeImagesWithSource?.(src, 'all');
     } else {
       editorRef?.current?.setBackgroundColor?.(bgColor, 'all');
     }
@@ -2799,23 +2802,33 @@ function BackgroundTab({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [applyKey, fillType]);
 
+  // Start each new picture from clean defaults so the result is predictable,
+  // whether it came from the user's file picker or from a preset tile.
+  const startNewPicture = (nextSrc: string, nextFit: BgFit = 'cover') => {
+    setTile(false);
+    setFit(nextFit);
+    setScaleX(100);
+    setScaleY(100);
+    setOffsetX(0);
+    setOffsetY(0);
+    setTransparency(0);
+    setMirror('none');
+    setFillType('picture');
+    setSrc(nextSrc);
+    // This picture is about to become the page background. A template that
+    // already lays the same sheet down as a full-bleed OBJECT (Ivory Decree's
+    // "frame", Sepia Paper's "paper") would then paint it twice and leave a
+    // redundant full-page entry in the Layers list — so the object copy goes
+    // and the background is the one that persists. Only an exact source match
+    // is removed, so an uploaded picture (a data url) never hits anything.
+    editorRef?.current?.removeImagesWithSource?.(nextSrc);
+  };
+
   const handleUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     const input = e.currentTarget;
     if (!file) return;
-    downscaleImageFile(file).then((dataUrl) => {
-      // Start each new picture from clean defaults so the result is predictable.
-      setTile(false);
-      setFit('cover');
-      setScaleX(100);
-      setScaleY(100);
-      setOffsetX(0);
-      setOffsetY(0);
-      setTransparency(0);
-      setMirror('none');
-      setFillType('picture');
-      setSrc(dataUrl);
-    }).catch(reportImageFailure);
+    downscaleImageFile(file).then(startNewPicture).catch(reportImageFailure);
     input.value = '';
   };
 
@@ -2849,6 +2862,11 @@ function BackgroundTab({
     `flex-1 py-1.5 rounded-[10px] text-[12px] font-[600] transition-colors ${
       active ? 'bg-[#8C6B6B] text-white' : 'bg-[#F2E8E6B2] text-[#7D5B59] hover:bg-[#EDE2DE]'
     }`;
+
+  // Resolved per render, not memoized: the remote manifest warms up
+  // asynchronously and a value frozen on first paint would miss the exact
+  // spelling it publishes. The list is tiny, so this costs nothing.
+  const backgroundPresets = getBackgroundPresets();
 
   return (
     <div>
@@ -2913,6 +2931,45 @@ function BackgroundTab({
         </div>
       ) : (
         <div className="flex flex-col gap-4">
+          {/* Ready-made page sheets. Set as the page BACKGROUND rather than
+              dropped as an object, so they sit behind the design and cannot be
+              selected or nudged. The file is full-page artwork, so the tile is
+              lazy — the sidebar should not pull megabytes before it is scrolled
+              into view. */}
+          {backgroundPresets.length > 0 && (
+            <div>
+              <div className="text-[11px] font-[600] text-[#7D5B5980] mb-1.5">
+                Template backgrounds
+              </div>
+              <div className="grid grid-cols-3 gap-2">
+                {backgroundPresets.map((preset) => (
+                  <button
+                    key={preset.id}
+                    type="button"
+                    onClick={() => startNewPicture(preset.url, preset.fit ?? 'cover')}
+                    title={preset.label}
+                    aria-label={`Use ${preset.label} as the background`}
+                    aria-pressed={src === preset.url}
+                    className={`relative aspect-9/16 rounded-[8px] overflow-hidden border transition hover:border-[#8C6B6B] ${
+                      src === preset.url
+                        ? 'border-[#8C6B6B] ring-2 ring-[#8C6B6B]/40'
+                        : 'border-[#EDE2DE]'
+                    }`}
+                  >
+                    <img
+                      src={preset.url}
+                      alt={preset.label}
+                      loading="lazy"
+                      decoding="async"
+                      draggable={false}
+                      className="w-full h-full object-cover pointer-events-none"
+                    />
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
           {/* Picture source */}
           <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={handleUpload} />
           {!src ? (

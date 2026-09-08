@@ -17,8 +17,13 @@
   --background: #F8F7F6;
   --foreground: #7D5B59;
   /* Height of the phone tool rail (canvas-editor/mobile-toolbar). Anything that
-     has to sit directly on top of it — the inspector sheet — offsets by this. */
-  --mobile-rail-h: 68px;
+     has to sit directly on top of it — the inspector sheet — or has to keep
+     clear of it — the canvas workspace's bottom padding — offsets by this, so
+     the rail can never land on top of the artboard's event footer.
+     The bottom safe-area inset is part of the rail's footprint (iOS home
+     indicator); it resolves to 0 where there is none. */
+  --mobile-rail-bar-h: 68px;
+  --mobile-rail-h: calc(var(--mobile-rail-bar-h) + env(safe-area-inset-bottom, 0px));
 }
 
 @theme inline {
@@ -28,12 +33,13 @@
   --font-mono: var(--font-geist-mono);
 }
 
-/* The editor's only phone/desktop switch. Below 500px the editor is the phone
-   layout (bottom toolbar, chrome-free full-bleed canvas); from 500px up it is
+/* The editor's only phone/desktop switch. Below 769px the editor is the phone
+   layout (bottom toolbar, chrome-free full-bleed canvas); from 769px up it is
    always the desktop/laptop layout (sidebar + inspector + canvas controls).
-   Use `pc:` for every one of those switches so they can never disagree. */
+   Use `pc:` for every one of those switches so they can never disagree.
+   The JS half of this boundary is src/lib/editorBreakpoint.ts — change both. */
 @theme {
-  --breakpoint-pc: 500px;
+  --breakpoint-pc: 769px;
 }
 
 /* Dark mode */

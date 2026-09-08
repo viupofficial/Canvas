@@ -54,7 +54,8 @@
 //   ✗ <svg viewBox="0 0 764.4 435.84">                     renders cropped
 // So: check the file before using an SVG, and prefer the PNG if there is one.
 // (This is why Crimson Velvet uses BG_Monogram.png rather than its B&G.svg
-// wordmark, and draws its Bordeline.svg frame as two rects — cvBorderFrame.)
+// wordmark, and why its Bordeline.svg frame is composited into the page
+// background rather than loaded — see cvVelvetBackground.)
 //
 // ── WHAT MUST NOT CHANGE ────────────────────────────────────────────────────
 // Some `name` values are FUNCTIONAL, not decoration. The editor and the
@@ -361,60 +362,35 @@ const elCountdownBox = (key: string, label: string, left: number): TemplateEleme
 // The panel is on every screen EXCEPT the guestbook, where the source fades it
 // out (`.floral-border-overlay.fade-out`) and slides its paper wash up, and
 // the envelope, which is its own full-page cover art.
-const elConceptPanel = (zoomX = 1, zoomY = zoomX): TemplateElement =>
-  ({
-    type: "image",
-    key: "panel",
-    name: "background panel",
-    asset: "/uploads/user_event/21/concept2.png",
-    // Root-relative INSIDE a remote template means "elsewhere on vi-up.com" —
-    // this file is a site-scope upload the manifest reports as
-    // /uploads/user_event/21/concept2.png, not a file in the template folder.
-    // See resolveRemote() in templateAssetResolver.ts.
-    left: 198,
-    top: 352,
-    originX: "center",
-    originY: "center",
-    scaleX: (396 / 853) * zoomX,
-    scaleY: (704 / 1844) * zoomY,
-    selectable: false,
-    locked: true,
-  }) as TemplateElement;
+// It is the page BACKGROUND, not an object. As a locked full-bleed image it sat
+// IN FRONT of the real background, so the Background panel opened empty on a
+// fresh Eloise and any picture set there was painted over and looked inert.
+// One flattened sheet per zoom keeps each page's framing while making the
+// surface a background the panel can read, adjust, replace and spread.
+const EL_PANELS = {
+  "1.2": "/eloise-panel.jpg",
+  "1.6": "/eloise-panel-16.jpg",
+  "1.3x1.4": "/eloise-panel-1314.jpg",
+} as const;
 
 /**
- * The medallion in the panel, at the page's own zoom — measured off the
- * artwork rather than guessed.
+ * The carved panel as a page background, at one of the three zooms the design
+ * uses. concept2.png's clear medallion is part of the artwork, so panel and
+ * circle are one picture already; these are that picture flattened at the page
+ * zoom (see src/config/elementGraphics.ts for how they were generated).
  *
- * Scanning outward from the centre of concept2.png for where the emboss stops
- * being flat puts the clear oval at x 126..720, y 537..1267 in source pixels.
- * Through the full-bleed mapping that is centre (196.4, 344.3) with radii
- * 137.9 x 139.3 — the two scales differ by exactly enough to square the oval
- * up, so on the page it is a circle. Zooming scales that about the artboard
- * centre, the same point the panel scales about, so ring and artwork stay
- * locked together.
- *
- * Drawn as a hairline in the template's gold — the `color: #8B6914` its unused
- * `.ornament` rule asks for — so it reads as a fine ring on the emboss and can
- * be restyled, moved or hidden from the Layers panel.
+ * `src`, not `asset`: buildBackgroundImage takes `src` verbatim, the only way a
+ * REMOTE template can point at a Vercel-hosted file.
  */
-const EL_MEDALLION = { cx: 196.4, cy: 344.3, rx: 137.9, ry: 139.3 } as const;
-
-const elOrnamentRing = (zoomX = 1, zoomY = zoomX): TemplateElement =>
-  ({
-    type: "shape",
-    shape: "ellipse",
-    key: "ornament",
-    name: "ornament layer",
-    left: 198 + (EL_MEDALLION.cx - 198) * zoomX,
-    top: 352 + (EL_MEDALLION.cy - 352) * zoomY,
-    originX: "center",
-    originY: "center",
-    rx: EL_MEDALLION.rx * zoomX,
-    ry: EL_MEDALLION.ry * zoomY,
-    fill: "transparent",
-    stroke: EL_.gold,
-    strokeWidth: 1,
-  }) as TemplateElement;
+const elPanelBackground = (
+  variant: keyof typeof EL_PANELS,
+): TemplateBackgroundAsset => ({
+  src: EL_PANELS[variant],
+  // 1080x1920 — the artboard's aspect ratio, so "cover" lands it pixel-exact
+  // and the zoom baked into each file is what frames the page.
+  naturalWidth: 1080,
+  naturalHeight: 1920,
+});
 
 // ── Crimson Velvet palette + row helpers ─────────────────────────────────────
 // Its content pages sit on the template's OWN velvet sheet — Crimson Velvet.png,
@@ -426,8 +402,9 @@ const elOrnamentRing = (zoomX = 1, zoomY = zoomX): TemplateElement =>
 //
 // A hairline rectangle leaves the whole page usable, so unlike a wreath's
 // narrow opening the only constraint is the inner rule itself: x 26..370,
-// y 16..612 (see cvBorderFrame). Content is centred at x=198 in a 284px column,
-// the same measure the other framed templates use.
+// y 22..606 (see cvVelvetBackground — the rule is part of that picture).
+// Content is centred at x=198 in a 284px column, the same measure the other
+// framed templates use.
 //
 // Note while reading the numbers: on Fabric v7 `originX`/`originY` DEFAULT TO
 // "center" (they were "left"/"top" up to v5), so every `left`/`top` here is the
@@ -437,6 +414,9 @@ const elOrnamentRing = (zoomX = 1, zoomY = zoomX): TemplateElement =>
 const CV = {
   crimson: "#4e0c0a",
   cream: "#f4efe9",
+  /** The double rule's gold. Nothing draws with it any more — it is burnt into
+   *  cvVelvetBackground's picture — but it is the value that picture was
+   *  composited with, so regenerating the frame needs it. */
   gold: "#b8892f",
   /** The envelope's own gold — the one that stays legible ON the velvet. */
   goldLight: "#e8cf9a",
@@ -467,61 +447,32 @@ const cvFullBleed = (
   }) as TemplateElement;
 
 /**
- * The same velvet, but as the page BACKGROUND rather than a locked object.
+ * The whole page surface every content page sits on: the template's velvet
+ * sheet WITH its double gold rule already in it.
  *
- * The velvet sheet every content page sits on: the template's own full-page
- * 1080x1920 texture. It used to be a locked full-bleed OBJECT; it is the page
- * background now so it behaves like a background the host applied by hand: the Background panel reads it back with
+ * It is the page BACKGROUND rather than a locked object, so it behaves like a
+ * background the host applied by hand — the Background panel reads it back with
  * its fit intact, it can be adjusted, swapped or removed there, and "Apply to
- * all pages" spreads it. The gold hairline stays vector on top (cvBorderFrame),
- * which keeps it crisp at every zoom and in PDF export.
+ * all pages" spreads it. The gold rule used to be two vector rects drawn on top
+ * (cvBorderFrame); it is part of this picture now, so the frame travels with
+ * the background instead of staying behind when the background is scaled,
+ * replaced or removed, and a page carries one frame rather than two.
+ *
+ * `src`, not `asset`: buildBackgroundImage takes `src` verbatim, which is the
+ * only way a REMOTE template can point at a Vercel-hosted file (a root-relative
+ * `asset` would resolve against the iFastNet host). See the note beside this
+ * file in src/config/elementGraphics.ts for how it was composited.
  *
  * `background: CV.crimson` underneath is still what shows during a slow load.
  */
 const cvVelvetBackground = (): TemplateBackgroundAsset => ({
-  asset: "Crimson Velvet.png",
-  // 1080x1920 — the frame every remote template is authored on.
+  src: "/crimson-velvet-frame.jpg",
+  // 1080x1920 — the frame every remote template is authored on. The artboard
+  // shares its aspect ratio, so "cover" lands the burnt-in rule exactly where
+  // cvBorderFrame used to draw it.
   naturalWidth: 1080,
   naturalHeight: 1920,
 });
-
-/**
- * The double gold hairline over the velvet, drawn as two nested rects rather
- * than loading the template's Bordeline.svg.
- *
- * The SVG is one of the viewBox-only files described in this file's header, so
- * it would render as a stretched top-left crop. It is also nothing but two
- * concentric stroked rectangles, which the generic `shape` element draws
- * natively — crisper at every zoom, exportable, and editable.
- *
- * Kept clear of the bottom edge: the floating event footer sits over roughly
- * the last 60px of the artboard, so a frame drawn to the true edge would have
- * its bottom rule hidden behind it. Inner rule: x 26..370, y 16..612.
- */
-const cvBorderFrame = (): TemplateElement[] =>
-  [
-    { outer: true, width: 356, height: 596 },
-    { outer: false, width: 344, height: 584 },
-  ].map(
-    ({ outer, width, height }) =>
-      ({
-        type: "shape",
-        shape: "rect",
-        key: outer ? "frame-outer" : "frame-inner",
-        left: 198,
-        top: 314,
-        originX: "center",
-        originY: "center",
-        width,
-        height,
-        fill: "transparent",
-        stroke: CV.gold,
-        strokeWidth: 1,
-        // Decoration, like the full-bleed sheet it sits on.
-        selectable: false,
-        locked: true,
-      }) as TemplateElement,
-  );
 
 /** Small gold label above a value, on the Event Details page. */
 const cvHeading = (text: string, top: number): TemplateElement => ({
@@ -730,44 +681,37 @@ const spFullBleed = (
   }) as TemplateElement;
 
 /**
- * The rule this template draws over the kraft, as two nested rects rather than
- * loading its `ornament border1.svg`.
+ * The whole page surface every content page sits on: the template's kraft sheet
+ * with its OWN ornament corners composited into it.
  *
- * The SVG is one of the viewBox-only files described in this file's header, so
- * it renders as a stretched top-left crop — which is why it was left out
- * entirely and these pages had no frame at all. Rects give the border back:
- * crisp at every zoom, exportable, and editable. #b87f27 is the colour the
- * source's own `.borderline` rule names (it ships commented out, so the design
- * as published has no visible frame either).
+ * What this replaces: the pages used to stack a locked full-bleed
+ * HD_Classic Paper.png object under two nested gold rects (spBorderFrame),
+ * because `ornament border1.svg` is one of the viewBox-only files described in
+ * this file's header and renders as a stretched top-left crop when Fabric loads
+ * it. Compositing it in a browser sidesteps that entirely — the real ornament
+ * is in the picture, so the gold stand-in is gone and the design finally shows
+ * the border the source actually ships.
  *
- * Kept clear of the bottom edge: the floating event footer sits over roughly
- * the last 60px of the artboard, so a frame drawn to the true edge would have
- * its bottom rule hidden behind it.
+ * The ornament keeps its own aspect ratio inside the box (an <img> letterboxes
+ * a viewBox-only SVG rather than stretching it), so the flourishes are
+ * undistorted, and the box stops short of the bottom edge — the floating event
+ * footer covers roughly the last 60px of the artboard, and corners drawn into
+ * that band would be hidden behind it.
+ *
+ * `src`, not `asset`: buildBackgroundImage takes `src` verbatim, which is the
+ * only way a REMOTE template can point at a Vercel-hosted file (a root-relative
+ * `asset` would resolve against the iFastNet host). See the note beside this
+ * file in src/config/elementGraphics.ts for how it was composited.
+ *
+ * `background: SP_.paper` underneath is still what shows during a slow load.
  */
-const spBorderFrame = (): TemplateElement[] =>
-  [
-    { outer: true, width: 356, height: 596 },
-    { outer: false, width: 344, height: 584 },
-  ].map(
-    ({ outer, width, height }) =>
-      ({
-        type: "shape",
-        shape: "rect",
-        key: outer ? "frame-outer" : "frame-inner",
-        left: 198,
-        top: 314,
-        originX: "center",
-        originY: "center",
-        width,
-        height,
-        fill: "transparent",
-        stroke: SP_.gold,
-        strokeWidth: 1,
-        // Decoration, like the kraft sheet it sits on.
-        selectable: false,
-        locked: true,
-      }) as TemplateElement,
-  );
+const spPaperBackground = (): TemplateBackgroundAsset => ({
+  src: "/sepia-paper-ornament.jpg",
+  // 1080x1920 — the frame every sheet this template ships is authored on. The
+  // artboard shares its aspect ratio, so "cover" lands it pixel-exact.
+  naturalWidth: 1080,
+  naturalHeight: 1920,
+});
 
 /** Event Details label — the source's bold Alice `.event-heading`. */
 const spHeading = (text: string, top: number): TemplateElement => ({
@@ -1920,20 +1864,19 @@ export const templates: Record<string, TemplateDefinition> = {
       {
         id: "invitation",
         name: "Invitation",
+        backgroundAsset: elPanelBackground("1.2"),
         elements: [
-          elConceptPanel(1.2),
-          elOrnamentRing(1.2),
           {
             type: "text",
             key: "eyebrow",
             text: "THE INTIMATE WEDDING OF",
             left: 196,
-            top: 200,
+            top: 206,
             originX: "center",
             width: 300,
             fontFamily: "Cormorant Garamond",
-            fontSize: 12,
-            charSpacing: 160,
+            fontSize: 10,
+            charSpacing: 120,
             textAlign: "center",
             fill: EL_.gold,
           },
@@ -1944,11 +1887,11 @@ export const templates: Record<string, TemplateDefinition> = {
             key: "couple",
             text: "Bride & Groom",
             left: 196,
-            top: 248,
+            top: 228,
             originX: "center",
             width: 260,
             fontFamily: "Cormorant Garamond",
-            fontSize: 34,
+            fontSize: 26,
             lineHeight: 1.3,
             textAlign: "center",
             fill: EL_.gold,
@@ -1957,26 +1900,26 @@ export const templates: Record<string, TemplateDefinition> = {
             type: "image",
             key: "date-plate",
             asset: "date.png",
-            // 696x324 down to 195x91 — the modest plate the source shows,
-            // sitting in the medallion's lower half.
+            // 696x324 down to 170x79 — the modest plate the source shows,
+            // sitting in the medallion's middle.
             left: 196,
-            top: 332,
+            top: 288,
             originX: "center",
             originY: "center",
-            scaleX: 195 / 696,
-            scaleY: 91 / 324,
+            scaleX: 170 / 696,
+            scaleY: 79 / 324,
           },
           {
             type: "text",
             key: "venue",
             text: "WILLOW HALL, FOREST VALLEY",
             left: 196,
-            top: 400,
+            top: 340,
             originX: "center",
             width: 300,
             fontFamily: "Montserrat",
             fontSize: 9,
-            charSpacing: 180,
+            charSpacing: 140,
             textAlign: "center",
             fill: EL_.gold,
           },
@@ -1985,11 +1928,11 @@ export const templates: Record<string, TemplateDefinition> = {
             key: "hashtag",
             text: "#WhenAMMetPM",
             left: 196,
-            top: 424,
+            top: 360,
             originX: "center",
             width: 300,
             fontFamily: "Cormorant Garamond",
-            fontSize: 14,
+            fontSize: 13,
             fontStyle: "italic",
             textAlign: "center",
             fill: EL_.gold,
@@ -1999,23 +1942,23 @@ export const templates: Record<string, TemplateDefinition> = {
             key: "rule-dress",
             asset: "line1.png",
             left: 196,
-            top: 452,
+            top: 380,
             originX: "center",
             originY: "center",
-            scaleX: 0.45,
-            scaleY: 0.45,
+            scaleX: 0.38,
+            scaleY: 0.38,
           },
           {
             type: "text",
             key: "dress-code",
             text: "Tema Pakaian: Traditional / Formal Attire\nLelaki: Baju Melayu atau Sut Formal\nPerempuan: Busana Tradisional atau Gaun Labuh",
             left: 196,
-            top: 496,
+            top: 412,
             originX: "center",
             width: 300,
             fontFamily: "Cormorant Garamond",
-            fontSize: 11,
-            lineHeight: 1.4,
+            fontSize: 9.5,
+            lineHeight: 1.3,
             textAlign: "center",
             fill: EL_.gold,
           },
@@ -2024,23 +1967,23 @@ export const templates: Record<string, TemplateDefinition> = {
             key: "rule-note",
             asset: "line2.png",
             left: 196,
-            top: 538,
+            top: 442,
             originX: "center",
             originY: "center",
-            scaleX: 0.7,
-            scaleY: 0.7,
+            scaleX: 0.5,
+            scaleY: 0.5,
           },
           {
             type: "text",
             key: "note",
             text: "Note: Mohon kerjasama tetamu untuk tidak mengenakan\npakaian kasual seperti T-shirt dan seluar jeans bagi\nmenghormati majlis.",
             left: 196,
-            top: 574,
+            top: 470,
             originX: "center",
             width: 320,
             fontFamily: "Cormorant Garamond",
-            fontSize: 8,
-            lineHeight: 1.45,
+            fontSize: 7,
+            lineHeight: 1.3,
             textAlign: "center",
             fill: EL_.gold,
           },
@@ -2056,15 +1999,14 @@ export const templates: Record<string, TemplateDefinition> = {
       {
         id: "parents",
         name: "Hosts",
+        backgroundAsset: elPanelBackground("1.6"),
         elements: [
-          elConceptPanel(1.6),
-          elOrnamentRing(1.6),
           {
             type: "image",
             key: "bismillah",
             asset: "Bismillah z&z.svg",
             left: 198,
-            top: 80,
+            top: 154,
             originX: "center",
             originY: "center",
             scaleX: 1.1,
@@ -2075,7 +2017,7 @@ export const templates: Record<string, TemplateDefinition> = {
             key: "basmalah",
             text: "Dengan nama Allah Yang Maha Pengasih\nlagi Maha Penyayang",
             left: 198,
-            top: 130,
+            top: 198,
             originX: "center",
             width: 320,
             fontFamily: "Cormorant Garamond",
@@ -2089,7 +2031,7 @@ export const templates: Record<string, TemplateDefinition> = {
             key: "couple-1",
             text: "Groom",
             left: 196,
-            top: 176,
+            top: 230,
             originX: "center",
             width: 300,
             fontFamily: "Cormorant Garamond",
@@ -2103,7 +2045,7 @@ export const templates: Record<string, TemplateDefinition> = {
             key: "couple-amp",
             text: "&",
             left: 196,
-            top: 201,
+            top: 254,
             originX: "center",
             width: 300,
             fontFamily: "Cormorant Garamond",
@@ -2117,7 +2059,7 @@ export const templates: Record<string, TemplateDefinition> = {
             key: "couple-2",
             text: "Bride",
             left: 196,
-            top: 226,
+            top: 278,
             originX: "center",
             width: 300,
             fontFamily: "Cormorant Garamond",
@@ -2126,19 +2068,19 @@ export const templates: Record<string, TemplateDefinition> = {
             textAlign: "center",
             fill: EL_.gold,
           },
-          ...elParentBlock("groom", "Putera kepada", "Groom’s Father", "Groom’s Mother", 262),
-          ...elParentBlock("bride", "Puteri kepada", "Bride’s Father", "Bride’s Mother", 358),
+          ...elParentBlock("groom", "Putera kepada", "Groom’s Father", "Groom’s Mother", 310),
+          ...elParentBlock("bride", "Puteri kepada", "Bride’s Father", "Bride’s Mother", 406),
           {
             type: "text",
             key: "invite-text",
             text: "Dengan penuh kesyukuran, kami mempersilakan Y.Bhg\nTan Sri/ Puan Sri/ Datuk Seri/ Dato’ Seri/ Datin Seri/\nDatuk/ Dato’/ Datin/ Encik/ Puan/ Cik hadir ke majlis\nperkahwinan putera dan puteri kesayangan kami",
             left: 198,
-            top: 486,
+            top: 514,
             originX: "center",
             width: 340,
             fontFamily: "Cormorant Garamond",
-            fontSize: 10.5,
-            lineHeight: 1.4,
+            fontSize: 9,
+            lineHeight: 1.3,
             textAlign: "center",
             fill: EL_.gold,
           },
@@ -2153,9 +2095,8 @@ export const templates: Record<string, TemplateDefinition> = {
       {
         id: "eventDetails",
         name: "Event Details",
+        backgroundAsset: elPanelBackground("1.2"),
         elements: [
-          elConceptPanel(1.2),
-          elOrnamentRing(1.2),
           ...elEventBlock("Tarikh", "15 August 2026", 225),
           ...elEventBlock("Hari", "Sabtu", 288),
           ...elEventBlock("Waktu", "8.30 PM - 10.30 PM", 351),
@@ -2169,9 +2110,8 @@ export const templates: Record<string, TemplateDefinition> = {
       {
         id: "itinerary",
         name: "Itinerary",
+        backgroundAsset: elPanelBackground("1.2"),
         elements: [
-          elConceptPanel(1.2),
-          elOrnamentRing(1.2),
           {
             type: "text",
             key: "title",
@@ -2214,9 +2154,8 @@ export const templates: Record<string, TemplateDefinition> = {
       {
         id: "countdown",
         name: "Counting Days",
+        backgroundAsset: elPanelBackground("1.3x1.4"),
         elements: [
-          elConceptPanel(1.3, 1.4),
-          elOrnamentRing(1.3, 1.4),
           {
             type: "text",
             key: "title",
@@ -2247,9 +2186,8 @@ export const templates: Record<string, TemplateDefinition> = {
       {
         id: "gallery",
         name: "Gallery",
+        backgroundAsset: elPanelBackground("1.3x1.4"),
         elements: [
-          elConceptPanel(1.3, 1.4),
-          elOrnamentRing(1.3, 1.4),
           {
             type: "text",
             key: "title",
@@ -2378,9 +2316,8 @@ export const templates: Record<string, TemplateDefinition> = {
       {
         id: "prayer",
         name: "Prayer",
+        backgroundAsset: elPanelBackground("1.3x1.4"),
         elements: [
-          elConceptPanel(1.3, 1.4),
-          elOrnamentRing(1.3, 1.4),
           {
             type: "text",
             key: "title",
@@ -2474,16 +2411,18 @@ export const templates: Record<string, TemplateDefinition> = {
   // The art is authored as full-page 1080x1920 layers at exactly the artboard's
   // 9:16 ratio, so they drop in full-bleed at 396/1080 (see cvFullBleed).
   //
-  // Every content page is the velvet sheet plus the source's own double gold
-  // rule — cvVelvetSheet() + cvBorderFrame(). Border Flower/7.png, the floral
-  // wreath, belongs to the lighter templates and is NOT part of this design.
+  // Every content page is the velvet sheet with the source's own double gold
+  // rule composited into it — cvVelvetBackground(). Border Flower/7.png, the
+  // floral wreath, belongs to the lighter templates and is NOT part of this
+  // design.
   //
   // NOT USED, because the manifest reports them missing on disk — referencing
   // one would only produce a "[TemplateAsset] Unable to load" warning:
   //   Border Flower/PAPER.png, waze_btn.png, YOUR_FLORAL_IMAGE.png,
   //   fonts/Alice-{regular,bold}.otf.
   // NOT USED by choice: PAPER.png (present, but a cream wash on a crimson
-  // design) and Bordeline.svg (drawn as rects instead — see cvBorderFrame).
+  // design) and Bordeline.svg (its two rects are composited into the page
+  // background instead — see cvVelvetBackground).
   // ═══════════════════════════════════════════════════════════════════════
   crimsonVelvet: {
     id: "crimson-velvet",
@@ -2594,7 +2533,6 @@ export const templates: Record<string, TemplateDefinition> = {
         background: CV.crimson,
         backgroundAsset: cvVelvetBackground(),
         elements: [
-          ...cvBorderFrame(),
           {
             type: "text",
             key: "intro",
@@ -2677,7 +2615,6 @@ export const templates: Record<string, TemplateDefinition> = {
         background: CV.crimson,
         backgroundAsset: cvVelvetBackground(),
         elements: [
-          ...cvBorderFrame(),
           {
             type: "image",
             key: "monogram",
@@ -2767,7 +2704,6 @@ export const templates: Record<string, TemplateDefinition> = {
         background: CV.crimson,
         backgroundAsset: cvVelvetBackground(),
         elements: [
-          ...cvBorderFrame(),
           cvHeading("DATE", 150),
           cvBody("26 June 2026", 172),
           cvHeading("TIME", 218),
@@ -2790,7 +2726,6 @@ export const templates: Record<string, TemplateDefinition> = {
         background: CV.crimson,
         backgroundAsset: cvVelvetBackground(),
         elements: [
-          ...cvBorderFrame(),
           {
             type: "text",
             key: "title",
@@ -2822,7 +2757,6 @@ export const templates: Record<string, TemplateDefinition> = {
         background: CV.crimson,
         backgroundAsset: cvVelvetBackground(),
         elements: [
-          ...cvBorderFrame(),
           {
             type: "text",
             key: "title",
@@ -2914,7 +2848,6 @@ export const templates: Record<string, TemplateDefinition> = {
         background: CV.crimson,
         backgroundAsset: cvVelvetBackground(),
         elements: [
-          ...cvBorderFrame(),
           {
             type: "text",
             key: "title",
@@ -2970,7 +2903,6 @@ export const templates: Record<string, TemplateDefinition> = {
         // sheet of paper dropped over the invitation, so it is left out.
         backgroundAsset: cvVelvetBackground(),
         elements: [
-          ...cvBorderFrame(),
           {
             type: "text",
             key: "title",
@@ -3025,7 +2957,6 @@ export const templates: Record<string, TemplateDefinition> = {
         background: CV.crimson,
         backgroundAsset: cvVelvetBackground(),
         elements: [
-          ...cvBorderFrame(),
           {
             type: "text",
             key: "title",
@@ -3810,10 +3741,11 @@ export const templates: Record<string, TemplateDefinition> = {
   //   Music/…mp3, fonts/Alice-{regular,bold}.otf — the design still asks for
   //   Alice, which the app loads from Google Fonts, so those cost nothing.
   // NOT USED for the SVG reason in this file's header: B&G.svg (the source's
-  //   couple wordmark), ornament border1.svg and bismillah.svg all declare only
-  //   a viewBox and would render as a stretched top-left crop. The border that
-  //   ornament SVG carries is drawn as rects instead — see spBorderFrame(). The wordmark is
-  //   authored as editable Alex Brush text instead, which is better anyway —
+  //   couple wordmark) and bismillah.svg both declare only a viewBox and would
+  //   render as a stretched top-left crop. ornament border1.svg has the same
+  //   problem, but its corners ARE the design, so it is composited into the
+  //   page background instead of loaded — see spPaperBackground(). The wordmark
+  //   is authored as editable Alex Brush text instead, which is better anyway —
   //   the customer can type their own names. Text-Logo/Da_intial_small.svg DOES
   //   carry width/height (23x26) and is used, at the 23px the source renders it.
   // NOT USED deliberately: Text-Logo/Logo_MayaAsyraaf.png renders the legacy
@@ -3954,9 +3886,8 @@ export const templates: Record<string, TemplateDefinition> = {
         id: "invitation",
         name: "Invitation",
         background: SP_.paper,
+        backgroundAsset: spPaperBackground(),
         elements: [
-          spFullBleed("paper", "HD_Classic Paper.png", { selectable: false, locked: true }),
-          ...spBorderFrame(),
           {
             type: "text",
             key: "couple",
@@ -4047,9 +3978,8 @@ export const templates: Record<string, TemplateDefinition> = {
         id: "parents",
         name: "Hosts",
         background: SP_.paper,
+        backgroundAsset: spPaperBackground(),
         elements: [
-          spFullBleed("paper", "HD_Classic Paper.png", { selectable: false, locked: true }),
-          ...spBorderFrame(),
           {
             type: "text",
             key: "greeting",
@@ -4170,9 +4100,8 @@ export const templates: Record<string, TemplateDefinition> = {
         id: "eventDetails",
         name: "Event Details",
         background: SP_.paper,
+        backgroundAsset: spPaperBackground(),
         elements: [
-          spFullBleed("paper", "HD_Classic Paper.png", { selectable: false, locked: true }),
-          ...spBorderFrame(),
           spHeading("Date", 120),
           spBody("26 April 2026", 148),
           spHeading("Time", 210),
@@ -4195,9 +4124,8 @@ export const templates: Record<string, TemplateDefinition> = {
         id: "itinerary",
         name: "Itinerary",
         background: SP_.paper,
+        backgroundAsset: spPaperBackground(),
         elements: [
-          spFullBleed("paper", "HD_Classic Paper.png", { selectable: false, locked: true }),
-          ...spBorderFrame(),
           {
             type: "text",
             key: "title",
@@ -4243,9 +4171,8 @@ export const templates: Record<string, TemplateDefinition> = {
         id: "countdown",
         name: "Counting Days",
         background: SP_.paper,
+        backgroundAsset: spPaperBackground(),
         elements: [
-          spFullBleed("paper", "HD_Classic Paper.png", { selectable: false, locked: true }),
-          ...spBorderFrame(),
           {
             type: "text",
             key: "title",
@@ -4327,9 +4254,8 @@ export const templates: Record<string, TemplateDefinition> = {
         id: "gallery",
         name: "Gallery",
         background: SP_.paper,
+        backgroundAsset: spPaperBackground(),
         elements: [
-          spFullBleed("paper", "HD_Classic Paper.png", { selectable: false, locked: true }),
-          ...spBorderFrame(),
           {
             type: "text",
             key: "title",
@@ -4383,6 +4309,7 @@ export const templates: Record<string, TemplateDefinition> = {
         id: "guestbook",
         name: "Guestbook",
         background: SP_.paper,
+        backgroundAsset: spPaperBackground(),
         elements: [
           {
             type: "image",
@@ -4394,7 +4321,6 @@ export const templates: Record<string, TemplateDefinition> = {
             scaleX: 0.3,
             scaleY: 0.3,
           },
-          ...spBorderFrame(),
           {
             type: "text",
             key: "title",
@@ -4450,9 +4376,8 @@ export const templates: Record<string, TemplateDefinition> = {
         id: "prayer",
         name: "Prayer",
         background: SP_.paper,
+        backgroundAsset: spPaperBackground(),
         elements: [
-          spFullBleed("paper", "HD_Classic Paper.png", { selectable: false, locked: true }),
-          ...spBorderFrame(),
           {
             type: "text",
             key: "title",

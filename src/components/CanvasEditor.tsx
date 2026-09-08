@@ -45,6 +45,7 @@ import { extractEnvelope } from "@/src/lib/extract-envelope";
 import { eventBlobPath, eventSlug } from "@/src/lib/slug";
 import RsvpSkeleton from "@/src/components/RsvpSkeleton";
 import { getPackageRules } from "@/src/lib/packageRules";
+import { isPhoneViewport } from "@/src/lib/editorBreakpoint";
 import {
   computeLayout,
   cropImageDataUrl,
@@ -204,6 +205,12 @@ export type EditorHandle = {
   setBackgroundImage: (url: string | null, opts?: BackgroundOptions, scope?: BackgroundScope) => void;
   // Read the active page's current background so the panel can display it.
   getBackground: () => BackgroundReadback;
+  // Delete image OBJECTS that are the same picture as `url`. Called when that
+  // picture becomes the page background: a copy of the identical artwork left
+  // sitting on the canvas would paint it twice and add a redundant full-page
+  // entry to the Layers list. Matching is by source, so nothing but an exact
+  // duplicate is ever removed. Returns how many objects went.
+  removeImagesWithSource: (url: string, scope?: BackgroundScope) => number;
   previewAnimation: (type: string) => void;
   getActiveImageSrc: () => string | null;
   replaceActiveImage: (dataUrl: string) => void;
@@ -333,6 +340,30 @@ const imageLoadOpts = (src: string) =>
   typeof src === "string" && src.startsWith("data:")
     ? undefined
     : { crossOrigin: "anonymous" as const };
+
+// ── Recognising two references to the SAME picture ──────────────────────────
+// The manifest publishes "HD_Vintage%20Floral.png" while a deterministic base
+// join can produce the same path with a literal space, so a raw string compare
+// would miss the match. Decoding both sides normalises that away.
+const sameImageKey = (src: unknown): string => {
+  if (typeof src !== "string" || !src) return "";
+  try {
+    return decodeURI(src).trim();
+  } catch {
+    return src.trim();
+  }
+};
+
+// The url an image object was loaded from, or null when it is not a plain
+// image. Accepts both a live fabric object and a serialized one, so `type` is
+// lower-cased before comparing — the same rule extract-envelope and RsvpPlayer
+// use on saved pages. An object carrying _editedSrc has been through the image
+// editor, so what it paints is no longer the file at its src: it is never a
+// duplicate of anything and is deliberately excluded.
+const plainImageSrcOf = (o: any): string | null => {
+  if (!o || String(o.type ?? "").toLowerCase() !== "image" || o._editedSrc) return null;
+  return o.getSrc?.() ?? o._element?.src ?? o.src ?? null;
+};
 
 // ── Placing an image that came from a panel or a drag ───────────────────────
 // Panel art is stored at print resolution — the royal wax seal is 1254px wide
@@ -2035,6 +2066,46 @@ const [currentPage, setCurrentPage] = useState(0);
         }
       }).catch((err: any) => console.error('Failed to load background image', err));
     },
+    removeImagesWithSource: (url: string, scope: BackgroundScope = 'current'): number => {
+      const canvas = fabricRef.current;
+      const wanted = sameImageKey(url);
+      if (!canvas || !wanted) return 0;
+      let removed = 0;
+
+      // Active page: the live canvas is the source of truth for it.
+      const doomed = canvas
+        .getObjects()
+        .filter((o: any) => sameImageKey(plainImageSrcOf(o)) === wanted);
+      if (doomed.length) {
+        // Discard first: removing an object that is part of the active
+        // selection leaves fabric holding a stale reference.
+        canvas.discardActiveObject();
+        for (const o of doomed) canvas.remove(o);
+        canvas.requestRenderAll();
+        pushSnapshot();
+        saveCurrentPage(currentPageRef.current);
+        onLayersChangeRef.current?.();
+        removed += doomed.length;
+      }
+
+      if (scope === 'all') {
+        // Every other page is plain serialized JSON. Computed off the ref and
+        // handed to setPages as a finished value — counting inside the updater
+        // would double-count the extra call React makes in StrictMode.
+        const next = pagesRef.current.map((p: any, i: number) => {
+          if (i === currentPageRef.current || !Array.isArray(p?.objects)) return p;
+          const objects = p.objects.filter(
+            (o: any) => sameImageKey(plainImageSrcOf(o)) !== wanted,
+          );
+          if (objects.length === p.objects.length) return p;
+          removed += p.objects.length - objects.length;
+          return { ...p, objects };
+        });
+        if (removed > doomed.length) setPages(next);
+      }
+
+      return removed;
+    },
     getBackground: (): BackgroundReadback => {
       const canvas = fabricRef.current;
       if (!canvas) return { kind: 'none' };
@@ -2840,9 +2911,6 @@ const [currentPage, setCurrentPage] = useState(0);
         // drag — an already-selected element is still dragged straight away.
         const SWIPE_NAV_PX = 60;   // sideways travel that counts as a swipe
         const SWIPE_NAV_MS = 700;  // slower than this is a drag, not a swipe
-        const isPhoneViewport = () =>
-          typeof window !== 'undefined' &&
-          window.matchMedia('(max-width: 499px)').matches;
         // Fabric hands us the raw DOM event, which is a pointer event on some
         // paths and a touch event on others.
         const clientPointOf = (e: any) => {
@@ -6275,7 +6343,18 @@ const applyBgToOtherPages = (patch: { backgroundImage?: any; backgroundColor?: a
           stay hidden, and their jobs are done by touch gestures / the toolbar. */}
       <div className="hidden pc:flex items-center justify-between text-sm text-neutral-500 border-t pt-3">
 
-  <div>
+  {/* Passive tips are the first thing to go when this row gets tight: under
+      ~1024px the three groups can't share it without the tip wrapping to three
+      lines and squeezing the page controls off the end. The pen/path messages
+      are live instructions for a tool that is mid-use, so those stay at every
+      width — only the idle hints hide. */}
+  <div
+    className={
+      pathEditState === 'drawing' || pathEditState === 'editing'
+        ? undefined
+        : 'hidden lg:block'
+    }
+  >
     {pathEditState === 'drawing'
       ? 'Pen — click to add a point, drag to curve it · Enter or Esc to finish · click the first point to close'
       : pathEditState === 'editing'

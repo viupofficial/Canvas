@@ -9,6 +9,7 @@ import {
 import Inspector, { type PhoneSection } from "./canvas-editor/inspector";
 import PhonePreviewWrapper from "./canvas-editor/PhonePreviewWrapper";
 import { Monitor, Smartphone } from "lucide-react";
+import { isPhoneViewport } from "@/src/lib/editorBreakpoint";
 
 
 export default function EditorLayoutClient({
@@ -99,11 +100,7 @@ export default function EditorLayoutClient({
     // On a phone the tool panel and the inspector both live at the bottom of the
     // screen, so selecting an element hands that space over to the inspector.
     // Desktop shows them side by side and needs no such trade.
-    if (
-      obj &&
-      typeof window !== "undefined" &&
-      window.matchMedia("(max-width: 499px)").matches
-    ) {
+    if (obj && isPhoneViewport()) {
       onPhoneSelection?.();
     }
   };
@@ -147,9 +144,12 @@ export default function EditorLayoutClient({
     <>
       <div className="flex flex-col pc:flex-row gap-2 lg:gap-6 h-full">
         {/* Main canvas area */}
-        {/* Bottom padding only clears the fixed mobile toolbar (~69px tall) — any
-            more leaves dead space under the canvas instead of canvas. */}
-        <div className="flex-1 h-full overflow-y-auto pb-[72px] pc:pb-0 pc:min-w-[220px]">
+        {/* Bottom padding only clears the fixed mobile toolbar — any more leaves
+            dead space under the canvas instead of canvas. It is driven off
+            --mobile-rail-h (the rail's own height, safe-area inset included)
+            rather than a hard-coded number, so the rail can never end up taller
+            than the gap reserved for it and cover the artboard's event footer. */}
+        <div className="flex-1 h-full overflow-y-auto pb-[calc(var(--mobile-rail-h)+4px)] pc:pb-0 pc:min-w-[220px]">
         <div className="bg-white border rounded-lg shadow-sm flex flex-col h-full">
           {/* Canvas area */}
           {previewMode === "phone" ? (
