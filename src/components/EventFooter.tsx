@@ -737,7 +737,6 @@ const generateICS = (event: any, loc?: any) => {
                                         rsvpText.paxNoteEnabled defaults to true. */}
                                     {rsvpText.paxNoteEnabled && (
                                         <p className="info-line">
-                                            <span className="material-symbols-outlined">info</span>
                                             {rsvpText.paxNote}
                                         </p>
                                     )}
