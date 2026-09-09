@@ -3317,6 +3317,7 @@ export default function Sidebar({
   rules,
   featureUsage,
   onLocationChanged,
+  onUpgrade,
   activeTool,
   onActiveToolChange,
   appliedTemplateId: appliedTemplateIdProp,
@@ -3345,8 +3346,9 @@ export default function Sidebar({
   // Teaser (public "try the editor") mode. Greys out RSVP + Money Gift and
   // makes them inert — clicking does NOT open the tool panel (upsell preview).
   teaser?: boolean;
-  // Opens the package upgrade modal. Accepted for compatibility with callers;
-  // the sidebar no longer gates RSVP / Money Gift behind it (both stay usable).
+  // Opens the package upgrade modal. Basic (package_id === 1) does not include
+  // RSVP or Money Gift, so clicking either tool calls this instead of opening
+  // the tool panel.
   onUpgrade?: () => void;
   // Full package rule set (gallery/location/music limits). Absent for free
   // designer canvases — defaults to full access (all limits Infinity).
@@ -3507,14 +3509,24 @@ export default function Sidebar({
   }, []);
 
   // Teaser + Basic grey out RSVP + Money Gift. In teaser they are inert —
-  // clicking must NOT open the tool panel (it's an upsell preview). For Basic
-  // they stay fully functional. Other tiers show them normally.
+  // clicking must NOT open the tool panel (it's an upsell preview). Basic does
+  // not include either feature, so clicking one opens the upgrade modal instead
+  // of the panel. Other tiers show them normally.
   const rsvpMoneyGreyed = teaser || pkgRules.isBasicPackage;
 
   const toggle = (id: Tab, disabled?: boolean) => {
     if (disabled) return;
     // Teaser: RSVP + Money Gift are shown but not interactive — don't open them.
     if (teaser && (id === 'rsvp' || id === 'money')) return;
+    // Basic: the package doesn't include RSVP / Money Gift. Sell the upgrade
+    // rather than opening a panel whose settings would never take effect.
+    if (pkgRules.isBasicPackage && (id === 'rsvp' || id === 'money')) {
+      // Make sure a panel that is somehow already open doesn't stay behind the
+      // modal, then hand off to the parent's Stripe upgrade flow.
+      setActive(null);
+      onUpgrade?.();
+      return;
+    }
     if (id === 'text') {
       setActive(null);
       // Drop a fresh text box in the centre of the canvas, ready to edit.
@@ -3533,8 +3545,9 @@ export default function Sidebar({
     <aside className="bg-brand-cream transition-all duration-200 w-24 lg:w-30 h-full overflow-y-auto shrink-0">
       <nav className="flex flex-col gap-2 pt-4">
         {SIDEBAR_ITEMS.map((it) => {
-          // Teaser + Basic grey out RSVP + Money Gift. In teaser they are also
-          // inert (see toggle), so show a not-allowed cursor there.
+          // Teaser + Basic grey out RSVP + Money Gift. Teaser is fully inert
+          // (see toggle), so show a not-allowed cursor there; Basic still
+          // reacts to the click by opening the upgrade modal.
           const isRsvpOrMoney = it.id === 'rsvp' || it.id === 'money';
           const isGreyed = isRsvpOrMoney && rsvpMoneyGreyed;
           const isInert = isRsvpOrMoney && teaser;
